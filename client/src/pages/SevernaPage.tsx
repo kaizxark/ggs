@@ -20,18 +20,17 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
               win.document.head.appendChild(s);
 
               // Replace logo text with Global Kids
-              const logoTexts = win.document.querySelectorAll('[data-framer-name="Severna"]');
-              logoTexts.forEach(el => { (el as HTMLElement).textContent = "Global Kids"; });
-              const subTexts = win.document.querySelectorAll('.framer-x6usmw');
-              subTexts.forEach(el => { (el as HTMLElement).textContent = "PRIVATE SCHOOL"; });
+              const allText2 = win.document.querySelectorAll('.framer-text');
+              allText2.forEach(el => {
+                const txt = (el as HTMLElement).textContent || "";
+                if (txt.includes("Severna")) (el as HTMLElement).textContent = "Global Kids";
+              });
 
-              // Replace logo image with logo.png
-              const logoImgs = win.document.querySelectorAll('[data-framer-component-type="SVG"][data-framer-name="Vector"]');
-              logoImgs.forEach((img) => {
-                const container = img.closest('.framer-1506cxs') || img.parentElement;
-                if (container) {
-                  container.innerHTML = '<img src="/logo.png" style="width:40px;height:44px;object-fit:contain;" alt="Global Kids Logo" />';
-                }
+              // Replace SVG logo with logo.png
+              const svgDivs = win.document.querySelectorAll('.framer-1506cxs');
+              svgDivs.forEach((div) => {
+                const html = `<img src="/logo.png" style="width:40px;height:44px;object-fit:contain;display:block;" alt="Global Kids Logo" />`;
+                (div as HTMLElement).innerHTML = html;
               });
 
               win.scrollTo(0, 0);
