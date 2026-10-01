@@ -13,34 +13,34 @@ import {
   BookOpen,
   Sparkles,
   Quote,
-  CheckCircle2
+  CheckCircle2,
+  Smile,
+  Shield,
+  Award
 } from "lucide-react";
 
 export default function About() {
   const values = [
-    { name: "Kindness", icon: HeartHandshake, desc: "Building an environment of empathy, gentle support, and genuine mutual grace." },
-    { name: "Integrity", icon: ShieldCheck, desc: "Upholding honesty, consistency, and sound moral character in every action." },
-    { name: "Courage", icon: Target, desc: "Empowering children to take intellectual risks and learn from every challenge." },
-    { name: "Respect", icon: Users, desc: "Honor for self, diversity of thought, and the communal space we share." },
-    { name: "Responsibility", icon: Compass, desc: "Active stewardship of our work, our environment, and collective progress." },
-    { name: "Joy in Learning", icon: Lightbulb, desc: "Finding genuine excitement and active curiosity in every learning discovery." },
+    { name: "Kindness", icon: HeartHandshake, desc: "Building empathy, gentle support, and mutual grace." },
+    { name: "Integrity", icon: ShieldCheck, desc: "Honesty and sound moral consistency in every action." },
+    { name: "Courage", icon: Target, desc: "Empowering children to take intellectual risks without fear." },
+    { name: "Respect", icon: Users, desc: "Honor for self, diversity of thought, and shared spaces." },
+    { name: "Responsibility", icon: Compass, desc: "Active stewardship of our work, peers, and environment." },
+    { name: "Joy in learning", icon: Lightbulb, desc: "Curiosity and excitement in every daily discovery." },
   ];
 
   const approaches = [
     {
       title: "Learn with curiosity",
-      tag: "Foundational Inquiry",
-      desc: "We replace rote memorization with hands-on questions. Science experiments, mathematical manipulatives, and open library circles awaken natural intellect."
+      desc: "Hands-on science experiments, mathematical manipulatives, and daily reading circles replace rote memorization."
     },
     {
       title: "Grow with confidence",
-      tag: "Personal Voice",
-      desc: "Every student gains regular stage presence through daily assemblies, debate, sports, and cultural arts, building poise without self-doubt."
+      desc: "Daily stage assemblies, debate councils, sports, and cultural arts nurture poise and clear public communication."
     },
     {
       title: "Lead with purpose",
-      tag: "Character & Civic Sense",
-      desc: "Mentors nurture ethical awareness, teamwork, and social stewardship, preparing students to become empathetic leaders in their community."
+      desc: "Community projects, civic awareness, and guided ethical discussions prepare students to become empathetic leaders."
     }
   ];
 
@@ -48,60 +48,72 @@ export default function About() {
     <div className="min-h-screen bg-[#f6eddd] text-[#34291C] font-['Schibsted_Grotesk',sans-serif] selection:bg-[#9e3b26] selection:text-white">
       <Navbar />
 
-      {/* Hero: Editorial Typographic Header */}
-      <section className="pt-12 pb-20 border-b border-[#e5d8c3]">
-        <div className="max-w-[1280px] mx-auto px-6 sm:px-12">
-          <div className="rounded-[20px] bg-[#34291C] text-[#f6eddd] p-8 sm:p-14 relative overflow-hidden shadow-xl border border-[#483928]">
-            <div className="absolute -right-16 -top-16 w-96 h-96 rounded-full bg-[#9e3b26] opacity-25 blur-3xl pointer-events-none" />
+      {/* Hero Banner with Photographic Background */}
+      <section className="pt-6 pb-12 sm:pt-8 sm:pb-16 max-w-[1240px] mx-auto px-4 sm:px-8">
+        <div className="relative rounded-[20px] overflow-hidden min-h-[340px] sm:min-h-[420px] flex items-end p-6 sm:p-12 shadow-lg border border-[#e5d8c3]">
+          {/* Hero Background Image */}
+          <img
+            src="https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=1800&q=80"
+            alt="Global Kids School Classroom"
+            className="absolute inset-0 w-full h-full object-cover object-center"
+          />
+          {/* Dark gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#1f1911]/90 via-[#1f1911]/60 to-transparent" />
 
-            <div className="max-w-3xl space-y-6 relative z-10">
-              <span className="text-xs font-bold uppercase tracking-widest text-[#e28743] bg-[#483928] border border-[#5d4a36] px-3.5 py-1 rounded-full inline-block">
-                Who We Are
-              </span>
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold font-['Space_Grotesk'] text-[#f6eddd] tracking-tight leading-[1.1]">
-                Nurturing the next generation of thinkers, doers, and leaders.
-              </h1>
-              <p className="text-base sm:text-lg text-[#d5cabb] leading-relaxed">
-                Global Kids School, Tumakuru, is built on the belief that children thrive when education feels purposeful, secure, and genuinely curious. We move beyond textbooks to foster mastery, confidence, and character.
-              </p>
-            </div>
+          {/* Hero Caption / Content */}
+          <div className="relative z-10 max-w-2xl space-y-3 text-[#f6eddd]">
+            <h1 className="text-3xl sm:text-5xl font-bold font-['Space_Grotesk'] tracking-tight leading-tight">
+              Who we are
+            </h1>
+            <p className="text-sm sm:text-base text-[#e5dbcc] leading-relaxed max-w-xl">
+              A calm, purposeful school in Tumakuru dedicated to building foundational literacy, active curiosity, and moral character.
+            </p>
           </div>
         </div>
       </section>
 
       {/* 7:5 Split Story Grid: Core Values & Principal Note */}
-      <section className="py-20 max-w-[1280px] mx-auto px-6 sm:px-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+      <section className="py-12 max-w-[1240px] mx-auto px-4 sm:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-start">
 
           {/* Left Column (7 cols): Story & Core Values */}
-          <div className="lg:col-span-7 space-y-10">
+          <div className="lg:col-span-7 space-y-8">
             <div className="space-y-4">
-              <span className="text-xs font-bold uppercase tracking-widest text-[#9e3b26]">
-                Our Philosophy & Origin
-              </span>
-              <h2 className="text-3xl font-bold font-['Space_Grotesk'] text-[#34291C] tracking-tight">
-                An ecosystem designed for meaningful discovery.
+              <h2 className="text-2xl sm:text-3xl font-bold font-['Space_Grotesk'] text-[#34291C] tracking-tight leading-tight">
+                A school where children learn, participate, and grow
               </h2>
-              <p className="text-sm sm:text-base text-[#6F6046] leading-relaxed">
-                Founded in Vokkodi, Tumakuru, Global Kids School serves families who prioritize quality, character-driven, and holistic education. Our facility is purposely built to reflect a child’s scale, with open classroom arrangements, dedicated science laboratories, and ventilated green play spaces.
+              <p className="text-sm text-[#6F6046] leading-relaxed">
+                Global Kids School was established with a singular conviction: every child deserves a learning environment that respects their natural curiosity, nurtures emotional resilience, and sets high standards for foundational excellence.
+              </p>
+              <p className="text-sm text-[#6F6046] leading-relaxed">
+                Located in Vokkodi, Tumakuru, our campus is structured to give learners space to breathe, question, experiment, and develop lifelong confidence under caring mentors.
               </p>
             </div>
 
-            {/* Guiding Compass / Value Chips Grid */}
-            <div className="space-y-4">
-              <h3 className="text-xl font-bold font-['Space_Grotesk'] text-[#34291C]">
+            {/* Core Values 2x3 Grid */}
+            <div className="pt-2 space-y-4">
+              <h3 className="text-lg font-bold font-['Space_Grotesk'] text-[#34291C]">
                 Our Guiding Values
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {values.map((v, i) => {
                   const Icon = v.icon;
                   return (
-                    <div key={i} className="p-5 rounded-[16px] bg-[#F9F1E0] border border-[#e2d5c0] hover:border-[#9e3b26]/40 transition-all shadow-xs space-y-2">
-                      <div className="w-8 h-8 rounded-[8px] bg-[#9e3b26] text-[#f6eddd] flex items-center justify-center">
-                        <Icon className="w-4 h-4" />
+                    <div
+                      key={i}
+                      className="p-4 rounded-[12px] bg-[#F9F1E0] border border-[#e2d5c0] shadow-2xs space-y-1.5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-[6px] bg-[#9e3b26] text-[#f6eddd] flex items-center justify-center">
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <h4 className="text-sm font-bold font-['Space_Grotesk'] text-[#34291C]">
+                          {v.name}
+                        </h4>
                       </div>
-                      <h4 className="text-base font-bold font-['Space_Grotesk'] text-[#34291C]">{v.name}</h4>
-                      <p className="text-xs text-[#6F6046] leading-relaxed">{v.desc}</p>
+                      <p className="text-[11px] sm:text-xs text-[#6F6046] leading-relaxed">
+                        {v.desc}
+                      </p>
                     </div>
                   );
                 })}
@@ -110,23 +122,23 @@ export default function About() {
           </div>
 
           {/* Right Column (5 cols): Principal's Note Card */}
-          <div className="lg:col-span-5 lg:sticky lg:top-28">
-            <div className="p-8 rounded-[20px] bg-[#34291C] text-[#f6eddd] border border-[#483928] shadow-xl space-y-6">
-              <Quote className="w-8 h-8 text-[#9e3b26]" />
-              <h3 className="text-xl font-bold font-['Space_Grotesk'] text-[#f6eddd]">
-                A Message from the Leadership
+          <div className="lg:col-span-5 lg:sticky lg:top-24">
+            <div className="p-7 rounded-[18px] bg-[#F9F1E0] border border-[#e2d5c0] shadow-xs space-y-5">
+              <Quote className="w-7 h-7 text-[#9e3b26]" />
+              <h3 className="text-lg font-bold font-['Space_Grotesk'] text-[#34291C]">
+                A note from the leadership
               </h3>
-              <p className="text-xs sm:text-sm text-[#d5cabb] leading-relaxed">
-                "Every child walks through our school gates with infinite capacity. Our responsibility as educators is not to fill a vessel with facts, but to kindle an enduring flame of inquiry, moral courage, and self-belief."
+              <p className="text-xs sm:text-sm text-[#6F6046] leading-relaxed">
+                "Every child who enters our campus carries immense promise. Our role as educators is not to lecture from above, but to provide the warmth, structure, and intellectual fuel they need to grow into capable, compassionate citizens."
               </p>
 
-              <div className="pt-4 border-t border-[#483928] flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#9e3b26] text-white flex items-center justify-center font-bold text-sm">
+              <div className="pt-3 border-t border-[#e2d5c0] flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-[#9e3b26] text-white flex items-center justify-center font-bold text-xs">
                   GK
                 </div>
                 <div>
-                  <strong className="block text-sm font-bold text-[#f6eddd]">Academic Directorate</strong>
-                  <span className="text-xs text-[#a09079]">Global Kids School, Tumakuru</span>
+                  <strong className="block text-xs sm:text-sm font-bold text-[#34291C]">Academic Directorate</strong>
+                  <span className="text-[11px] text-[#8e7e65]">Global Kids School, Tumakuru</span>
                 </div>
               </div>
             </div>
@@ -136,57 +148,51 @@ export default function About() {
       </section>
 
       {/* 3-Column Approach Cards */}
-      <section className="py-20 bg-[#F9F1E0] border-y border-[#e2d5c0]">
-        <div className="max-w-[1280px] mx-auto px-6 sm:px-12">
-          <div className="text-center max-w-2xl mx-auto mb-14 space-y-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-[#9e3b26]">
-              Our Educational Framework
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-bold font-['Space_Grotesk'] text-[#34291C]">
-              How we nurture young minds.
+      <section className="py-14 bg-[#F9F1E0] border-y border-[#e2d5c0]">
+        <div className="max-w-[1240px] mx-auto px-4 sm:px-8">
+          <div className="max-w-xl mb-10 space-y-1.5">
+            <h2 className="text-2xl sm:text-3xl font-bold font-['Space_Grotesk'] text-[#34291C]">
+              Our approach
             </h2>
+            <p className="text-xs sm:text-sm text-[#6F6046]">
+              Three ideas behind every classroom day.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {approaches.map((app, idx) => (
-              <div key={idx} className="p-8 rounded-[16px] bg-[#f6eddd] border border-[#e2d5c0] shadow-xs flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#9e3b26] block">
-                    {app.tag}
-                  </span>
-                  <h3 className="text-xl font-bold font-['Space_Grotesk'] text-[#34291C]">
-                    {app.title}
-                  </h3>
-                  <p className="text-xs sm:text-sm text-[#6F6046] leading-relaxed">
-                    {app.desc}
-                  </p>
-                </div>
-                <div className="pt-4 border-t border-[#e2d5c0] text-xs font-bold text-[#9e3b26] flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>CBSE Pedagogical Standard</span>
-                </div>
+              <div
+                key={idx}
+                className="p-6 rounded-[16px] bg-[#f6eddd] border border-[#e2d5c0] shadow-xs space-y-2.5"
+              >
+                <h3 className="text-base font-bold font-['Space_Grotesk'] text-[#34291C]">
+                  {app.title}
+                </h3>
+                <p className="text-xs sm:text-sm text-[#6F6046] leading-relaxed">
+                  {app.desc}
+                </p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Community CTA Band */}
-      <section className="py-20 max-w-[1280px] mx-auto px-6 sm:px-12">
-        <div className="rounded-[20px] bg-[#34291C] text-[#f6eddd] p-8 sm:p-14 flex flex-col md:flex-row items-center justify-between gap-8 border border-[#483928] shadow-xl">
-          <div className="space-y-3 max-w-xl">
-            <h2 className="text-2xl sm:text-3xl font-bold font-['Space_Grotesk'] text-[#f6eddd]">
-              Become part of our learning circle.
+      {/* Dark CTA Banner */}
+      <section className="py-14 bg-[#34291C] text-[#f6eddd] border-t border-[#483928]">
+        <div className="max-w-[1240px] mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="space-y-1 text-center sm:text-left">
+            <h2 className="text-xl sm:text-2xl font-bold font-['Space_Grotesk'] text-[#f6eddd]">
+              Come and see a school day for yourself.
             </h2>
-            <p className="text-xs sm:text-sm text-[#d5cabb] leading-relaxed">
-              Whether you are a prospective parent, an educator looking for a nurturing place to grow, or a community partner in Tumakuru, we welcome you.
+            <p className="text-xs sm:text-sm text-[#c7baa6]">
+              Schedule a guided walk through our classrooms and meet our educators.
             </p>
           </div>
           <Link
             href="/contact"
-            className="px-6 py-3.5 rounded-[10px] bg-[#9e3b26] text-[#f6eddd] font-bold text-sm shadow-md hover:bg-[#832e1d] transition-all shrink-0 flex items-center gap-2"
+            className="px-6 py-3 rounded-[20px] bg-[#9e3b26] hover:bg-[#832e1d] text-[#f6eddd] font-bold text-xs sm:text-sm shadow-md transition-all shrink-0 flex items-center gap-2"
           >
-            <span>Start the Conversation</span>
+            <span>Enquire about admissions</span>
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
