@@ -5,7 +5,7 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
       src={src}
       title="Severna"
       className="w-full h-screen border-0"
-      style={{ display: "block" }}
+      style={{ display: "block", zoom: "1.3" }}
     />
   );
 }
