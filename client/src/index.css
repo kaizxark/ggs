@@ -3,22 +3,22 @@
 
 :root {
   font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  color: #30403b;
-  background: #f7f9f7;
+  color: #e4e7eb;
+  background: #0f1115;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 * { box-sizing: border-box; }
-html { background: #f7f9f7; }
-body { margin: 0; min-width: 320px; background: #f7f9f7; }
+html { background: #0f1115; }
+body { margin: 0; min-width: 320px; background: #0f1115; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 button, a, input, select, textarea { outline-color: #2f6f68; }
 
-.erp-app { min-height: 100vh; background: #f7f9f7; }
+.erp-app { min-height: 100vh; background: #0f1115; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; display: flex; width: 246px; flex-direction: column; border-right: 1px solid #e5ebe7; background: #fbfcfb; transition: width .22s var(--ease-out), transform .22s var(--ease-out); }
 .sidebar.collapsed { width: 72px; }
 .sidebar-top { padding: 20px 14px 12px; }
