@@ -357,7 +357,7 @@ function PlaceholderView({ view, onBack }: { view: string; onBack: () => void })
   return <div className="page-stack"><div className="page-intro"><div><button className="back-link" onClick={onBack}>← Overview</button><p className="eyebrow mt-4">{item.kicker}</p><h1 className="page-title">{view}</h1><p className="page-subtitle">{item.detail}</p></div><button className="primary-button" onClick={() => toast(`${view} workspace ready to configure`)}><Sparkles size={16} />Explore workspace</button></div><div className="coming-soon-panel"><div className="coming-icon"><item.icon size={25} /></div><h2>Everything connected, nothing buried.</h2><p>This workspace shares the same operating model as the dashboard. The next layer of records, workflows and role views can be opened from here.</p><button className="secondary-button" onClick={() => toast.success("Workspace tour started")}>Take a quick tour <ChevronRight size={15} /></button></div></div>;
 }
 
-export default function Home() {
+export default function Dashboard() {
   const [activeView, setActiveView] = useState("Overview");
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
