@@ -13,12 +13,8 @@ import Dashboard from "./pages/Dashboard";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/about" component={About} />
-      <Route path="/contact" component={Contact} />
-      <Route path="/login" component={Login} />
+      <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
-      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
