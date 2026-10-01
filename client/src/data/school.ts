@@ -15,7 +15,7 @@ export const schoolInfo = {
     secondaryPhone: "0816 2950219",
     whatsapp: "+91 86600 66542",
     email: "admissions@globalkids.school",
-    officeHours: "Monday to Saturday: 9:00 AM – 4:30 PM",
+    officeHours: "Monday to Saturday: 9:00 AM - 4:30 PM",
   },
   academics: {
     curriculum: "CBSE-pattern methodology",

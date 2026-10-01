@@ -178,7 +178,7 @@ export default function Home() {
               The decision to build a new Tumakuru school community began with a simple observation: children thrive when learning feels intentional, unhurried, and calm.
             </p>
             <p className="text-sm text-[#6F6046] leading-relaxed">
-              What began as a handful of classrooms in Puttanapalya, Vokkodi has grown into a school of four active wings — without losing the personal touch and mentorship that shaped our earliest days.
+              What began as a handful of classrooms in Puttanapalya, Vokkodi has grown into a school of four active wings, without losing the personal touch and mentorship that shaped our earliest days.
             </p>
 
             <div className="pt-2">
@@ -426,7 +426,7 @@ export default function Home() {
           <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
             <Link
               href="/contact"
-              className="px-6 py-3 rounded-[20px] bg-[#9e3b26] hover:bg-[#832e1d] text-[#f6eddd] font-bold text-xs sm:text-sm shadow-md transition-colors shrink-0 flex items-center gap-2 group"
+              className="px-6 py-3 rounded-[20px] bg-[#9e3b26] hover:bg-[#832e1d] text-[#f6eddd] font-bold text-xs sm:text-sm shadow-md transition-colors shrink-0 whitespace-nowrap flex items-center gap-2 group"
             >
               <span>Enquire about admissions</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
