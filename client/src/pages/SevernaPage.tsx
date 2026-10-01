@@ -19,11 +19,6 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
               s.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
               win.document.head.appendChild(s);
 
-              // Hide footer links
-              const s = win.document.createElement('style');
-              s.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
-              win.document.head.appendChild(s);
-
               const replace = () => {
                 win.document.querySelectorAll('.framer-text').forEach(el => {
                   const txt = (el as HTMLElement).textContent || "";
