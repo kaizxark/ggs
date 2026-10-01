@@ -10,7 +10,17 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
     <iframe
       src={src}
       title="Severna"
-      onLoad={() => { try { const el = document.querySelector('iframe'); if (el?.contentWindow) el.contentWindow.scrollTo(0,0); } catch{} }}
+      onLoad={() => {
+        try {
+          const win = (document.querySelector('iframe') as HTMLIFrameElement)?.contentWindow;
+          if (win?.document) {
+            const s = win.document.createElement('style');
+            s.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
+            win.document.head.appendChild(s);
+            win.scrollTo(0, 0);
+          }
+        } catch {}
+      }}
       className="w-full h-screen border-0"
       style={{ display: "block", zoom: "1.3" }}
     />
