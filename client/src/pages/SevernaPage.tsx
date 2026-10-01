@@ -7,8 +7,9 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
 
   const src = section === "about" ? "/severna/severna-atkris.framer.website/index.html#about" : section === "contact" ? "/severna/severna-atkris.framer.website/index.html#form" : "/severna/severna-atkris.framer.website/index.html";
   return (
-    <iframe
-      src={src}
+    <div style={{ width: "100%", height: "100vh", overflow: "hidden", position: "relative", background: "#fff" }}>
+      <iframe
+        src={src}
       title="Severna"
       onLoad={() => {
         try {
@@ -24,5 +25,6 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
       className="w-full h-screen border-0"
       style={{ display: "block", zoom: "1.3" }}
     />
+    </div>
   );
 }
