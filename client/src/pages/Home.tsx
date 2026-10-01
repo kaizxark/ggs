@@ -1,438 +1,398 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Link } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform, useSpring, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/public/Navbar";
 import Footer from "@/components/public/Footer";
 import { schoolInfo } from "@/data/school";
 import {
+  ArrowUpRight,
   ArrowRight,
-  ChevronRight,
+  Sparkles,
+  MoveRight,
+  Compass,
   Heart,
   Sun,
-  Users,
-  Quote
+  ShieldCheck,
+  ChevronDown
 } from "lucide-react";
 
-// Emil Kowalski inspired transition easing curves
-const easeOutQuint = [0.22, 1, 0.36, 1] as const;
-
-const fadeInUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i: number = 0) => ({
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.5,
-      delay: i * 0.08,
-      ease: easeOutQuint
-    }
-  })
-};
-
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.08,
-      delayChildren: 0.05
-    }
-  }
-};
+const easeOutExpo = [0.16, 1, 0.3, 1] as const;
 
 export default function Home() {
-  const [activeModal, setActiveModal] = useState<number | null>(null);
+  const [activeAccordion, setActiveAccordion] = useState<number | null>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Parallax Scroll Tracking
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"]
+  });
+
+  const smoothProgress = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001
+  });
+
+  const heroImageScale = useTransform(smoothProgress, [0, 0.2], [1, 1.15]);
+  const heroImageY = useTransform(smoothProgress, [0, 0.2], [0, -40]);
 
   const timelineItems = [
     {
       year: "2011",
-      title: "Founded in Vokkodi",
+      title: "Foundations in Vokkodi",
       desc: "Started with 45 students in a small learning environment focused on inquiry and foundational skills.",
+      tag: "Origins"
     },
     {
       year: "2016",
-      title: "Primary wing opened",
+      title: "Primary Wing Expansion",
       desc: "Expanded campus to include dedicated STEM discovery labs and open play areas for Grades 1 to 5.",
+      tag: "Infrastructure"
     },
     {
       year: "2021",
-      title: "CBSE High School wing added",
+      title: "CBSE High School Addition",
       desc: "Secondary classrooms, advanced science laboratories, and structured academic mentorship.",
+      tag: "Academics"
     },
     {
-      year: "Today",
-      title: "A vibrant learning community",
-      desc: "600+ students, 40+ dedicated teachers, and a thriving campus culture in Tumakuru.",
+      year: "Present",
+      title: "A Vibrant Learning Community",
+      desc: "Over 600 students, 40 dedicated teachers, and a thriving campus culture in Tumakuru.",
+      tag: "Today"
     }
-  ];
-
-  const milestoneCards = [
-    {
-      id: 1,
-      year: "2011",
-      title: "New school building",
-      desc: "Designed for natural light, ventilation, and collaborative learning spaces.",
-      image: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=600&q=80",
-      detail: "Our Vokkodi campus was purpose-built with airy classrooms, child-scale furniture, and safe enclosed courtyards."
-    },
-    {
-      id: 2,
-      year: "2016",
-      title: "Growth in the classroom",
-      desc: "Deepening inquiry-led learning, science manipulatives, and individualized mentorship.",
-      image: "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=600&q=80",
-      detail: "Integrated practical STEM blocks and hands-on experiments into daily coursework for early grades."
-    },
-    {
-      id: 3,
-      year: "2021",
-      title: "Beyond the textbooks",
-      desc: "Dedicated arts studio, sports field, debate councils, and civic engagement.",
-      image: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=600&q=80",
-      detail: "Comprehensive sports coaching, cultural arts participation, and stage assemblies to build lifelong confidence."
-    }
-  ];
-
-  const stats = [
-    { value: "15+", label: "Years of education", sub: "Tumakuru campus since 2011" },
-    { value: "600+", label: "Students enrolled", sub: "Playgroup to Grade 10" },
-    { value: "40+", label: "Dedicated faculty", sub: "Low 1:15 educator ratio" },
-    { value: "4", label: "Learning wings", sub: "Pre-primary to High School" },
   ];
 
   const differentiators = [
     {
-      icon: Heart,
-      title: "Child-centred learning",
-      desc: "Curiosity-first pedagogy where students ask questions, conduct hands-on experiments, and build genuine conceptual understanding."
+      id: 0,
+      title: "Child-Centred Inquiry",
+      subtitle: "Curiosity First",
+      desc: "Where students ask questions, conduct hands-on experiments, and build genuine conceptual understanding without the pressure of rote exams.",
+      image: "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=1200&q=80"
     },
     {
-      icon: Sun,
-      title: "Consistent calm routines",
-      desc: "Structured school days with balanced academic focus, physical outdoor movement, and mindful reflection without exam stress."
+      id: 1,
+      title: "Structured, Calm Routines",
+      subtitle: "Rhythm & Balance",
+      desc: "Balanced academic focus paired with daily outdoor movement, arts, and mindful reflection to nurture steady emotional resilience.",
+      image: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80"
     },
     {
-      icon: Users,
-      title: "Open parent partnership",
-      desc: "Regular educator touchpoints, transparent student progress tracking, and an approachable, communicative leadership team."
+      id: 2,
+      title: "Transparent Parent Partnership",
+      subtitle: "Open Community",
+      desc: "Regular educator touchpoints, transparent student progress tracking, and an approachable, communicative leadership team.",
+      image: "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1200&q=80"
     }
   ];
 
   return (
-    <div className="min-h-screen bg-[#f6eddd] text-[#34291C] font-['Schibsted_Grotesk',sans-serif] selection:bg-[#9e3b26] selection:text-white">
+    <div ref={containerRef} className="min-h-screen bg-[#f6eddd] text-[#34291C] font-['Schibsted_Grotesk',sans-serif] selection:bg-[#9e3b26] selection:text-white overflow-hidden">
+
+      {/* 1. INITIAL CURTAIN REVEAL */}
+      <motion.div
+        initial={{ y: 0 }}
+        animate={{ y: "-100%" }}
+        transition={{ duration: 1.1, ease: [0.76, 0, 0.24, 1], delay: 0.1 }}
+        className="fixed inset-0 z-50 bg-[#34291C] flex items-center justify-center pointer-events-none"
+      >
+        <motion.div
+          initial={{ opacity: 1, scale: 1 }}
+          animate={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          className="text-[#f6eddd] font-['Space_Grotesk'] text-xl sm:text-2xl font-bold tracking-tight"
+        >
+          Global Kids School
+        </motion.div>
+      </motion.div>
+
       <Navbar />
 
-      {/* Hero Banner with Photographic Background */}
-      <section className="pt-6 pb-12 sm:pt-8 sm:pb-16 max-w-[1240px] mx-auto px-4 sm:px-8">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: easeOutQuint }}
-          className="relative rounded-[20px] overflow-hidden min-h-[340px] sm:min-h-[420px] flex items-end p-6 sm:p-12 shadow-lg border border-[#e5d8c3]"
-        >
-          {/* Hero Background Image */}
-          <motion.img
-            initial={{ scale: 1.05 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 1.2, ease: easeOutQuint }}
-            src="https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=1800&q=80"
-            alt="Global Kids School Campus"
-            className="absolute inset-0 w-full h-full object-cover object-center"
-          />
-          {/* Subtle dark gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#1f1911]/90 via-[#1f1911]/60 to-transparent" />
+      {/* 2. KINETIC EDITORIAL HERO */}
+      <section className="relative pt-8 pb-16 sm:pt-14 sm:pb-24 max-w-[1400px] mx-auto px-4 sm:px-8">
 
-          {/* Hero Caption / Content */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
+        {/* Top Meta Line */}
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ded1bc] pb-4 mb-8 sm:mb-12">
+          <div className="flex items-center gap-2 text-xs font-mono text-[#6F6046]">
+            <span className="w-2 h-2 rounded-full bg-[#9e3b26] animate-pulse" />
+            <span>TUMAKURU, KARNATAKA</span>
+          </div>
+          <div className="text-xs font-mono text-[#6F6046]">
+            CBSE PATTERN · NURSERY TO GRADE 10
+          </div>
+        </div>
+
+        {/* Massive Typography Statement */}
+        <div className="space-y-2 mb-12 sm:mb-16">
+          <motion.h1
+            initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2, ease: easeOutQuint }}
-            className="relative z-10 max-w-2xl space-y-3 text-[#f6eddd]"
+            transition={{ duration: 0.8, ease: easeOutExpo, delay: 0.3 }}
+            className="text-5xl sm:text-7xl lg:text-[7.5vw] font-bold font-['Space_Grotesk'] tracking-tighter leading-[0.9] text-[#34291C]"
           >
-            <h1 className="text-3xl sm:text-5xl font-bold font-['Space_Grotesk'] tracking-tight leading-tight">
-              Our journey so far
-            </h1>
-            <p className="text-sm sm:text-base text-[#e5dbcc] leading-relaxed max-w-xl">
-              How a small school grew into a vibrant, compassionate learning community across Tumakuru.
-            </p>
-          </motion.div>
-        </motion.div>
-      </section>
+            WHERE CURIOUS <br />
+            <span className="italic font-serif font-normal text-[#9e3b26]">MINDS GROW</span> INTO <br />
+            CONFIDENT DOERS.
+          </motion.h1>
+        </div>
 
-      {/* 5:7 Split Section: Milestones in Order */}
-      <section className="py-12 max-w-[1240px] mx-auto px-4 sm:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-start">
+        {/* Asymmetric Hero Media & Manifesto Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
 
-          {/* Left Column (5 cols): Milestones Intro */}
+          {/* Manifesto Left (5 cols) */}
           <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-40px" }}
-            variants={fadeInUp}
-            className="lg:col-span-5 space-y-5 lg:sticky lg:top-24"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: easeOutExpo, delay: 0.5 }}
+            className="lg:col-span-5 space-y-6"
           >
-            <h2 className="text-2xl sm:text-3xl font-bold font-['Space_Grotesk'] text-[#34291C] tracking-tight">
-              Milestones, in order
-            </h2>
-            <p className="text-sm text-[#6F6046] leading-relaxed">
-              The decision to build a new Tumakuru school community began with a simple observation: children thrive when learning feels intentional, unhurried, and calm.
-            </p>
-            <p className="text-sm text-[#6F6046] leading-relaxed">
-              What began as a handful of classrooms in Puttanapalya, Vokkodi has grown into a school of four active wings, without losing the personal touch and mentorship that shaped our earliest days.
+            <p className="text-base sm:text-lg text-[#6F6046] leading-relaxed">
+              We provide a calm, intentional, and joyful school environment in Tumakuru. Here, education is not an assembly line—it is a personal journey of discovery, empathy, and foundational rigor.
             </p>
 
-            <div className="pt-2">
+            <div className="flex flex-wrap items-center gap-4 pt-2">
               <Link
                 href="/contact"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#9e3b26] hover:text-[#7d2c1c] transition-colors group"
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-[#9e3b26] text-[#f6eddd] font-bold text-xs sm:text-sm shadow-md hover:bg-[#832e1d] transition-all group"
               >
-                <span>Admissions for next academic year</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                <span>Book a Campus Tour</span>
+                <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </Link>
+              <Link
+                href="/about"
+                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full border border-[#ded1bc] text-[#34291C] font-bold text-xs sm:text-sm hover:bg-[#ece4d4] transition-all"
+              >
+                <span>Our Philosophy</span>
               </Link>
             </div>
           </motion.div>
 
-          {/* Right Column (7 cols): Timeline Rail */}
+          {/* Large Hero Frame Right (7 cols) */}
           <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-40px" }}
-            variants={staggerContainer}
-            className="lg:col-span-7 space-y-7 relative before:absolute before:inset-0 before:left-2 before:w-[2px] before:bg-[#ded1bc]"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1, ease: easeOutExpo, delay: 0.4 }}
+            className="lg:col-span-7 relative h-[360px] sm:h-[480px] rounded-[24px] overflow-hidden border border-[#ded1bc] shadow-xl"
           >
-            {timelineItems.map((item, idx) => (
-              <motion.div
-                key={idx}
-                variants={fadeInUp}
-                custom={idx}
-                className="relative pl-8 group"
-              >
-                {/* Timeline Dot */}
-                <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-[#9e3b26] border-2 border-[#f6eddd] shadow-xs group-hover:scale-125 transition-transform" />
+            <motion.img
+              style={{ scale: heroImageScale, y: heroImageY }}
+              src="https://images.unsplash.com/photo-1541829070764-84a7d30dd3f3?auto=format&fit=crop&w=1800&q=80"
+              alt="Global Kids School Campus"
+              className="w-full h-full object-cover object-center"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#1f1911]/80 via-transparent to-transparent" />
+            <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between text-[#f6eddd]">
+              <span className="text-xs font-mono">Vokkodi, Tumakuru Campus</span>
+              <span className="text-xs font-mono">Est. 2011</span>
+            </div>
+          </motion.div>
 
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xs font-mono font-bold text-[#9e3b26]">
+        </div>
+      </section>
+
+      {/* 3. RUNNING STATS BANNER */}
+      <section className="border-y border-[#ded1bc] bg-[#F9F1E0] py-10">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div>
+              <div className="text-4xl sm:text-6xl font-bold font-['Space_Grotesk'] text-[#9e3b26] tracking-tight">
+                15+
+              </div>
+              <div className="text-xs sm:text-sm font-bold text-[#34291C] mt-1">Years in Tumakuru</div>
+              <p className="text-[11px] text-[#6F6046]">Nurturing foundational learners since 2011</p>
+            </div>
+            <div>
+              <div className="text-4xl sm:text-6xl font-bold font-['Space_Grotesk'] text-[#9e3b26] tracking-tight">
+                600+
+              </div>
+              <div className="text-xs sm:text-sm font-bold text-[#34291C] mt-1">Scholars Enrolled</div>
+              <p className="text-[11px] text-[#6F6046]">Playgroup to Secondary Class 10</p>
+            </div>
+            <div>
+              <div className="text-4xl sm:text-6xl font-bold font-['Space_Grotesk'] text-[#9e3b26] tracking-tight">
+                1:15
+              </div>
+              <div className="text-xs sm:text-sm font-bold text-[#34291C] mt-1">Teacher Ratio</div>
+              <p className="text-[11px] text-[#6F6046]">Individual attention and mentorship</p>
+            </div>
+            <div>
+              <div className="text-4xl sm:text-6xl font-bold font-['Space_Grotesk'] text-[#9e3b26] tracking-tight">
+                4
+              </div>
+              <div className="text-xs sm:text-sm font-bold text-[#34291C] mt-1">Learning Wings</div>
+              <p className="text-[11px] text-[#6F6046]">Purpose-built developmental stages</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. THE STICKY JOURNEY (EDITORIAL TIMELINE) */}
+      <section className="py-20 sm:py-32 max-w-[1400px] mx-auto px-4 sm:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+
+          {/* Sticky Left Column */}
+          <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
+            <span className="text-xs font-mono uppercase text-[#9e3b26] tracking-widest font-bold">
+              Evolution & Milestones
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-bold font-['Space_Grotesk'] text-[#34291C] tracking-tight leading-tight">
+              A decade of unhurried growth.
+            </h2>
+            <p className="text-sm text-[#6F6046] leading-relaxed max-w-md">
+              From a humble set of classrooms in Vokkodi to an expansive campus of discovery labs and creative studios.
+            </p>
+          </div>
+
+          {/* Timeline Cards Right */}
+          <div className="lg:col-span-7 space-y-6">
+            {timelineItems.map((item, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.6, ease: easeOutExpo }}
+                className="p-6 sm:p-8 rounded-[20px] bg-[#F9F1E0] border border-[#ded1bc] shadow-xs flex flex-col sm:flex-row gap-6 justify-between items-start"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-mono font-bold text-[#9e3b26] bg-[#ece4d4] px-2.5 py-1 rounded-[6px]">
                       {item.year}
                     </span>
-                    <span className="text-xs text-[#8e7e65]">•</span>
-                    <h3 className="text-base font-bold font-['Space_Grotesk'] text-[#34291C]">
-                      {item.title}
-                    </h3>
+                    <span className="text-xs text-[#8e7e65] font-mono uppercase tracking-wider">{item.tag}</span>
                   </div>
-                  <p className="text-xs sm:text-sm text-[#6F6046] leading-relaxed">
+                  <h3 className="text-xl font-bold font-['Space_Grotesk'] text-[#34291C]">
+                    {item.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#6F6046] leading-relaxed max-w-lg">
                     {item.desc}
                   </p>
                 </div>
               </motion.div>
             ))}
-          </motion.div>
+          </div>
 
         </div>
       </section>
 
-      {/* 3 Milestone Thumbnail Cards */}
-      <section className="py-10 max-w-[1240px] mx-auto px-4 sm:px-8">
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-40px" }}
-          variants={staggerContainer}
-          className="grid grid-cols-1 md:grid-cols-3 gap-6"
-        >
-          {milestoneCards.map((card, idx) => (
-            <motion.div
-              key={card.id}
-              variants={fadeInUp}
-              custom={idx}
-              whileHover={{ y: -4 }}
-              transition={{ duration: 0.25, ease: easeOutQuint }}
-              className="p-5 rounded-[16px] bg-[#F9F1E0] border border-[#e2d5c0] shadow-xs flex flex-col justify-between hover:border-[#9e3b26]/40 hover:shadow-md transition-all space-y-4 group"
-            >
-              <div className="space-y-3">
-                <div className="relative w-full h-44 rounded-[10px] overflow-hidden bg-[#ece4d4]">
-                  <img
-                    src={card.image}
-                    alt={card.title}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-[4px] bg-[#34291C]/80 backdrop-blur-xs text-[#f6eddd] text-[10px] font-mono font-bold">
-                    {card.year}
-                  </span>
-                </div>
+      {/* 5. INTERACTIVE ACCORDION SHOWCASE */}
+      <section className="py-20 bg-[#34291C] text-[#f6eddd]">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-8">
 
-                <div className="space-y-1.5">
-                  <h4 className="text-base font-bold font-['Space_Grotesk'] text-[#34291C]">
-                    {card.title}
-                  </h4>
-                  <p className="text-xs text-[#6F6046] leading-relaxed">
-                    {card.desc}
-                  </p>
-                </div>
-              </div>
+          <div className="max-w-2xl mb-12 sm:mb-16 space-y-3">
+            <span className="text-xs font-mono uppercase text-[#e28743] tracking-widest font-bold">
+              Pedagogical Pillars
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-bold font-['Space_Grotesk'] tracking-tight">
+              Three commitments behind every classroom day.
+            </h2>
+          </div>
 
-              <div className="pt-2 border-t border-[#e2d5c0]/60">
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(activeModal === card.id ? null : card.id)}
-                  className="text-xs font-bold text-[#9e3b26] hover:text-[#7d2c1c] flex items-center gap-1 transition-colors"
-                >
-                  <span>{activeModal === card.id ? "Close detail" : "View detail"}</span>
-                  <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${activeModal === card.id ? "rotate-90" : ""}`} />
-                </button>
-                <AnimatePresence>
-                  {activeModal === card.id && (
-                    <motion.p
-                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                      animate={{ opacity: 1, height: "auto", marginTop: 8 }}
-                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                      transition={{ duration: 0.25, ease: easeOutQuint }}
-                      className="overflow-hidden text-xs text-[#34291C] bg-[#f0e5d1] p-2.5 rounded-[6px] leading-relaxed"
-                    >
-                      {card.detail}
-                    </motion.p>
-                  )}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+
+            {/* Accordion Tabs Left (6 cols) */}
+            <div className="lg:col-span-6 space-y-4">
+              {differentiators.map((diff) => {
+                const isActive = activeAccordion === diff.id;
+                return (
+                  <div
+                    key={diff.id}
+                    onClick={() => setActiveAccordion(diff.id)}
+                    className={`cursor-pointer p-6 rounded-[16px] border transition-all ${
+                      isActive
+                        ? "bg-[#453726] border-[#9e3b26]"
+                        : "bg-[#3d3122]/50 border-[#4e402f] hover:border-[#6b5841]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <span className="text-xs font-mono text-[#e28743]">{diff.subtitle}</span>
+                        <h3 className="text-xl font-bold font-['Space_Grotesk'] text-[#f6eddd]">
+                          {diff.title}
+                        </h3>
+                      </div>
+                      <div className={`w-8 h-8 rounded-full border border-[#6b5841] flex items-center justify-center transition-transform ${isActive ? "rotate-90 bg-[#9e3b26] border-[#9e3b26]" : ""}`}>
+                        <MoveRight className="w-4 h-4 text-[#f6eddd]" />
+                      </div>
+                    </div>
+
+                    <AnimatePresence>
+                      {isActive && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                          animate={{ opacity: 1, height: "auto", marginTop: 16 }}
+                          exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                          transition={{ duration: 0.35, ease: easeOutExpo }}
+                          className="overflow-hidden border-t border-[#5a4833] pt-4"
+                        >
+                          <p className="text-xs sm:text-sm text-[#d5cabb] leading-relaxed">
+                            {diff.desc}
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Dynamic Image Display Right (6 cols) */}
+            <div className="lg:col-span-6">
+              <div className="relative h-[340px] sm:h-[460px] rounded-[20px] overflow-hidden border border-[#5a4833]">
+                <AnimatePresence mode="wait">
+                  {differentiators.map((diff) => {
+                    if (diff.id !== activeAccordion) return null;
+                    return (
+                      <motion.img
+                        key={diff.id}
+                        initial={{ opacity: 0, scale: 1.05 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.98 }}
+                        transition={{ duration: 0.5, ease: easeOutExpo }}
+                        src={diff.image}
+                        alt={diff.title}
+                        className="absolute inset-0 w-full h-full object-cover object-center"
+                      />
+                    );
+                  })}
                 </AnimatePresence>
               </div>
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
+            </div>
 
-      {/* 4-Column Stat row */}
-      <section className="py-14 bg-[#F9F1E0] border-y border-[#e2d5c0]">
-        <div className="max-w-[1240px] mx-auto px-4 sm:px-8">
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-40px" }}
-            variants={staggerContainer}
-            className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8"
-          >
-            {stats.map((s, idx) => (
-              <motion.div
-                key={idx}
-                variants={fadeInUp}
-                custom={idx}
-                className="space-y-1"
-              >
-                <div className="text-3xl sm:text-4xl font-bold font-['Space_Grotesk'] text-[#9e3b26] tracking-tight">
-                  {s.value}
-                </div>
-                <h4 className="font-bold text-xs sm:text-sm text-[#34291C] font-['Space_Grotesk']">
-                  {s.label}
-                </h4>
-                <p className="text-[11px] sm:text-xs text-[#6F6046]">
-                  {s.sub}
-                </p>
-              </motion.div>
-            ))}
-          </motion.div>
+          </div>
+
         </div>
       </section>
 
-      {/* Testimonial Quote Card (Dark Charcoal) */}
-      <section className="py-16 max-w-[1240px] mx-auto px-4 sm:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 25 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-50px" }}
-          transition={{ duration: 0.5, ease: easeOutQuint }}
-          className="rounded-[20px] bg-[#34291C] text-[#f6eddd] p-8 sm:p-12 shadow-xl border border-[#483928] space-y-6"
-        >
-          <Quote className="w-8 h-8 text-[#9e3b26]" />
-          <blockquote className="text-lg sm:text-2xl font-medium font-['Space_Grotesk'] text-[#f6eddd] leading-snug">
-            "Sending our two children to Global Kids School in Vokkodi was the single best decision we made. The teachers listen, they encourage curiosity rather than fear of examinations, and the campus environment is warm and disciplined."
-          </blockquote>
-          <div className="pt-2 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#9e3b26] text-white flex items-center justify-center font-bold text-xs">
-              RS
-            </div>
-            <div>
-              <strong className="block text-sm font-bold text-[#f6eddd]">Ramesh & Shobha Sharma</strong>
-              <span className="text-xs text-[#c4b6a1]">Parents of Grade 4 & Grade 7 Learners • Tumakuru</span>
-            </div>
-          </div>
-        </motion.div>
-      </section>
+      {/* 6. CALL TO ACTION / ADMISSIONS */}
+      <section className="py-24 sm:py-32 max-w-[1400px] mx-auto px-4 sm:px-8">
+        <div className="rounded-[28px] bg-[#F9F1E0] border border-[#ded1bc] p-8 sm:p-16 text-center space-y-6 relative overflow-hidden shadow-sm">
 
-      {/* What Makes Us Different (3 Columns) */}
-      <section className="py-12 max-w-[1240px] mx-auto px-4 sm:px-8">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.4, ease: easeOutQuint }}
-          className="max-w-xl mb-8 space-y-1.5"
-        >
-          <h2 className="text-2xl sm:text-3xl font-bold font-['Space_Grotesk'] text-[#34291C] tracking-tight">
-            What makes us different
+          <div className="inline-block px-3 py-1 rounded-full bg-[#ece4d4] text-[#9e3b26] text-xs font-mono font-bold">
+            ADMISSIONS OPEN 2026-27
+          </div>
+
+          <h2 className="text-3xl sm:text-6xl font-bold font-['Space_Grotesk'] text-[#34291C] max-w-2xl mx-auto tracking-tight leading-tight">
+            Be part of our next chapter.
           </h2>
-          <p className="text-xs sm:text-sm text-[#6F6046]">
-            Three foundational commitments that define every day at Global Kids School.
+
+          <p className="text-sm sm:text-base text-[#6F6046] max-w-lg mx-auto leading-relaxed">
+            Take the first step toward a calm, curiosity-led school journey for your child in Tumakuru.
           </p>
-        </motion.div>
 
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-40px" }}
-          variants={staggerContainer}
-          className="grid grid-cols-1 md:grid-cols-3 gap-6"
-        >
-          {differentiators.map((d, idx) => {
-            const Icon = d.icon;
-            return (
-              <motion.div
-                key={idx}
-                variants={fadeInUp}
-                custom={idx}
-                whileHover={{ y: -3 }}
-                transition={{ duration: 0.2, ease: easeOutQuint }}
-                className="p-6 rounded-[16px] bg-[#F9F1E0] border border-[#e2d5c0] shadow-xs space-y-3 hover:shadow-md transition-all"
-              >
-                <div className="w-9 h-9 rounded-[8px] bg-[#ece4d4] text-[#9e3b26] flex items-center justify-center">
-                  <Icon className="w-4 h-4" />
-                </div>
-                <h3 className="text-base font-bold font-['Space_Grotesk'] text-[#34291C]">
-                  {d.title}
-                </h3>
-                <p className="text-xs text-[#6F6046] leading-relaxed">
-                  {d.desc}
-                </p>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-      </section>
-
-      {/* Dark CTA Band */}
-      <section className="py-14 bg-[#34291C] text-[#f6eddd] border-t border-[#483928]">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.45, ease: easeOutQuint }}
-          className="max-w-[1240px] mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-6"
-        >
-          <div className="space-y-1 text-center sm:text-left">
-            <h2 className="text-xl sm:text-2xl font-bold font-['Space_Grotesk'] text-[#f6eddd]">
-              Be part of the next chapter.
-            </h2>
-            <p className="text-xs sm:text-sm text-[#c7baa6]">
-              Admissions open for the upcoming academic year across all grade wings.
-            </p>
-          </div>
-          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+          <div className="pt-4 flex flex-wrap justify-center gap-4">
             <Link
               href="/contact"
-              className="px-6 py-3 rounded-[20px] bg-[#9e3b26] hover:bg-[#832e1d] text-[#f6eddd] font-bold text-xs sm:text-sm shadow-md transition-colors shrink-0 whitespace-nowrap flex items-center gap-2 group"
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-[#9e3b26] text-[#f6eddd] font-bold text-sm shadow-md hover:bg-[#832e1d] transition-all group"
             >
-              <span>Enquire about admissions</span>
+              <span>Enquire for Admissions</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </Link>
-          </motion.div>
-        </motion.div>
+          </div>
+
+        </div>
       </section>
 
       <Footer />
