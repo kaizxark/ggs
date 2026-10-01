@@ -15,23 +15,29 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
           try {
             const win = (document.querySelector('iframe') as HTMLIFrameElement)?.contentWindow;
             if (win?.document) {
-              const s = win.document.createElement('style');
-              s.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
-              win.document.head.appendChild(s);
+              const styleEl = win.document.createElement('style');
+              styleEl.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
+              win.document.head.appendChild(styleEl);
 
-              const replace = () => {
+              const replaceText = () => {
                 win.document.querySelectorAll('.framer-text').forEach(el => {
-                  const txt = (el as HTMLElement).textContent || "";
-                  if (txt.includes("Severna")) (el as HTMLElement).textContent = "Global Kids";
-                });
-                win.document.querySelectorAll('.framer-1506cxs').forEach(div => {
-                  (div as HTMLElement).innerHTML = '<img src="/logo.png" style="width:40px;height:44px;object-fit:contain;display:block;" alt="Global Kids Logo" />';
+                  if ((el as HTMLElement).textContent?.includes("Severna")) {
+                    (el as HTMLElement).textContent = "Global Kids";
+                  }
                 });
               };
-              replace();
-              const obs = new win.MutationObserver(() => replace());
+              replaceText();
+              const obs = new win.MutationObserver(replaceText);
               obs.observe(win.document.body, { childList: true, subtree: true });
-              setTimeout(() => obs.disconnect(), 3000);
+              setTimeout(() => obs.disconnect(), 2000);
+
+              // Only replace first SVG logo container once
+              setTimeout(() => {
+                const logoDiv = win.document.querySelector('.framer-1506cxs');
+                if (logoDiv) {
+                  (logoDiv as HTMLElement).innerHTML = '<img src="/logo.png" style="width:40px;height:44px;object-fit:contain;display:block;" alt="Global Kids Logo" />';
+                }
+              }, 500);
 
               win.scrollTo(0, 0);
             }
