@@ -16,7 +16,7 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
             const win = (document.querySelector('iframe') as HTMLIFrameElement)?.contentWindow;
             if (win?.document) {
               const styleEl = win.document.createElement('style');
-              styleEl.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
+              styleEl.textContent = 'a[href*="framer.com"], a[href*="framer"][href]:not([href="/"]):not([href*="#"]) { display: none !important; }';
               win.document.head.appendChild(styleEl);
 
               const replaceText = () => {
