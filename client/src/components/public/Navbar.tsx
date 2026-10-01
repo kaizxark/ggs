@@ -40,7 +40,7 @@ export default function Navbar() {
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 bg-[#e68a2e] text-[#122824] text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-[#122824] animate-pulse" />
-              Admissions 2026–27
+              Admissions 2026-27
             </span>
             <span className="hidden sm:inline font-medium text-[#c0d4cf]">
               Playgroup to Grade 10 • Puttanapalya, Vokkodi, Tumakuru

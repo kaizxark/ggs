@@ -82,10 +82,10 @@ export default function Home() {
         "Phonics & early bilingual vocabulary acquisition",
         "Sensory motor coordination & tactile activities",
         "Social sharing, emotional security & self-expression",
-        "No high-stakes testing — continuous joyful observation"
+        "No high-stakes testing - continuous joyful observation"
       ],
       ratio: "1:15 Teacher-Child Attention",
-      timing: "9:00 AM – 1:00 PM"
+      timing: "9:00 AM - 1:00 PM"
     },
     primary: {
       badge: "Grades 1 to 5",
@@ -98,7 +98,7 @@ export default function Home() {
         "Introductory computer skills & logical reasoning"
       ],
       ratio: "Individualized Student Mentoring",
-      timing: "9:00 AM – 3:30 PM"
+      timing: "9:00 AM - 3:30 PM"
     },
     secondary: {
       badge: "Grades 6 to 10",
@@ -111,7 +111,7 @@ export default function Home() {
         "Comprehensive character and career readiness"
       ],
       ratio: "Subject Specialist Educators",
-      timing: "9:00 AM – 4:00 PM"
+      timing: "9:00 AM - 4:00 PM"
     }
   };
 
@@ -176,7 +176,7 @@ export default function Home() {
                   <div className="text-xs text-[#627771]">Vokkodi, Tumakuru</div>
                 </div>
                 <div>
-                  <div className="text-lg font-extrabold text-[#122824] font-['Manrope']">Nursery – X</div>
+                  <div className="text-lg font-extrabold text-[#122824] font-['Manrope']">Nursery - X</div>
                   <div className="text-xs text-[#627771]">Complete Schooling</div>
                 </div>
               </div>
@@ -190,7 +190,7 @@ export default function Home() {
                 <div className="flex items-center justify-between pb-6 border-b border-[#23453f] relative z-10">
                   <div>
                     <span className="text-[10px] font-extrabold tracking-widest text-[#ffc87a] uppercase block">
-                      Academic Session 2026–2027
+                      Academic Session 2026-2027
                     </span>
                     <h3 className="text-xl font-bold font-['Manrope'] text-white mt-0.5">
                       Admissions Desk
@@ -277,8 +277,8 @@ export default function Home() {
           {/* Card 1 */}
           <div className="rounded-3xl bg-white border border-[#e5ebe7] p-8 shadow-sm hover:shadow-xl hover:border-[#1f5e54]/40 transition-all flex flex-col justify-between group">
             <div className="space-y-5">
-              <div className="w-12 h-12 rounded-2xl bg-[#eaf4f0] text-[#1f5e54] flex items-center justify-center font-bold text-lg font-['Manrope'] group-hover:scale-105 transition-transform">
-                01
+              <div className="w-12 h-12 rounded-2xl bg-[#eaf4f0] text-[#1f5e54] flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
+                <Lightbulb className="w-6 h-6" />
               </div>
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#e68a2e] block mb-1">
@@ -301,8 +301,8 @@ export default function Home() {
           {/* Card 2 */}
           <div className="rounded-3xl bg-white border border-[#e5ebe7] p-8 shadow-sm hover:shadow-xl hover:border-[#1f5e54]/40 transition-all flex flex-col justify-between group">
             <div className="space-y-5">
-              <div className="w-12 h-12 rounded-2xl bg-[#fff3e0] text-[#b45309] flex items-center justify-center font-bold text-lg font-['Manrope'] group-hover:scale-105 transition-transform">
-                02
+              <div className="w-12 h-12 rounded-2xl bg-[#fff3e0] text-[#b45309] flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
+                <Target className="w-6 h-6" />
               </div>
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#b45309] block mb-1">
@@ -325,8 +325,8 @@ export default function Home() {
           {/* Card 3 */}
           <div className="rounded-3xl bg-white border border-[#e5ebe7] p-8 shadow-sm hover:shadow-xl hover:border-[#1f5e54]/40 transition-all flex flex-col justify-between group">
             <div className="space-y-5">
-              <div className="w-12 h-12 rounded-2xl bg-[#ebf4ff] text-[#1d4ed8] flex items-center justify-center font-bold text-lg font-['Manrope'] group-hover:scale-105 transition-transform">
-                03
+              <div className="w-12 h-12 rounded-2xl bg-[#ebf4ff] text-[#1d4ed8] flex items-center justify-center font-bold text-lg group-hover:scale-105 transition-transform">
+                <Compass className="w-6 h-6" />
               </div>
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#1d4ed8] block mb-1">
@@ -351,10 +351,7 @@ export default function Home() {
       {/* Interactive Grade & Wing Navigator */}
       <section className="py-20 bg-white border-y border-[#e5ebe7]">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="text-center max-w-2xl mx-auto space-y-3 mb-12">
-            <span className="text-xs font-bold uppercase tracking-widest text-[#1f5e54] bg-[#e4efe9] px-3.5 py-1 rounded-full">
-              Comprehensive Schooling
-            </span>
+          <div className="text-center max-w-2xl mx-auto mb-12">
             <h2 className="text-3xl sm:text-4xl font-extrabold text-[#122824] font-['Manrope'] tracking-tight">
               A curriculum tailored for every developmental stage
             </h2>
@@ -383,7 +380,7 @@ export default function Home() {
                     : "text-[#556c65] hover:text-[#122824]"
                 }`}
               >
-                Primary Wing (Grades 1 – 5)
+                Primary Wing (Grades 1-5)
               </button>
               <button
                 type="button"
@@ -394,7 +391,7 @@ export default function Home() {
                     : "text-[#556c65] hover:text-[#122824]"
                 }`}
               >
-                Middle & High (Grades 6 – 10)
+                Middle & High (Grades 6-10)
               </button>
             </div>
           </div>
@@ -467,9 +464,6 @@ export default function Home() {
       {/* A Day in the Life: Interactive Timeline */}
       <section className="py-20 lg:py-28 max-w-7xl mx-auto px-4 sm:px-8">
         <div className="max-w-2xl space-y-3 mb-14">
-          <span className="text-xs font-bold uppercase tracking-widest text-[#1f5e54] bg-[#e4efe9] px-3.5 py-1 rounded-full">
-            Campus Daily Rhythm
-          </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#122824] font-['Manrope'] tracking-tight">
             A Day in the Life at Global Kids School
           </h2>
@@ -549,9 +543,6 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
             <div className="lg:col-span-7 space-y-6">
-              <span className="text-xs font-extrabold uppercase tracking-widest text-[#ffc87a] bg-white/10 px-3 py-1 rounded-full">
-                Admissions Blueprint
-              </span>
               <h2 className="text-3xl sm:text-4xl font-extrabold font-['Manrope'] tracking-tight leading-tight">
                 Transparent & hassle-free admission process.
               </h2>
@@ -612,7 +603,7 @@ export default function Home() {
               </div>
 
               <p className="text-[11px] text-center text-[#829993]">
-                Office Timings: Mon – Sat (9:00 AM – 4:30 PM)
+                Office Timings: Mon-Sat (9:00 AM - 4:30 PM)
               </p>
             </div>
 

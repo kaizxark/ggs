@@ -79,7 +79,7 @@ export default function About() {
           <div className="space-y-4">
             <h3 className="text-xl font-bold font-['Manrope'] text-[#122824]">A Multi-Sensory Approach</h3>
             <p className="text-sm text-[#556c65] leading-relaxed">
-              From our Early Year learners discovering phonetic sounds with wooden blocks, to our High School experts running chemistry experiments in the lab, our pedagogy is hands-on. By engaging more than just the eyes and ears—we activate the tactile and analytical mind through continuous doing.
+              From our Early Year learners discovering phonetic sounds with wooden blocks, to our High School experts running chemistry experiments in the lab, our pedagogy is hands-on. By engaging more than just the eyes and ears - we activate the tactile and analytical mind through continuous doing.
             </p>
           </div>
 
@@ -96,7 +96,6 @@ export default function About() {
       <section className="py-24 bg-white border-y border-[#e5ebe7]">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <header className="text-center mb-16 max-w-xl mx-auto space-y-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-[#1f5e54]">Principles</span>
             <h2 className="text-3xl font-extrabold font-['Manrope'] text-[#122824]">Our Guiding Compass</h2>
           </header>
 
