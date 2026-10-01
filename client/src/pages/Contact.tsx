@@ -8,9 +8,10 @@ import {
   MapPin,
   Clock,
   ArrowRight,
-  AlertCircle,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Calendar,
+  MessageSquare
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,147 +22,194 @@ export default function Contact() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Simulate submission
     setTimeout(() => {
       setLoading(false);
       setSuccess(true);
-      toast.success("Enquiry submitted successfully! Our team will contact you soon.");
-    }, 1500);
+      toast.success("Enquiry received. Our admissions team will reach out shortly.");
+    }, 1200);
   };
 
   return (
-    <div className="min-h-screen bg-[#f8faf9] text-[#2c3d37] font-['DM_Sans',sans-serif]">
+    <div className="min-h-screen bg-[#faf9f5] text-[#122824] font-['DM_Sans',sans-serif]">
       <Navbar />
 
-      {/* Hero */}
-      <section className="bg-[#f0f5f3] pt-16 pb-12 px-4 sm:px-8 text-center border-b border-[#e2e9e5]">
-        <div className="max-w-3xl mx-auto space-y-4">
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1a2d28] font-['Manrope'] tracking-tight">
-            Connect with Global Kids School
-          </h1>
-          <p className="text-sm text-[#546b65]">
-            Have questions about admissions or want to schedule a campus tour? Reach out to our team.
-          </p>
+      {/* Hero Header */}
+      <section className="py-20 border-b border-[#e5ebe7] bg-gradient-to-tr from-[#f2f7f4] via-[#faf9f5] to-[#fcfcfb]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="max-w-3xl space-y-4">
+            <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#1f5e54] bg-[#e4efe9] px-3.5 py-1 rounded-full">
+              Admissions & Connect
+            </span>
+            <h1 className="text-4xl sm:text-5xl font-extrabold font-['Manrope'] tracking-tight text-[#122824]">
+              Start your child’s journey at Global Kids School.
+            </h1>
+            <p className="text-base sm:text-lg text-[#556c65] leading-relaxed">
+              We welcome families to schedule campus tours, converse with educators, and discover our learning environment in Tumakuru firsthand.
+            </p>
+          </div>
         </div>
       </section>
 
-      <section className="py-16 px-4 sm:px-8 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+      {/* Main Grid: Details + Contact Form */}
+      <section className="py-20 max-w-7xl mx-auto px-4 sm:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
 
-          {/* Contact Details & Info */}
-          <div className="space-y-8">
-            <h2 className="text-xl font-extrabold text-[#1a2d28] font-['Manrope']">Get in Touch Directly</h2>
+          {/* Left Column: Campus Info & Timings */}
+          <div className="lg:col-span-5 space-y-8">
+            <div className="space-y-3">
+              <h2 className="text-2xl font-extrabold font-['Manrope'] text-[#122824]">
+                Campus & Contact Info
+              </h2>
+              <p className="text-sm text-[#556c65]">
+                Reach us via phone or stop by during our designated admissions desk hours.
+              </p>
+            </div>
 
             <div className="space-y-4">
-              <div className="p-5 rounded-2xl bg-white border border-[#e4ede8] flex items-start gap-4 hover:border-[#2f6f68]/30 transition-all">
-                <div className="w-10 h-10 rounded-xl bg-[#eef7f4] text-[#2f6f68] flex items-center justify-center flex-shrink-0">
+              {/* Phone Card */}
+              <div className="p-6 rounded-3xl bg-white border border-[#e5ebe7] space-y-2 hover:border-[#1f5e54]/30 transition-all shadow-xs">
+                <div className="w-10 h-10 rounded-2xl bg-[#edf3ef] text-[#1f5e54] flex items-center justify-center">
                   <Phone className="w-5 h-5" />
                 </div>
-                <div>
-                  <h4 className="font-bold text-sm text-[#1b2d28] mb-1">Admissions & General Enquiries</h4>
-                  <a href={`tel:${schoolInfo.contact.primaryPhone.replace(/\s+/g, '')}`} className="text-sm font-semibold text-[#2f6f68] block hover:underline">
+                <h3 className="font-extrabold text-sm text-[#122824] pt-2">Admissions Helpline</h3>
+                <div className="space-y-1">
+                  <a
+                    href={`tel:${schoolInfo.contact.primaryPhone.replace(/\s+/g, '')}`}
+                    className="text-base font-extrabold text-[#1f5e54] hover:underline block"
+                  >
                     {schoolInfo.contact.primaryPhone}
                   </a>
-                  <a href={`tel:${schoolInfo.contact.secondaryPhone.replace(/\s+/g, '')}`} className="text-xs text-[#637a74] block hover:underline">
-                    {schoolInfo.contact.secondaryPhone}
-                  </a>
+                  <p className="text-xs text-[#637a74]">Office Line: {schoolInfo.contact.secondaryPhone}</p>
                 </div>
               </div>
 
-              <div className="p-5 rounded-2xl bg-white border border-[#e4ede8] flex items-start gap-4 hover:border-[#2f6f68]/30 transition-all">
-                <div className="w-10 h-10 rounded-xl bg-[#fdf5eb] text-[#d97706] flex items-center justify-center flex-shrink-0">
-                  <Mail className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-sm text-[#1b2d28] mb-1">Email Us</h4>
-                  <a href={`mailto:${schoolInfo.contact.email}`} className="text-sm font-semibold text-[#2f6f68] hover:underline">
-                    {schoolInfo.contact.email}
-                  </a>
-                </div>
-              </div>
-
-              <div className="p-5 rounded-2xl bg-white border border-[#e4ede8] flex items-start gap-4 hover:border-[#2f6f68]/30 transition-all">
-                <div className="w-10 h-10 rounded-xl bg-[#eff6ff] text-[#2563eb] flex items-center justify-center flex-shrink-0">
+              {/* Address Card */}
+              <div className="p-6 rounded-3xl bg-white border border-[#e5ebe7] space-y-2 hover:border-[#1f5e54]/30 transition-all shadow-xs">
+                <div className="w-10 h-10 rounded-2xl bg-[#edf3ef] text-[#1f5e54] flex items-center justify-center">
                   <MapPin className="w-5 h-5" />
                 </div>
-                <div>
-                  <h4 className="font-bold text-sm text-[#1b2d28] mb-1">Campus Address</h4>
-                  <p className="text-sm text-[#637a74] leading-relaxed">
-                    {schoolInfo.address.full}
-                  </p>
-                </div>
+                <h3 className="font-extrabold text-sm text-[#122824] pt-2">Campus Location</h3>
+                <p className="text-xs text-[#556c65] leading-relaxed">
+                  {schoolInfo.address.full}
+                </p>
               </div>
 
-              <div className="p-5 rounded-2xl bg-white border border-[#e4ede8] flex items-start gap-4 hover:border-[#2f6f68]/30 transition-all">
-                <div className="w-10 h-10 rounded-xl bg-[#f8f9fa] text-[#637a74] flex items-center justify-center flex-shrink-0">
+              {/* Hours Card */}
+              <div className="p-6 rounded-3xl bg-white border border-[#e5ebe7] space-y-2 hover:border-[#1f5e54]/30 transition-all shadow-xs">
+                <div className="w-10 h-10 rounded-2xl bg-[#edf3ef] text-[#1f5e54] flex items-center justify-center">
                   <Clock className="w-5 h-5" />
                 </div>
-                <div>
-                  <h4 className="font-bold text-sm text-[#1b2d28] mb-1">Our Working Hours</h4>
-                  <p className="text-sm text-[#637a74]">{schoolInfo.contact.officeHours}</p>
-                </div>
+                <h3 className="font-extrabold text-sm text-[#122824] pt-2">Office & Visiting Hours</h3>
+                <p className="text-xs text-[#556c65]">
+                  {schoolInfo.contact.officeHours}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Enquiry Form */}
-          <div className="bg-white p-8 sm:p-10 rounded-3xl border border-[#e8efe9] shadow-lg shadow-[#1e3b35]/5">
+          {/* Right Column: Form */}
+          <div className="lg:col-span-7 bg-white p-8 sm:p-12 rounded-[32px] border border-[#e2eae6] shadow-xl shadow-[#122824]/5">
             {success ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-12">
-                <div className="w-16 h-16 rounded-full bg-[#eef7f4] flex items-center justify-center">
-                  <CheckCircle2 className="w-8 h-8 text-[#2f6f68]" />
+              <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-[#e4efe9] text-[#1f5e54] flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8" />
                 </div>
-                <h3 className="text-xl font-extrabold text-[#1a2d28] font-['Manrope']">Thank You!</h3>
-                <p className="text-sm text-[#546b65] max-w-xs">
-                  We have received your enquiry. Our admissions counselors will reach out to you shortly.
+                <h3 className="text-2xl font-extrabold font-['Manrope'] text-[#122824]">
+                  Enquiry Received
+                </h3>
+                <p className="text-sm text-[#556c65] max-w-sm leading-relaxed">
+                  Thank you for your interest in Global Kids School. A member of our admissions team will contact you shortly with details.
                 </p>
                 <button
+                  type="button"
                   onClick={() => setSuccess(false)}
-                  className="mt-6 text-sm font-bold text-[#2f6f68] hover:underline"
+                  className="mt-4 px-6 py-2.5 rounded-xl border border-[#d2dfd8] text-xs font-bold text-[#122824] hover:bg-[#faf9f5]"
                 >
-                  Send another message
+                  Send another request
                 </button>
               </div>
             ) : (
-             <form onSubmit={handleSubmit} className="space-y-5">
-              <h2 className="text-xl font-extrabold text-[#1a2d28] font-['Manrope'] mb-6">Admissions Enquiry</h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#556963]">Parent/Guardian Name *</label>
-                  <input required className="w-full px-4 py-3 rounded-xl border border-[#dce6e1] focus:border-[#2f6f68] focus:ring-1 focus:ring-[#2f6f68] outline-none text-sm transition-all" />
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <h3 className="text-2xl font-extrabold font-['Manrope'] text-[#122824]">
+                    Book a Visit or Enquire
+                  </h3>
+                  <p className="text-xs text-[#556c65] mt-1">
+                    Fill out the form below to receive syllabus information and schedule an on-campus tour.
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-[#556963]">Mobile Number *</label>
-                  <input required type="tel" className="w-full px-4 py-3 rounded-xl border border-[#dce6e1] focus:border-[#2f6f68] focus:ring-1 focus:ring-[#2f6f68] outline-none text-sm transition-all" />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#344843]">Parent / Guardian Name *</label>
+                    <input
+                      required
+                      placeholder="e.g. Anjali Sharma"
+                      className="w-full px-4 py-3 rounded-xl border border-[#d2dfd8] focus:border-[#1f5e54] focus:ring-1 focus:ring-[#1f5e54] outline-none text-xs bg-[#faf9f5]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#344843]">Mobile Number *</label>
+                    <input
+                      required
+                      type="tel"
+                      placeholder="e.g. +91 98765 43210"
+                      className="w-full px-4 py-3 rounded-xl border border-[#d2dfd8] focus:border-[#1f5e54] focus:ring-1 focus:ring-[#1f5e54] outline-none text-xs bg-[#faf9f5]"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#556963]">Child Name & Grade Interest *</label>
-                <input required className="w-full px-4 py-3 rounded-xl border border-[#dce6e1] focus:border-[#2f6f68] focus:ring-1 focus:ring-[#2f6f68] outline-none text-sm transition-all" placeholder="e.g. Rahul, Class UKG" />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#344843]">Child's Name</label>
+                    <input
+                      placeholder="e.g. Aarav"
+                      className="w-full px-4 py-3 rounded-xl border border-[#d2dfd8] focus:border-[#1f5e54] focus:ring-1 focus:ring-[#1f5e54] outline-none text-xs bg-[#faf9f5]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#344843]">Grade of Interest *</label>
+                    <select
+                      required
+                      className="w-full px-4 py-3 rounded-xl border border-[#d2dfd8] focus:border-[#1f5e54] focus:ring-1 focus:ring-[#1f5e54] outline-none text-xs bg-[#faf9f5]"
+                    >
+                      <option value="">Select Grade</option>
+                      <option value="playgroup">Playgroup / Nursery</option>
+                      <option value="kindergarten">LKG / UKG</option>
+                      <option value="primary">Grade 1 to 5</option>
+                      <option value="middle">Grade 6 to 8</option>
+                      <option value="high">Grade 9 to 10</option>
+                    </select>
+                  </div>
+                </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-[#556963]">Message or Enquiry *</label>
-                <textarea required rows={4} className="w-full px-4 py-3 rounded-xl border border-[#dce6e1] focus:border-[#2f6f68] focus:ring-1 focus:ring-[#2f6f68] outline-none text-sm transition-all" placeholder="What would you like to know about our school?" />
-              </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-[#344843]">Questions or Specific Requirements</label>
+                  <textarea
+                    rows={4}
+                    placeholder="Tell us what you are looking for, or any specific questions about admissions..."
+                    className="w-full px-4 py-3 rounded-xl border border-[#d2dfd8] focus:border-[#1f5e54] focus:ring-1 focus:ring-[#1f5e54] outline-none text-xs bg-[#faf9f5]"
+                  />
+                </div>
 
-              <div className="flex items-start gap-2 pt-2">
-                <input required type="checkbox" className="mt-1 accent-[#2f6f68]" />
-                <p className="text-[10px] text-[#819690] leading-tight">
-                  I agree to Global Kids School contacting me with admissions information using the details provided.
-                </p>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-[#2f6f68] hover:bg-[#235852] text-white font-bold text-sm transition-all shadow-md mt-4 disabled:opacity-75"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Submit Enquiry <ArrowRight className="w-4 h-4" /></>}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-[#122824] hover:bg-[#1a3a34] text-white font-extrabold text-xs shadow-md transition-colors disabled:opacity-70"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Sending Details...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Submit Admissions Enquiry</span>
+                      <ArrowRight className="w-4 h-4 text-[#ffc87a]" />
+                    </>
+                  )}
+                </button>
+              </form>
             )}
           </div>
         </div>

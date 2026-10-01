@@ -1,114 +1,115 @@
 import React from "react";
 import Navbar from "@/components/public/Navbar";
 import Footer from "@/components/public/Footer";
+import { Link } from "wouter";
 import {
   HeartHandshake,
-  Target,
-  Lightbulb,
-  Smile,
   ShieldCheck,
+  Target,
+  Users,
   Compass,
-  Users
+  Lightbulb,
+  ArrowRight,
+  BookOpen,
+  Award,
+  Sparkles
 } from "lucide-react";
-import { Link } from "wouter";
 
 export default function About() {
   const values = [
-    { name: "Kindness", icon: HeartHandshake, color: "text-rose-500", bg: "bg-rose-50" },
-    { name: "Integrity", icon: ShieldCheck, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { name: "Courage", icon: Target, color: "text-amber-600", bg: "bg-amber-50" },
-    { name: "Respect", icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
-    { name: "Responsibility", icon: Compass, color: "text-indigo-600", bg: "bg-indigo-50" },
-    { name: "Joy in Learning", icon: Smile, color: "text-teal-600", bg: "bg-teal-50" },
+    { name: "Kindness", icon: HeartHandshake, color: "text-rose-600", desc: "Building an environment of gentle, proactive empathy and grace." },
+    { name: "Integrity", icon: ShieldCheck, color: "text-emerald-700", desc: "Upholding honesty, consistency, and sound character in every action." },
+    { name: "Courage", icon: Target, color: "text-amber-700", desc: "Empowering children to take intellectual risks and learn from every challenge." },
+    { name: "Respect", icon: Users, color: "text-blue-700", desc: "Honor for self, diversity, and the communal space we share." },
+    { name: "Responsibility", icon: Compass, color: "text-indigo-700", desc: "Active stewardship of our work, our environment, and our collective progress." },
+    { name: "Joy", icon: Lightbulb, color: "text-teal-700", desc: "Finding genuine excitement and curiosity in every learning discovery." },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f8faf9] text-[#2c3d37] font-['DM_Sans',sans-serif]">
+    <div className="min-h-screen bg-[#faf9f5] text-[#122824] font-['DM_Sans',sans-serif]">
       <Navbar />
 
-      {/* Hero */}
-      <section className="bg-gradient-to-b from-[#24463f] to-[#1e3b35] text-white pt-16 pb-24 px-4 sm:px-8 border-b border-[#25423c]">
-        <div className="max-w-4xl mx-auto text-center space-y-6">
-          <span className="text-xs font-bold uppercase tracking-widest text-[#fbd38d] block font-['Manrope'] mb-2">
-            About Global Kids School
-          </span>
-          <h1 className="text-4xl sm:text-5xl font-extrabold font-['Manrope'] tracking-tight leading-tight">
-            Nurturing the Next Generation of Leaders and Thinkers
-          </h1>
-          <p className="text-sm sm:text-base text-[#b1c7c2] leading-relaxed max-w-3xl mx-auto font-normal">
-            We believe education is more than academics. It is the joyful process of discovering who you are, what you are capable of, and how you can contribute to the world.
-          </p>
+      {/* Hero: Editorial Typographic Header */}
+      <section className="py-24 border-b border-[#e5ebe7] relative bg-gradient-to-tr from-[#f2f7f4] via-[#faf9f5] to-[#fcfcfb]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="max-w-3xl space-y-6">
+            <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#1f5e54] bg-[#e4efe9] px-3.5 py-1 rounded-full">
+              Our Institutional Story
+            </span>
+            <h1 className="text-4xl sm:text-6xl font-extrabold font-['Manrope'] tracking-tight leading-[1.05] text-[#122824]">
+              Nurturing the next generation of thinkers, doers, and leaders.
+            </h1>
+            <p className="text-lg text-[#556c65] leading-relaxed">
+              Global Kids School, Tumakuru, is built on the belief that children thrive when education feels purposeful, secure, and genuinely curious. We move beyond textbooks to foster mastery, confidence, and character.
+            </p>
+          </div>
         </div>
       </section>
 
-      {/* Who We Are & Approach */}
-      <section className="py-16 md:py-24 max-w-7xl mx-auto px-4 sm:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-start">
-          <div className="space-y-6">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1a2d28] font-['Manrope'] flex items-center gap-3 border-l-4 border-[#2f6f68] pl-4">
-              Who We Are
+      {/* The Pedagogy Block: Subtle, editorial layout */}
+      <section className="py-24 max-w-7xl mx-auto px-4 sm:px-8 grid grid-cols-1 lg:grid-cols-12 gap-16">
+        <div className="lg:col-span-5 relative">
+          <div className="sticky top-32 space-y-6">
+            <h2 className="text-3xl font-extrabold font-['Manrope'] text-[#122824] leading-tight">
+              An ecosystem designed for curiosity.
             </h2>
-            <div className="text-sm text-[#546b65] leading-relaxed space-y-4">
-              <p>
-                Situated in the heart of Tumakuru, Global Kids School is a vibrant and caring educational ecosystem dedicated to shaping intelligent, empathetic, and confident young individuals.
-              </p>
-              <p>
-                From lively early-years classrooms that spark wonder to middle school labs that foster critical inquiry, our campus is designed to support every phase of a child's developmental journey.
-              </p>
-              <p>
-                We do not just drill facts; we build strong conceptual foundations in mathematics, sciences, languages, and the arts, while actively integrating physical fitness and moral education.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1a2d28] font-['Manrope'] flex items-center gap-3 border-l-4 border-[#d97706] pl-4">
-              Our Educational Approach
-            </h2>
-            <div className="space-y-5">
-              <div className="flex gap-4 p-5 rounded-2xl bg-white border border-[#e4ede8] shadow-xs">
-                <div className="w-10 h-10 rounded-xl bg-[#eef7f4] flex flex-shrink-0 items-center justify-center">
-                  <Lightbulb className="w-5 h-5 text-[#2f6f68]" />
-                </div>
+            <p className="text-sm text-[#556c65] leading-relaxed">
+              We move beyond traditional rote learning by integrating conceptual mastery with hands-on labs, creative expression, and active physical play.
+            </p>
+            <div className="flex flex-col gap-4 pt-4">
+              <div className="flex items-start gap-4 p-4 rounded-2xl bg-[#edf3ef] border border-[#d6e5e1]">
+                <Lightbulb className="w-6 h-6 text-[#1f5e54] mt-1 shrink-0" />
                 <div>
-                  <h4 className="font-bold text-[#233833] text-sm mb-1.5 font-['Manrope']">Curiosity-Driven Pedagogy</h4>
-                  <p className="text-xs text-[#637a74] leading-relaxed">Children learn best when they are asking the questions. Our lesson plans prioritize interactive experiments, discussions, and project-based learning.</p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 p-5 rounded-2xl bg-white border border-[#e4ede8] shadow-xs">
-                <div className="w-10 h-10 rounded-xl bg-[#fdf5eb] flex flex-shrink-0 items-center justify-center">
-                  <Target className="w-5 h-5 text-[#d97706]" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-[#233833] text-sm mb-1.5 font-['Manrope']">Structured Foundations</h4>
-                  <p className="text-xs text-[#637a74] leading-relaxed">While we encourage free thought, we couple it with a rigorous academic framework aligning with the CBSE pattern to ensure deep mastery of core subjects.</p>
+                  <h4 className="font-extrabold text-sm text-[#122824]">Inquiry-first learning</h4>
+                  <p className="text-xs text-[#556c65] mt-1">Questions drive our classroom dialogue, not teacher-led monologues.</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        <div className="lg:col-span-7 space-y-12">
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold font-['Manrope'] text-[#122824]">Our Origin</h3>
+            <p className="text-sm text-[#556c65] leading-relaxed">
+              Born from a local vision in Tumakuru, Global Kids School serves families who prioritize quality, safe, and holistic education. We are situated in a quiet, nurturing pocket of Vokkodi, providing the perfect distance from distractions while remaining accessible to the central city. Our facility is purposely built to reflect a child’s scale, with open classroom arrangements, dedicated exploration corners, and ventilated spaces.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold font-['Manrope'] text-[#122824]">A Multi-Sensory Approach</h3>
+            <p className="text-sm text-[#556c65] leading-relaxed">
+              From our Early Year learners discovering phonetic sounds with wooden blocks, to our High School experts running chemistry experiments in the lab, our pedagogy is hands-on. By engaging more than just the eyes and ears—we activate the tactile and analytical mind through continuous doing.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold font-['Manrope'] text-[#122824]">The Teacher as Mentor</h3>
+            <p className="text-sm text-[#556c65] leading-relaxed">
+              Our faculty members undergo rigorous developmental training. We select for pedagogical empathy as much as subject command. In every wing, our teachers act as guides, assessing each student's unique pace and providing support that challenges without overwhelming.
+            </p>
+          </div>
+        </div>
       </section>
 
-      {/* Core Values */}
-      <section className="py-16 md:py-24 bg-white border-y border-[#e2ece7]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 text-center">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#2f6f68] bg-[#eef7f4] px-3 py-1 rounded-full mb-4 inline-block">
-            Our Core Values
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#192b26] font-['Manrope'] tracking-tight mb-12">
-            The principles that guide our community
-          </h2>
+      {/* Core Values: Grid of Values */}
+      <section className="py-24 bg-white border-y border-[#e5ebe7]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <header className="text-center mb-16 max-w-xl mx-auto space-y-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-[#1f5e54]">Principles</span>
+            <h2 className="text-3xl font-extrabold font-['Manrope'] text-[#122824]">Our Guiding Compass</h2>
+          </header>
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
-            {values.map((val, idx) => {
-              const Icon = val.icon;
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {values.map((v, i) => {
+              const Icon = v.icon;
               return (
-                <div key={idx} className="p-6 rounded-2xl bg-[#fbfdfc] border border-[#eef5f1] hover:shadow-md hover:border-[#2f6f68]/30 transition-all flex flex-col items-center text-center">
-                  <div className={`w-14 h-14 rounded-full ${val.bg} ${val.color} flex items-center justify-center mb-4`}>
+                <div key={i} className="group p-8 rounded-3xl bg-[#faf9f5] border border-[#edf3ef] hover:border-[#1f5e54]/30 hover:shadow-lg transition-all">
+                  <div className={`w-12 h-12 rounded-2xl bg-white border border-[#edf3ef] flex items-center justify-center mb-6 transition-transform group-hover:scale-110 ${v.color}`}>
                     <Icon className="w-6 h-6" />
                   </div>
-                  <h4 className="font-extrabold text-[#243530] text-base font-['Manrope']">{val.name}</h4>
+                  <h4 className="text-lg font-extrabold font-['Manrope'] text-[#122824] mb-3">{v.name}</h4>
+                  <p className="text-xs text-[#556c65] leading-relaxed">{v.desc}</p>
                 </div>
               );
             })}
@@ -116,38 +117,22 @@ export default function About() {
         </div>
       </section>
 
-      {/* Our Community & Mentorship */}
-      <section className="py-16 md:py-24 max-w-7xl mx-auto px-4 sm:px-8">
-        <div className="bg-[#24463f] rounded-3xl p-8 sm:p-12 lg:p-16 flex flex-col lg:flex-row items-center gap-12 shadow-xl shadow-[#24463f]/10 overflow-hidden relative">
-          <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#2c584f] rounded-full blur-3xl opacity-50 pointer-events-none" />
-
-          <div className="lg:w-1/2 space-y-6 relative z-10 text-white">
-            <h2 className="text-2xl sm:text-4xl font-extrabold font-['Manrope'] leading-tight">
-              A partnership between passionate educators and supportive parents.
-            </h2>
-            <p className="text-sm text-[#b9ceca] leading-relaxed">
-              Our educators are mentors first. We hire teachers who exhibit deep patience, subject expertise, and a genuine love for working with children. Small class sizes allow them to recognize a child's unique talents or struggles early.
-              <br/><br/>
-              Furthermore, we consider parents as active partners in education, ensuring clear and consistent communication regarding a child's holistic progress through our unified staff portal.
-            </p>
-            <div className="pt-4">
-              <Link
-                href="/contact"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-[#fbd38d] hover:bg-[#f2c16c] text-[#24463f] font-bold text-sm shadow-md transition-colors"
-              >
-                Join Our School Community
-              </Link>
+      {/* Community CTA */}
+      <section className="py-24 max-w-7xl mx-auto px-4 sm:px-8">
+        <div className="rounded-[40px] bg-[#122824] text-white p-12 lg:p-20 flex flex-col md:flex-row items-center justify-between gap-12">
+            <div className="space-y-6 max-w-xl">
+              <h2 className="text-3xl lg:text-4xl font-extrabold font-['Manrope'] tracking-tight">Become a part of our learning circle.</h2>
+              <p className="text-sm text-[#a5c5bd] leading-relaxed">
+                Whether you are a prospective parent, an educator looking for a nurturing place to grow, or a member of the Tumakuru community, we invite you to reach out.
+              </p>
             </div>
-          </div>
-
-          <div className="lg:w-1/2 relative w-full h-[320px] rounded-2xl bg-[#f4f7f6] overflow-hidden flex items-center justify-center border-4 border-[#2c584f]/50">
-            {/* Visual representation placeholder */}
-            <div className="text-center p-6 space-y-3">
-              <Users className="w-12 h-12 text-[#2f6f68] mx-auto opacity-30" />
-              <p className="text-sm font-bold text-[#627772]">Dedicated Mentorship</p>
-              <p className="text-[11px] text-[#869f9a]">Safe, nurturing environments fostering deep connections.</p>
-            </div>
-          </div>
+            <Link
+              href="/contact"
+              className="px-8 py-4 rounded-xl bg-[#e68a2e] text-[#122824] font-extrabold text-sm shadow-md hover:bg-[#ffc87a] transition-all shrink-0 flex items-center gap-2"
+            >
+              Start the Conversation
+              <ArrowRight className="w-4 h-4" />
+            </Link>
         </div>
       </section>
 

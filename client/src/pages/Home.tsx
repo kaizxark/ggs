@@ -19,292 +19,235 @@ import {
   GraduationCap,
   Palette,
   Trophy,
-  Award,
-  Smile,
-  ChevronRight,
-  MapPin,
   Clock,
-  ArrowUpRight
+  MapPin,
+  ArrowUpRight,
+  Sun,
+  Coffee,
+  Activity,
+  Layers,
+  Check,
+  Award,
+  FileCheck
 } from "lucide-react";
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"all" | "classrooms" | "activities" | "sports">("all");
+  const [selectedWing, setSelectedWing] = useState<"early" | "primary" | "secondary">("early");
+  const [activeTimeIndex, setActiveTimeIndex] = useState(0);
 
-  const pillars = [
+  const dailySchedule = [
     {
-      title: "Learn with curiosity",
-      tagline: "Active Inquiry & Discovery",
-      description: "Encouraging children to ask questions, explore hands-on concepts, and develop lifelong passion for learning rather than rote memorization.",
-      icon: Lightbulb,
-      color: "bg-[#eef8f5] text-[#2f6f68] border-[#cbe5dc]",
-      badge: "Foundational Pedagogy",
+      time: "08:45 AM",
+      title: "Morning Assembly & Value Meditation",
+      desc: "Community songs, news sharing, mindful breathing, and theme-of-the-day discussions that build morning readiness.",
+      icon: Sun,
+      tag: "Social Connection"
     },
     {
-      title: "Grow with confidence",
-      tagline: "Safe & Supportive Environment",
-      description: "Small class sizes and empathetic educators help each child build stage courage, public speaking skills, emotional intelligence, and resilience.",
-      icon: Sparkles,
-      color: "bg-[#fdf6ec] text-[#b7791f] border-[#fae2c0]",
-      badge: "Child-Centric Focus",
-    },
-    {
-      title: "Lead with purpose",
-      tagline: "Character, Values & Teamwork",
-      description: "Instilling core values of kindness, integrity, environmental consciousness, and community spirit to prepare students for real-world leadership.",
-      icon: Target,
-      color: "bg-[#eff6ff] text-[#2b6cb0] border-[#bee3f8]",
-      badge: "Holistic Development",
-    },
-  ];
-
-  const experiences = [
-    {
-      title: "Experiential Classrooms",
-      desc: "Interactive learning aids, digital audio-visual resources, and student-led group activities designed to make concepts memorable.",
+      time: "09:30 AM",
+      title: "Interactive Core Conceptual Blocks",
+      desc: "Mathematics, Languages, and General Science taught using physical manipulatives, phonics kits, and interactive inquiry.",
       icon: BookOpen,
+      tag: "Foundational Academics"
     },
     {
-      title: "Sports & Physical Wellness",
-      desc: "Daily fitness routines, structured outdoor sports, yoga, and games that promote motor skills, agility, and true sportsmanship.",
+      time: "11:30 AM",
+      title: "Nutritious Snack & Free Play",
+      desc: "Structured social recess under teacher supervision where etiquette, peer cooperation, and sharing are practiced naturally.",
+      icon: Coffee,
+      tag: "Wellbeing & Life Skills"
+    },
+    {
+      time: "01:00 PM",
+      title: "STEM Discovery & Creative Arts",
+      desc: "Hands-on model building, art & craft, environmental science observations, and language storytelling circles.",
+      icon: Lightbulb,
+      tag: "Experiential Inquiry"
+    },
+    {
+      time: "03:00 PM",
+      title: "Physical Sports, Drills & Yoga",
+      desc: "Agility workouts, team sport drills, obstacle coordination, and relaxing cooldown sessions before dismissal.",
       icon: Trophy,
-    },
-    {
-      title: "Arts, Music & Performance",
-      desc: "Creative expression through drawing, crafts, cultural festivities, dance, and annual theatrical performances.",
-      icon: Palette,
-    },
-    {
-      title: "STEM & Digital Literacy",
-      desc: "Age-appropriate introduction to science experiments, logical puzzles, mathematics manipulatives, and modern learning tools.",
-      icon: Compass,
-    },
-    {
-      title: "Value Education & Empathy",
-      desc: "Character building, moral ethics, hygiene habits, and respectful interaction taught through everyday school practices.",
-      icon: Heart,
-    },
-    {
-      title: "Parent-School Synergy",
-      desc: "Transparent progress reporting, active parent-teacher interactions, and regular workshops ensuring continuous growth.",
-      icon: Users,
+      tag: "Physical Agility"
     },
   ];
 
-  const steps = [
-    {
-      step: "01",
-      title: "Submit Enquiry",
-      desc: "Fill our online form or call our admissions team to express interest in the upcoming academic year.",
+  const wingsData = {
+    early: {
+      badge: "Ages 3 to 6 Years",
+      title: "Foundational Playgroup, Nursery & Kindergarten",
+      desc: "We prioritize joyful sensory discovery, phonetic language immersion, numeracy play, fine motor skills, and social confidence in a warm, child-safe setup.",
+      outcomes: [
+        "Phonics & early bilingual vocabulary acquisition",
+        "Sensory motor coordination & tactile activities",
+        "Social sharing, emotional security & self-expression",
+        "No high-stakes testing — continuous joyful observation"
+      ],
+      ratio: "1:15 Teacher-Child Attention",
+      timing: "9:00 AM – 1:00 PM"
     },
-    {
-      step: "02",
-      title: "Campus Interaction & Tour",
-      desc: "Visit our campus in Vokkodi, Tumakuru to meet our teachers and explore learning spaces.",
+    primary: {
+      badge: "Grades 1 to 5",
+      title: "Primary Wing: Conceptual Mastery & Curiosity",
+      desc: "Transitioning from play-based discovery into structured inquiry, mathematical thinking, environmental studies, expressive English, and creative arts.",
+      outcomes: [
+        "Strong foundation in mental math & problem solving",
+        "Reading fluency, cursive writing & creative journaling",
+        "General science practical demonstrations & nature studies",
+        "Introductory computer skills & logical reasoning"
+      ],
+      ratio: "Individualized Student Mentoring",
+      timing: "9:00 AM – 3:30 PM"
     },
-    {
-      step: "03",
-      title: "Student Readiness",
-      desc: "An informal, friendly conversational interaction to understand the child's strengths and learning stage.",
-    },
-    {
-      step: "04",
-      title: "Admission Confirmation",
-      desc: "Complete simple documentation and welcome your child into the Global Kids School family!",
-    },
-  ];
-
-  const galleryItems = [
-    {
-      category: "classrooms",
-      title: "Interactive Early Learning Spaces",
-      desc: "Bright, airy classrooms with child-safe furnishings and rich activity corners.",
-      tag: "Pre-Primary & Primary",
-      bgGradient: "from-[#2f6f68] to-[#1f4e48]"
-    },
-    {
-      category: "activities",
-      title: "Hands-on Science & Math Corner",
-      desc: "Manipulatives and discovery kits that make abstract concepts clear and fun.",
-      tag: "Experiential Learning",
-      bgGradient: "from-[#d97706] to-[#b45309]"
-    },
-    {
-      category: "sports",
-      title: "Outdoor Play & Physical Fitness",
-      desc: "Safe, open grounds for athletics, team games, drills, and physical coordination.",
-      tag: "Sports & Wellness",
-      bgGradient: "from-[#2563eb] to-[#1d4ed8]"
-    },
-    {
-      category: "activities",
-      title: "Art, Craft & Creative Expression",
-      desc: "Dedicated creative tables where young imaginations take vivid, colorful shapes.",
-      tag: "Creative Arts",
-      bgGradient: "from-[#7c3aed] to-[#6d28d9]"
-    },
-    {
-      category: "classrooms",
-      title: "Reading & Storytelling Nook",
-      desc: "Curated storybooks and reading journals that spark the joy of literature early.",
-      tag: "Library & Literacy",
-      bgGradient: "from-[#0d9488] to-[#0f766e]"
-    },
-    {
-      category: "activities",
-      title: "Cultural Events & Assemblies",
-      desc: "Celebrating diversity, national heritage, and student achievements on stage.",
-      tag: "School Celebrations",
-      bgGradient: "from-[#e11d48] to-[#be123c]"
-    },
-  ];
-
-  const filteredGallery = activeTab === "all"
-    ? galleryItems
-    : galleryItems.filter(item => item.category === activeTab);
+    secondary: {
+      badge: "Grades 6 to 10",
+      title: "Middle & High School: Purpose & Academic Excellence",
+      desc: "Aligning rigorous CBSE-pattern curriculum with critical analysis, science laboratory practicals, debate, leadership roles, and holistic board readiness.",
+      outcomes: [
+        "In-depth physics, chemistry, biology & advanced mathematics",
+        "Debate, public speaking, drama & cultural presentations",
+        "Leadership clubs, quiz leagues & competitive exam preparedness",
+        "Comprehensive character and career readiness"
+      ],
+      ratio: "Subject Specialist Educators",
+      timing: "9:00 AM – 4:00 PM"
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#f8faf9] text-[#2c3d37] font-['DM_Sans',sans-serif]">
+    <div className="min-h-screen bg-[#faf9f5] text-[#1a2d28] font-['DM_Sans',sans-serif] selection:bg-[#ffc87a] selection:text-[#122824]">
       <Navbar />
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden pt-12 pb-20 md:pt-20 md:pb-28 border-b border-[#e4ede8] bg-gradient-to-b from-[#f2f8f5] via-[#f7faf8] to-[#ffffff]">
-        {/* Subtle Decorative Background Blobs */}
-        <div className="absolute top-[-10%] right-[-5%] w-[450px] h-[450px] rounded-full bg-[#dbeee7]/50 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-[5%] left-[-10%] w-[400px] h-[400px] rounded-full bg-[#faedd8]/40 blur-3xl pointer-events-none" />
+      {/* Hero Section: Editorial & Prestigious */}
+      <section className="relative overflow-hidden pt-10 pb-20 lg:pt-16 lg:pb-28 border-b border-[#e5ebe7] bg-gradient-to-b from-[#f2f7f4] via-[#faf9f5] to-[#faf9f5]">
+        {/* Subtle Decorative Grid Pattern Background */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1b433b0a_1px,transparent_1px),linear-gradient(to_bottom,#1b433b0a_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
-            {/* Left Content */}
-            <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-              {/* Pill badge */}
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#e3f2ec] border border-[#c3e3d7] text-[#205e56] text-xs font-bold shadow-xs">
-                <Sparkles className="w-3.5 h-3.5 text-[#d97706]" />
-                <span>Nurturing Excellence in Tumakuru, Karnataka</span>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-10 items-center">
+
+            {/* Left Main Editorial Text */}
+            <div className="lg:col-span-7 space-y-7">
+              {/* Institution Seal Ribbon */}
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-[#e8f1ed] border border-[#cbdcd5] text-[#122824] text-xs font-bold shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-[#e68a2e]" />
+                <span className="tracking-wide uppercase text-[11px] font-extrabold text-[#122824]">
+                  Puttanapalya, Vokkodi • Tumakuru
+                </span>
               </div>
 
-              {/* Main Headline */}
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-[#192b26] font-['Manrope'] tracking-tight leading-[1.12]">
-                Where <span className="text-[#2f6f68] underline decoration-[#fbd38d] decoration-wavy decoration-2 underline-offset-8">curious minds</span> grow into confident doers.
+              {/* Editorial Headline */}
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-[#122824] font-['Manrope'] tracking-tight leading-[1.12]">
+                Where <span className="text-[#1f5e54] underline decoration-[#ffc87a] decoration-4 underline-offset-8">curious minds</span> grow into confident doers.
               </h1>
 
-              {/* Subheading */}
-              <p className="text-base sm:text-lg text-[#556963] max-w-2xl mx-auto lg:mx-0 leading-relaxed font-normal">
-                A nurturing school community in Tumakuru built around meaningful learning, confidence, character, and possibility. We inspire every child to learn joyfully and achieve their highest potential.
+              {/* Subtext */}
+              <p className="text-base sm:text-lg text-[#4a5f59] leading-relaxed max-w-2xl font-normal">
+                A nurturing school community in Tumakuru built around authentic learning, character, moral integrity, and joy. From early years to Grade 10, we make education meaningful, active, and inspiring.
               </p>
 
               {/* Action Buttons */}
-              <div className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-3.5">
+              <div className="pt-1 flex flex-wrap items-center gap-4">
                 <Link
                   href="/contact"
-                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-[#2f6f68] hover:bg-[#235852] text-white font-bold text-sm shadow-md shadow-[#2f6f68]/25 hover:shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="inline-flex items-center gap-2.5 px-6 py-4 rounded-xl bg-[#122824] hover:bg-[#1a3a34] text-white font-extrabold text-sm shadow-lg shadow-[#122824]/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <span>Enquire About Admissions</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4 text-[#ffc87a]" />
                 </Link>
 
                 <Link
                   href="/about"
-                  className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-white hover:bg-[#f3f8f5] text-[#2c4e47] border border-[#cbdcd5] font-bold text-sm shadow-xs transition-all hover:border-[#2f6f68]"
+                  className="inline-flex items-center gap-2 px-6 py-4 rounded-xl bg-white hover:bg-[#f2f7f4] text-[#122824] border border-[#cad9d3] font-bold text-sm shadow-2xs transition-all hover:border-[#122824]"
                 >
-                  <span>Explore School Story</span>
-                  <ChevronRight className="w-4 h-4 text-[#2f6f68]" />
-                </Link>
-
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-2 px-4 py-3.5 rounded-xl bg-[#eaf4f0] hover:bg-[#d8ece5] text-[#225750] text-xs font-bold transition-colors"
-                >
-                  <span>Staff / ERP Login</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
+                  <span>Our Educational Philosophy</span>
                 </Link>
               </div>
 
-              {/* Key Trust Highlights */}
-              <div className="pt-4 grid grid-cols-3 gap-3 border-t border-[#e2ece7] max-w-lg mx-auto lg:mx-0 text-left">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-[#2f6f68] shrink-0" />
-                  <span className="text-xs font-semibold text-[#3b504a]">Safe & Caring Campus</span>
+              {/* Quick Trust Highlights */}
+              <div className="pt-6 border-t border-[#e2eae6] grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-lg font-extrabold text-[#122824] font-['Manrope']">CBSE Pattern</div>
+                  <div className="text-xs text-[#627771]">Curriculum & Pedagogy</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Award className="w-4 h-4 text-[#d97706] shrink-0" />
-                  <span className="text-xs font-semibold text-[#3b504a]">CBSE Pattern Model</span>
+                <div>
+                  <div className="text-lg font-extrabold text-[#122824] font-['Manrope']">Safe Campus</div>
+                  <div className="text-xs text-[#627771]">Vokkodi, Tumakuru</div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Smile className="w-4 h-4 text-[#2b6cb0] shrink-0" />
-                  <span className="text-xs font-semibold text-[#3b504a]">Holistic Growth</span>
+                <div>
+                  <div className="text-lg font-extrabold text-[#122824] font-['Manrope']">Nursery – X</div>
+                  <div className="text-xs text-[#627771]">Complete Schooling</div>
                 </div>
               </div>
             </div>
 
-            {/* Right Card / Visual Showcase */}
-            <div className="lg:col-span-5 relative">
-              <div className="relative rounded-2xl bg-white p-6 sm:p-7 shadow-xl shadow-[#244b44]/8 border border-[#d9e6e0] overflow-hidden">
-                <div className="flex items-center justify-between pb-5 border-b border-[#ebf2ee]">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#2f6f68] text-white flex items-center justify-center font-bold font-['Manrope'] shadow-md">
-                      GK
-                    </div>
-                    <div>
-                      <h2 className="font-extrabold text-base text-[#1e302b] font-['Manrope']">
-                        Global Kids School
-                      </h2>
-                      <p className="text-xs text-[#718680] flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-[#2f6f68]" />
-                        Vokkodi, Tumakuru
-                      </p>
-                    </div>
+            {/* Right Interactive Campus Overview Slate */}
+            <div className="lg:col-span-5">
+              <div className="rounded-3xl bg-[#122824] text-white p-7 sm:p-8 shadow-2xl border border-[#23453f] relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#1f5e54] rounded-full blur-3xl opacity-30 pointer-events-none" />
+
+                <div className="flex items-center justify-between pb-6 border-b border-[#23453f] relative z-10">
+                  <div>
+                    <span className="text-[10px] font-extrabold tracking-widest text-[#ffc87a] uppercase block">
+                      Academic Session 2026–2027
+                    </span>
+                    <h3 className="text-xl font-bold font-['Manrope'] text-white mt-0.5">
+                      Admissions Desk
+                    </h3>
                   </div>
-                  <span className="px-2.5 py-1 rounded-full bg-[#edf7f3] text-[#24635b] text-[11px] font-bold">
-                    AY 2026–27
+                  <span className="px-3 py-1 rounded-full bg-[#1f5e54] text-[#ffc87a] text-xs font-bold border border-[#2d7d71]">
+                    Open Now
                   </span>
                 </div>
 
-                {/* Card Body with Key Program Highlights */}
-                <div className="py-5 space-y-3.5">
-                  <div className="p-3.5 rounded-xl bg-[#f5f9f7] border border-[#e4eeea] flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#2f6f68]/10 text-[#2f6f68] flex items-center justify-center shrink-0 mt-0.5">
+                {/* Information Rows */}
+                <div className="py-6 space-y-4 relative z-10 text-xs">
+                  <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-[#1a3832] border border-[#28524a]">
+                    <div className="w-8 h-8 rounded-xl bg-[#ffc87a]/20 text-[#ffc87a] flex items-center justify-center shrink-0 mt-0.5">
                       <GraduationCap className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-[#1f332e]">Early Years & Primary Wing</h3>
-                      <p className="text-[11px] text-[#5e736d] mt-0.5">
-                        Focus on foundational language, numeracy, sensory activities, and social-emotional development.
+                      <strong className="block text-white font-bold text-sm">Pre-Primary to High School</strong>
+                      <p className="text-[#a5c5bd] mt-0.5">
+                        Accepting applications for Playgroup, Nursery, LKG, UKG and Grades 1 through 10.
                       </p>
                     </div>
                   </div>
 
-                  <div className="p-3.5 rounded-xl bg-[#fef9f2] border border-[#faecd8] flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#d97706]/10 text-[#d97706] flex items-center justify-center shrink-0 mt-0.5">
-                      <Palette className="w-4 h-4" />
+                  <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-[#1a3832] border border-[#28524a]">
+                    <div className="w-8 h-8 rounded-xl bg-[#ffc87a]/20 text-[#ffc87a] flex items-center justify-center shrink-0 mt-0.5">
+                      <Phone className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-[#38260b]">Middle & High School Wing</h3>
-                      <p className="text-[11px] text-[#715c3d] mt-0.5">
-                        Deep conceptual understanding, problem-solving, science practicals, and leadership mentoring.
-                      </p>
+                      <strong className="block text-white font-bold text-sm">Direct Admission Lines</strong>
+                      <a href={`tel:${schoolInfo.contact.primaryPhone.replace(/\s+/g, '')}`} className="text-[#ffc87a] font-bold block hover:underline text-sm mt-0.5">
+                        {schoolInfo.contact.primaryPhone}
+                      </a>
+                      <span className="text-[#8baea5] text-[11px]">Office Desk: {schoolInfo.contact.secondaryPhone}</span>
                     </div>
                   </div>
 
-                  <div className="p-3.5 rounded-xl bg-[#f0f7ff] border border-[#d6e7fc] flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#2563eb]/10 text-[#2563eb] flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-[#1a3832] border border-[#28524a]">
+                    <div className="w-8 h-8 rounded-xl bg-[#ffc87a]/20 text-[#ffc87a] flex items-center justify-center shrink-0 mt-0.5">
                       <Clock className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-[#102a45]">Admissions Helpline</h3>
-                      <p className="text-[11px] text-[#4b6a8a] mt-0.5">
-                        Call <strong className="text-[#102a45]">+91 86600 66542</strong> or visit between 9:00 AM – 4:30 PM.
+                      <strong className="block text-white font-bold text-sm">Campus Visiting Hours</strong>
+                      <p className="text-[#a5c5bd] mt-0.5">
+                        Monday to Saturday • 9:00 AM to 4:30 PM
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Bottom CTA on card */}
-                <div className="pt-2">
+                {/* Direct Action */}
+                <div className="pt-2 relative z-10">
                   <Link
                     href="/contact"
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#2f6f68] hover:bg-[#245b55] text-white text-xs font-bold shadow-md transition-colors"
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-[#e68a2e] hover:bg-[#f2993d] text-[#122824] text-xs font-extrabold shadow-md transition-colors"
                   >
-                    <span>Schedule a Campus Walkthrough</span>
+                    <span>Schedule an In-Person Campus Walk</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 </div>
@@ -314,344 +257,369 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 3 Pillars / Learning Philosophy Section */}
-      <section className="py-16 md:py-24 bg-white border-b border-[#e5ece8]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#2f6f68] bg-[#eef7f4] px-3 py-1 rounded-full">
-              Our Core Philosophy
+      {/* The 3 Core Pillars: Contrast against standard rote learning */}
+      <section className="py-20 lg:py-28 max-w-7xl mx-auto px-4 sm:px-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+          <div className="max-w-2xl space-y-3">
+            <span className="text-xs font-bold uppercase tracking-widest text-[#1f5e54] bg-[#e4efe9] px-3.5 py-1 rounded-full">
+              Foundational Philosophy
             </span>
-            <h2 className="text-2xl sm:text-4xl font-extrabold text-[#192b26] font-['Manrope'] tracking-tight">
-              Three Pillars of Every Child's Journey
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-[#122824] font-['Manrope'] tracking-tight">
+              Moving beyond memorization to genuine understanding.
             </h2>
-            <p className="text-sm text-[#5d736d] leading-relaxed">
-              We focus on cultivating children who are not just test-ready, but life-ready with high character, resilience, and curiosity.
-            </p>
+          </div>
+          <p className="text-sm text-[#556c65] max-w-md">
+            At Global Kids School, learning is an active conversation. We build students who reason, question, experiment, and articulate their thoughts with clarity.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* Card 1 */}
+          <div className="rounded-3xl bg-white border border-[#e5ebe7] p-8 shadow-sm hover:shadow-xl hover:border-[#1f5e54]/40 transition-all flex flex-col justify-between group">
+            <div className="space-y-5">
+              <div className="w-12 h-12 rounded-2xl bg-[#eaf4f0] text-[#1f5e54] flex items-center justify-center font-bold text-lg font-['Manrope'] group-hover:scale-105 transition-transform">
+                01
+              </div>
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#e68a2e] block mb-1">
+                  Active Pedagogy
+                </span>
+                <h3 className="text-xl font-extrabold text-[#122824] font-['Manrope']">
+                  Learn with Curiosity
+                </h3>
+              </div>
+              <p className="text-sm text-[#556c65] leading-relaxed">
+                Rather than dictating answers, our teachers pose open-ended challenges. Children build mathematical concepts through manipulatives, science through lab observation, and language through reading circles.
+              </p>
+            </div>
+            <div className="pt-6 mt-6 border-t border-[#f0f4f2] text-xs font-bold text-[#1f5e54] flex items-center gap-1">
+              <span>Inquiry-based classrooms</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {pillars.map((pillar, idx) => {
-              const Icon = pillar.icon;
-              return (
-                <div
-                  key={idx}
-                  className="rounded-2xl p-7 border bg-[#fbfdfc] border-[#e2ece7] hover:border-[#2f6f68]/40 hover:shadow-lg transition-all duration-200 flex flex-col justify-between group"
-                >
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className={`w-12 h-12 rounded-xl border flex items-center justify-center ${pillar.color}`}>
-                        <Icon className="w-6 h-6" />
-                      </div>
-                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#f0f4f2] text-[#4f6760]">
-                        {pillar.badge}
-                      </span>
-                    </div>
+          {/* Card 2 */}
+          <div className="rounded-3xl bg-white border border-[#e5ebe7] p-8 shadow-sm hover:shadow-xl hover:border-[#1f5e54]/40 transition-all flex flex-col justify-between group">
+            <div className="space-y-5">
+              <div className="w-12 h-12 rounded-2xl bg-[#fff3e0] text-[#b45309] flex items-center justify-center font-bold text-lg font-['Manrope'] group-hover:scale-105 transition-transform">
+                02
+              </div>
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#b45309] block mb-1">
+                  Emotional & Public Courage
+                </span>
+                <h3 className="text-xl font-extrabold text-[#122824] font-['Manrope']">
+                  Grow with Confidence
+                </h3>
+              </div>
+              <p className="text-sm text-[#556c65] leading-relaxed">
+                Every child gets stage opportunities, group presentation roles, and individual mentor guidance. We celebrate effort, build resilience against failure, and cultivate confident speakers.
+              </p>
+            </div>
+            <div className="pt-6 mt-6 border-t border-[#f0f4f2] text-xs font-bold text-[#b45309] flex items-center gap-1">
+              <span>Small-group mentoring</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
 
-                    <div>
-                      <h3 className="text-xl font-extrabold text-[#192b26] font-['Manrope'] group-hover:text-[#2f6f68] transition-colors">
-                        {pillar.title}
-                      </h3>
-                      <p className="text-xs font-semibold text-[#7d928c] mt-0.5">
-                        {pillar.tagline}
-                      </p>
-                    </div>
-
-                    <p className="text-sm text-[#556963] leading-relaxed">
-                      {pillar.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-6 mt-4 border-t border-[#edf3f0]">
-                    <Link
-                      href="/about"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2f6f68] hover:text-[#1e4e48] transition-colors"
-                    >
-                      <span>Read pedagogical approach</span>
-                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Card 3 */}
+          <div className="rounded-3xl bg-white border border-[#e5ebe7] p-8 shadow-sm hover:shadow-xl hover:border-[#1f5e54]/40 transition-all flex flex-col justify-between group">
+            <div className="space-y-5">
+              <div className="w-12 h-12 rounded-2xl bg-[#ebf4ff] text-[#1d4ed8] flex items-center justify-center font-bold text-lg font-['Manrope'] group-hover:scale-105 transition-transform">
+                03
+              </div>
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#1d4ed8] block mb-1">
+                  Moral & Civic Compass
+                </span>
+                <h3 className="text-xl font-extrabold text-[#122824] font-['Manrope']">
+                  Lead with Purpose
+                </h3>
+              </div>
+              <p className="text-sm text-[#556c65] leading-relaxed">
+                Education is incomplete without high character. Kindness, empathy, environmental responsibility, respect for peers, and community service are practiced daily across all grades.
+              </p>
+            </div>
+            <div className="pt-6 mt-6 border-t border-[#f0f4f2] text-xs font-bold text-[#1d4ed8] flex items-center gap-1">
+              <span>Values & community action</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Experience & Enrichment Section */}
-      <section className="py-16 md:py-24 bg-[#f6faf8] border-b border-[#e5ece8]">
+      {/* Interactive Grade & Wing Navigator */}
+      <section className="py-20 bg-white border-y border-[#e5ebe7]">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
-            <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-28">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#2f6f68] bg-[#eef7f4] px-3 py-1 rounded-full">
-                Holistic Education
-              </span>
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-[#192b26] font-['Manrope'] tracking-tight">
-                Designed for well-rounded, joyful growth.
-              </h2>
-              <p className="text-sm text-[#5d736d] leading-relaxed">
-                Academic rigor is combined with creative arts, physical wellness, moral values, and real-world collaboration.
+          <div className="text-center max-w-2xl mx-auto space-y-3 mb-12">
+            <span className="text-xs font-bold uppercase tracking-widest text-[#1f5e54] bg-[#e4efe9] px-3.5 py-1 rounded-full">
+              Comprehensive Schooling
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-[#122824] font-['Manrope'] tracking-tight">
+              A curriculum tailored for every developmental stage
+            </h2>
+          </div>
+
+          {/* Wing Selector Tabs */}
+          <div className="flex justify-center mb-10">
+            <div className="inline-flex p-1.5 rounded-2xl bg-[#edf3ef] border border-[#dbe6df] gap-1">
+              <button
+                type="button"
+                onClick={() => setSelectedWing("early")}
+                className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                  selectedWing === "early"
+                    ? "bg-[#122824] text-white shadow-md font-extrabold"
+                    : "text-[#556c65] hover:text-[#122824]"
+                }`}
+              >
+                Pre-Primary (Nursery, LKG, UKG)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedWing("primary")}
+                className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                  selectedWing === "primary"
+                    ? "bg-[#122824] text-white shadow-md font-extrabold"
+                    : "text-[#556c65] hover:text-[#122824]"
+                }`}
+              >
+                Primary Wing (Grades 1 – 5)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedWing("secondary")}
+                className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                  selectedWing === "secondary"
+                    ? "bg-[#122824] text-white shadow-md font-extrabold"
+                    : "text-[#556c65] hover:text-[#122824]"
+                }`}
+              >
+                Middle & High (Grades 6 – 10)
+              </button>
+            </div>
+          </div>
+
+          {/* Wing Details Card */}
+          <div className="p-8 sm:p-12 rounded-3xl bg-[#faf9f5] border border-[#e0e8e3] grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#ffc87a]/20 text-[#b45309] text-xs font-bold">
+                {wingsData[selectedWing].badge}
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-[#122824] font-['Manrope']">
+                {wingsData[selectedWing].title}
+              </h3>
+              <p className="text-sm text-[#556c65] leading-relaxed">
+                {wingsData[selectedWing].desc}
               </p>
+
+              <div className="space-y-2.5 pt-2">
+                <strong className="text-xs font-bold uppercase tracking-wider text-[#122824] block">
+                  Key Learning Milestones:
+                </strong>
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[#415550]">
+                  {wingsData[selectedWing].outcomes.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#1f5e54] shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="lg:col-span-5 bg-white p-7 rounded-2xl border border-[#dce6e0] shadow-xs space-y-4">
+              <h4 className="text-sm font-extrabold text-[#122824] font-['Manrope'] border-b border-[#edf3f0] pb-3">
+                Wing Specifications
+              </h4>
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between py-1 border-b border-[#f4f7f5]">
+                  <span className="text-[#6d827c]">Daily Timings</span>
+                  <span className="font-bold text-[#122824]">{wingsData[selectedWing].timing}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#f4f7f5]">
+                  <span className="text-[#6d827c]">Attention Model</span>
+                  <span className="font-bold text-[#122824]">{wingsData[selectedWing].ratio}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-[#f4f7f5]">
+                  <span className="text-[#6d827c]">Co-Curriculars</span>
+                  <span className="font-bold text-[#122824]">Sports, Art, Music & Yoga</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-[#6d827c]">Evaluation</span>
+                  <span className="font-bold text-[#122824]">Continuous Growth Tracking</span>
+                </div>
+              </div>
+
               <div className="pt-2">
                 <Link
                   href="/contact"
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#2f6f68] text-white text-xs font-bold shadow-sm hover:bg-[#255b55] transition-colors"
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#122824] text-white text-xs font-bold hover:bg-[#1a3a34] transition-colors"
                 >
-                  <span>Book a Campus Tour</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Enquire for this Grade</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#ffc87a]" />
                 </Link>
               </div>
             </div>
-
-            <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {experiences.map((exp, idx) => {
-                const Icon = exp.icon;
-                return (
-                  <div
-                    key={idx}
-                    className="p-6 rounded-2xl bg-white border border-[#e0ebe5] shadow-xs hover:border-[#2f6f68]/40 hover:shadow-md transition-all"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-[#eaf4f0] text-[#2f6f68] flex items-center justify-center mb-4">
-                      <Icon className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-extrabold text-base text-[#1b2f29] font-['Manrope'] mb-2">
-                      {exp.title}
-                    </h3>
-                    <p className="text-xs text-[#556963] leading-relaxed">
-                      {exp.desc}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </div>
       </section>
 
-      {/* Campus Life & Activity Gallery */}
-      <section className="py-16 md:py-24 bg-white border-b border-[#e5ece8]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-            <div className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-[#2f6f68] bg-[#eef7f4] px-3 py-1 rounded-full">
-                Campus Spaces
-              </span>
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-[#192b26] font-['Manrope'] tracking-tight">
-                Spaces built for joyful exploration
-              </h2>
-            </div>
+      {/* A Day in the Life: Interactive Timeline */}
+      <section className="py-20 lg:py-28 max-w-7xl mx-auto px-4 sm:px-8">
+        <div className="max-w-2xl space-y-3 mb-14">
+          <span className="text-xs font-bold uppercase tracking-widest text-[#1f5e54] bg-[#e4efe9] px-3.5 py-1 rounded-full">
+            Campus Daily Rhythm
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#122824] font-['Manrope'] tracking-tight">
+            A Day in the Life at Global Kids School
+          </h2>
+          <p className="text-sm text-[#556c65]">
+            Every day is structured to balance focused academic blocks, hands-on lab experiments, creative playtime, and physical sports.
+          </p>
+        </div>
 
-            {/* Filter Tabs */}
-            <div className="flex flex-wrap items-center gap-2 bg-[#f0f5f2] p-1.5 rounded-xl border border-[#e2ede8]">
-              {(["all", "classrooms", "activities", "sports"] as const).map((tab) => (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Timeline Buttons on Left */}
+          <div className="lg:col-span-5 space-y-2.5">
+            {dailySchedule.map((item, idx) => {
+              const Icon = item.icon;
+              const isActive = activeTimeIndex === idx;
+              return (
                 <button
-                  key={tab}
+                  key={idx}
                   type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
-                    activeTab === tab
-                      ? "bg-white text-[#2f6f68] shadow-xs"
-                      : "text-[#5e736d] hover:text-[#214e49]"
+                  onClick={() => setActiveTimeIndex(idx)}
+                  className={`w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between ${
+                    isActive
+                      ? "bg-[#122824] text-white border-[#122824] shadow-md"
+                      : "bg-white text-[#1a2d28] border-[#e2eae6] hover:border-[#1f5e54]/30"
                   }`}
                 >
-                  {tab === "all" ? "All Spaces" : tab}
+                  <div className="flex items-center gap-3.5">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isActive ? "bg-white/15 text-[#ffc87a]" : "bg-[#edf4f0] text-[#1f5e54]"}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider block ${isActive ? "text-[#ffc87a]" : "text-[#718680]"}`}>
+                        {item.time}
+                      </span>
+                      <strong className="text-sm font-bold font-['Manrope'] block">
+                        {item.title}
+                      </strong>
+                    </div>
+                  </div>
+                  <ArrowRight className={`w-4 h-4 transition-transform ${isActive ? "text-[#ffc87a] translate-x-1" : "text-[#b0c4bd]"}`} />
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredGallery.map((item, idx) => (
-              <div
-                key={idx}
-                className="group rounded-2xl border border-[#e2ebe6] bg-[#fbfdfc] overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col"
-              >
-                {/* Visual Header Mockup */}
-                <div className={`h-48 bg-gradient-to-br ${item.bgGradient} p-6 flex flex-col justify-between text-white relative overflow-hidden`}>
-                  <div className="absolute right-[-20px] bottom-[-20px] opacity-10 font-black text-8xl font-['Manrope'] select-none">
-                    GK
-                  </div>
-                  <span className="inline-block px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-md text-[11px] font-bold w-max">
-                    {item.tag}
-                  </span>
-                  <div>
-                    <h4 className="font-extrabold text-lg text-white font-['Manrope'] leading-snug">
-                      {item.title}
-                    </h4>
-                  </div>
-                </div>
-
-                {/* Details */}
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <p className="text-xs text-[#556963] leading-relaxed">
-                    {item.desc}
-                  </p>
-                  <div className="pt-3 border-t border-[#edf4f0] flex items-center justify-between text-xs text-[#2f6f68] font-bold">
-                    <span>Verified Campus Environment</span>
-                    <Sparkles className="w-3.5 h-3.5" />
-                  </div>
-                </div>
+          {/* Timeline Active Spotlight on Right */}
+          <div className="lg:col-span-7 bg-[#1f5e54] text-white p-8 sm:p-12 rounded-3xl relative overflow-hidden shadow-xl">
+            <div className="space-y-6 relative z-10">
+              <div className="flex items-center justify-between">
+                <span className="px-3.5 py-1 rounded-full bg-white/15 text-[#ffc87a] text-xs font-bold border border-white/10">
+                  {dailySchedule[activeTimeIndex].time}
+                </span>
+                <span className="text-xs font-bold text-[#b5ded4] uppercase tracking-wider">
+                  {dailySchedule[activeTimeIndex].tag}
+                </span>
               </div>
-            ))}
+
+              <h3 className="text-2xl sm:text-3xl font-extrabold font-['Manrope'] leading-snug">
+                {dailySchedule[activeTimeIndex].title}
+              </h3>
+
+              <p className="text-sm text-[#d1eee6] leading-relaxed">
+                {dailySchedule[activeTimeIndex].desc}
+              </p>
+
+              <div className="pt-4 border-t border-white/15 flex items-center justify-between text-xs text-[#b5ded4]">
+                <span>Supervised by certified educators</span>
+                <span className="text-[#ffc87a] font-bold">Vokkodi Campus</span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* 4-Step Admissions Pathway */}
-      <section className="py-16 md:py-24 bg-[#f4f9f6] border-b border-[#e5ece8]">
+      {/* Admissions Document Checklist & CTA */}
+      <section className="py-20 bg-[#122824] text-white border-t border-[#1c3a34]">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#2f6f68] bg-[#e3f0eb] px-3 py-1 rounded-full">
-              Admissions Roadmap
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-extrabold text-[#192b26] font-['Manrope'] tracking-tight">
-              Simple 4-Step Enrollment Process
-            </h2>
-            <p className="text-sm text-[#5d736d] leading-relaxed">
-              We ensure a smooth, welcoming admission experience for parents and children.
-            </p>
-          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {steps.map((st, idx) => (
-              <div
-                key={idx}
-                className="p-6 rounded-2xl bg-white border border-[#dfeae4] shadow-xs relative flex flex-col justify-between"
-              >
-                <div>
-                  <span className="text-2xl font-black text-[#2f6f68]/30 font-['Manrope'] block mb-3">
-                    {st.step}
-                  </span>
-                  <h3 className="font-extrabold text-base text-[#1b2d28] font-['Manrope'] mb-2">
-                    {st.title}
-                  </h3>
-                  <p className="text-xs text-[#596e67] leading-relaxed">
-                    {st.desc}
+            <div className="lg:col-span-7 space-y-6">
+              <span className="text-xs font-extrabold uppercase tracking-widest text-[#ffc87a] bg-white/10 px-3 py-1 rounded-full">
+                Admissions Blueprint
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold font-['Manrope'] tracking-tight leading-tight">
+                Transparent & hassle-free admission process.
+              </h2>
+              <p className="text-sm text-[#a5c5bd] leading-relaxed max-w-xl">
+                We believe in simple, welcoming enrollment. Reach out online or visit our campus in Vokkodi, Tumakuru to secure your child’s seat for the upcoming academic year.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="p-4 rounded-2xl bg-[#1a3832] border border-[#274f46] space-y-2">
+                  <FileCheck className="w-5 h-5 text-[#ffc87a]" />
+                  <h4 className="text-sm font-bold text-white">Documents Checklist</h4>
+                  <p className="text-xs text-[#8eaead]">
+                    Birth Certificate, Transfer Certificate (if applicable), Passport photos, and previous report card.
                   </p>
                 </div>
 
-                <div className="mt-6 pt-3 border-t border-[#eef5f1] flex items-center gap-1 text-[11px] font-bold text-[#2f6f68]">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#38a169]" />
-                  <span>Step {idx + 1} of 4</span>
+                <div className="p-4 rounded-2xl bg-[#1a3832] border border-[#274f46] space-y-2">
+                  <Users className="w-5 h-5 text-[#ffc87a]" />
+                  <h4 className="text-sm font-bold text-white">Friendly Interaction</h4>
+                  <p className="text-xs text-[#8eaead]">
+                    No stressful tests for young children. An informal conversational session to understand readiness.
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
 
-          {/* Quick Action Strip */}
-          <div className="mt-12 p-8 rounded-2xl bg-[#234e48] text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
-            <div className="space-y-1 text-center md:text-left">
+            {/* Quick Visit Scheduler Card */}
+            <div className="lg:col-span-5 bg-white text-[#122824] p-8 rounded-3xl shadow-2xl space-y-5">
               <h3 className="text-xl font-extrabold font-['Manrope']">
-                Have questions regarding grades, fees or transport?
+                Book a Campus Tour
               </h3>
-              <p className="text-xs text-[#b8d9d2]">
-                Our admissions counselors are available Monday through Saturday (9:00 AM – 4:30 PM).
+              <p className="text-xs text-[#586f68] leading-relaxed">
+                Experience our classrooms, meet teachers, and review the academic curriculum in person.
+              </p>
+
+              <div className="space-y-3 pt-2">
+                <a
+                  href={`tel:${schoolInfo.contact.primaryPhone.replace(/\s+/g, '')}`}
+                  className="w-full flex items-center justify-between p-3.5 rounded-xl bg-[#faf9f5] border border-[#e0e8e3] hover:border-[#1f5e54] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-4 h-4 text-[#e68a2e]" />
+                    <div>
+                      <span className="text-[10px] text-[#788e88] block">Admissions Coordinator</span>
+                      <strong className="text-xs text-[#122824]">{schoolInfo.contact.primaryPhone}</strong>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-[#1f5e54]" />
+                </a>
+
+                <Link
+                  href="/contact"
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-[#122824] hover:bg-[#1a3a34] text-white font-extrabold text-xs shadow-md transition-colors"
+                >
+                  <span>Submit Online Enquiry</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#ffc87a]" />
+                </Link>
+              </div>
+
+              <p className="text-[11px] text-center text-[#829993]">
+                Office Timings: Mon – Sat (9:00 AM – 4:30 PM)
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <a
-                href={`tel:${schoolInfo.contact.primaryPhone.replace(/\s+/g, '')}`}
-                className="px-5 py-3 rounded-xl bg-[#fbd38d] hover:bg-[#f6c367] text-[#234e48] font-bold text-xs shadow-md transition-colors flex items-center gap-2"
-              >
-                <Phone className="w-4 h-4" />
-                <span>Call {schoolInfo.contact.primaryPhone}</span>
-              </a>
-              <Link
-                href="/contact"
-                className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs transition-colors"
-              >
-                <span>Submit Online Form</span>
-              </Link>
-            </div>
+
           </div>
         </div>
       </section>
 
-      {/* Parent & Community Voice */}
-      <section className="py-16 md:py-24 bg-white border-b border-[#e5ece8]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8">
-          <div className="text-center max-w-2xl mx-auto space-y-3 mb-14">
-            <span className="text-xs font-bold uppercase tracking-wider text-[#2f6f68] bg-[#eef7f4] px-3 py-1 rounded-full">
-              Community Voice
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-extrabold text-[#192b26] font-['Manrope'] tracking-tight">
-              What Families Say About Global Kids
-            </h2>
-            <p className="text-sm text-[#5d736d] leading-relaxed">
-              Real reflections from parents in Tumakuru on the positive changes they notice in their children.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-7 rounded-2xl bg-[#fbfdfc] border border-[#e2ece7] shadow-xs flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex text-[#f6ad55] gap-1">
-                  {"★★★★★".split("").map((star, i) => (
-                    <span key={i} className="text-base">{star}</span>
-                  ))}
-                </div>
-                <p className="text-xs sm:text-sm text-[#4d635c] italic leading-relaxed">
-                  "The individual attention my child receives is remarkable. The teachers are polite, approachable, and truly care about bringing out each student's curiosity."
-                </p>
-              </div>
-              <div className="pt-4 mt-6 border-t border-[#edf4f0] flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#dcf0ea] text-[#2f6f68] font-bold flex items-center justify-center text-xs">
-                  P1
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-[#233530]">Parent of Grade 3 Student</h4>
-                  <p className="text-[11px] text-[#819690]">Tumakuru</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-7 rounded-2xl bg-[#fbfdfc] border border-[#e2ece7] shadow-xs flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex text-[#f6ad55] gap-1">
-                  {"★★★★★".split("").map((star, i) => (
-                    <span key={i} className="text-base">{star}</span>
-                  ))}
-                </div>
-                <p className="text-xs sm:text-sm text-[#4d635c] italic leading-relaxed">
-                  "I love the balance between academics and extra activities. My daughter comes home excited every single day to share what new project she worked on."
-                </p>
-              </div>
-              <div className="pt-4 mt-6 border-t border-[#edf4f0] flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#faecd8] text-[#b7791f] font-bold flex items-center justify-center text-xs">
-                  P2
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-[#233530]">Parent of UKG Student</h4>
-                  <p className="text-[11px] text-[#819690]">Tumakuru</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-7 rounded-2xl bg-[#fbfdfc] border border-[#e2ece7] shadow-xs flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex text-[#f6ad55] gap-1">
-                  {"★★★★★".split("").map((star, i) => (
-                    <span key={i} className="text-base">{star}</span>
-                  ))}
-                </div>
-                <p className="text-xs sm:text-sm text-[#4d635c] italic leading-relaxed">
-                  "The campus environment is safe, disciplined, and very child-friendly. The school staff communicates promptly through digital channels."
-                </p>
-              </div>
-              <div className="pt-4 mt-6 border-t border-[#edf4f0] flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#dbeafe] text-[#2563eb] font-bold flex items-center justify-center text-xs">
-                  P3
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-[#233530]">Parent of Grade 6 Student</h4>
-                  <p className="text-[11px] text-[#819690]">Tumakuru</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
       <Footer />
     </div>
   );
