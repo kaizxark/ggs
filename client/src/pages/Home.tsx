@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 // Emil Kowalski inspired transition easing curves
-const easeOutQuint = [0.22, 1, 0.36, 1];
+const easeOutQuint = [0.22, 1, 0.36, 1] as const;
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-const easeOutQuint = [0.22, 1, 0.36, 1];
+const easeOutQuint = [0.22, 1, 0.36, 1] as const;
 
 export default function Contact() {
   const [loading, setLoading] = useState(false);
