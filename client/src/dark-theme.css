@@ -1,0 +1,14 @@
+/* Full dark theme for Dashboard and app */
+.dark, html.dark, body.dark, .dark body, .dark .erp-app {
+  background: #0b0d10 !important;
+  color: #e4e6eb !important;
+}
+.dark .bg-white, .dark .bg-neutral-50, .dark .bg-\[#f7f9f7\], .dark .bg-\[#f6eddd\], .dark .bg-\[#fbfcfb\] { background: #13171f !important; }
+.dark .text-neutral-900, .dark .text-\[#1a1a1a\], .dark .text-\[#34291C\], .dark .text-\[#273631\] { color: #e6e8ec !important; }
+.dark .text-neutral-500, .dark .text-neutral-600, .dark .text-\[#6F6046\], .dark .text-\[#78847f\], .dark .text-\[#8b939c\] { color: #9aa4ad !important; }
+.dark .border-neutral-200, .dark .border-\[#e2e9e6\], .dark .border-\[#ded1bc\], .dark .border-\[#e0e0e0\], .dark .border-\[#e5ebe7\] { border-color: #2a3038 !important; }
+.dark .bg-\[#2f6f68\], .dark .bg-\[#3fb8a2\], .dark .text-\[#2f6f68\] { background: #2d7a6e !important; color: #3fb8a2 !important; }
+.dark input, .dark select, .dark textarea { background: #181b22; border-color: #2a3038; color: #e6e8ec; }
+.dark input::placeholder, .dark select::placeholder, .dark textarea::placeholder { color: #6b7680; }
+.dark button:not([disabled]) { background: #2d7a6e; color: white; }
+.dark .shadow-md, .dark .shadow-lg { box-shadow: 0 4px 24px rgba(0,0,0,.4); }
