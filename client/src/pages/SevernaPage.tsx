@@ -19,19 +19,24 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
               s.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
               win.document.head.appendChild(s);
 
-              // Replace logo text with Global Kids
-              const allText2 = win.document.querySelectorAll('.framer-text');
-              allText2.forEach(el => {
-                const txt = (el as HTMLElement).textContent || "";
-                if (txt.includes("Severna")) (el as HTMLElement).textContent = "Global Kids";
-              });
+              // Hide footer links
+              const s = win.document.createElement('style');
+              s.textContent = '[data-framer-name="footer"] a[href*="framer"], a[href*="framer.com"], .framer-footer, .framer-6CtRv a[href*="framer"], div:has(> a[href*="framer"]), [data-framer-component-type="Link"] a[href*="framer.com"] { display: none !important; }';
+              win.document.head.appendChild(s);
 
-              // Replace SVG logo with logo.png
-              const svgDivs = win.document.querySelectorAll('.framer-1506cxs');
-              svgDivs.forEach((div) => {
-                const html = `<img src="/logo.png" style="width:40px;height:44px;object-fit:contain;display:block;" alt="Global Kids Logo" />`;
-                (div as HTMLElement).innerHTML = html;
-              });
+              const replace = () => {
+                win.document.querySelectorAll('.framer-text').forEach(el => {
+                  const txt = (el as HTMLElement).textContent || "";
+                  if (txt.includes("Severna")) (el as HTMLElement).textContent = "Global Kids";
+                });
+                win.document.querySelectorAll('.framer-1506cxs').forEach(div => {
+                  (div as HTMLElement).innerHTML = '<img src="/logo.png" style="width:40px;height:44px;object-fit:contain;display:block;" alt="Global Kids Logo" />';
+                });
+              };
+              replace();
+              const obs = new win.MutationObserver(() => replace());
+              obs.observe(win.document.body, { childList: true, subtree: true });
+              setTimeout(() => obs.disconnect(), 3000);
 
               win.scrollTo(0, 0);
             }
