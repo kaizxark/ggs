@@ -7,7 +7,7 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
 
   const src = section === "about" ? "/severna/severna-atkris.framer.website/index.html#about" : section === "contact" ? "/severna/severna-atkris.framer.website/index.html#form" : "/severna/severna-atkris.framer.website/index.html";
   return (
-    <div style={{ height: "100vh", overflow: "hidden", position: "relative", background: "#fff" }}>
+    <div style={{ height: "130vh", overflowY: "auto", position: "relative", background: "#fff" }}>
       <iframe
         src={src}
         title="Severna"
