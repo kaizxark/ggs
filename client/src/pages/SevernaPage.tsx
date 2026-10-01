@@ -5,7 +5,7 @@ export default function SevernaPage({ section = "home" }: { section?: "home" | "
       <iframe
         src={src}
         title="Severna"
-        style={{ position: "absolute", top: 0, left: 0, width: "130vw", height: "130vh", border: "none", transform: "scale(1.3)", transformOrigin: "0 0" }}
+        style={{ position: "absolute", top: 0, left: 0, width: "130vw", height: "130vh", border: "none", transform: "translateX(-13vw) scale(1.3)", transformOrigin: "0 0" }}
       />
     </div>
   );
