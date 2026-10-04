@@ -18,3 +18,7 @@ node_modules/
 .vercel/
 .vscode/
 .idea/
+
+# A second, unreferenced copy of the Webflow export (38 MB). The build reads
+# joyloo.webflow.io/, so this is dead weight on every upload.
+webflow-site/

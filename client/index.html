@@ -9,6 +9,11 @@
          cropping it turned into an unreadable egg at tab size, and the whole
          mark keeps its circular silhouette down to 32px. Transparent PNG rather
          than .ico so the round edge survives on dark browser chrome. -->
+    <!-- Browsers request /favicon.ico unprompted even when the icons below are
+         declared. Without a real file there, the request fell through to the
+         SPA rewrite and answered with the whole 368 KB index.html, which the
+         browser then tried to parse as an icon. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
     <link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png" />
@@ -21,6 +26,38 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script defer src="%VITE_ANALYTICS_ENDPOINT%/umami" data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+    <!--
+      Analytics is not wired up. The tag used to interpolate its endpoint from an
+      environment variable that is not set, so it shipped as a literal request
+      for a non-existent path - a wasted round trip to the site itself on every
+      page load, and a Vite build warning each time. The script is only injected
+      once both variables are actually set, so it costs nothing until analytics
+      is configured.
+
+      (This comment deliberately spells the variables without the surrounding
+      percent signs Vite scans for, which is what was triggering the warning.)
+
+      To enable it, set VITE_ANALYTICS_ENDPOINT and VITE_ANALYTICS_WEBSITE_ID.
+    -->
+    <script>
+      // Vite only substitutes the percent-delimited form in HTML, so the values
+      // are read that way. `import.meta.env` is a module-only construct and
+      // throws in a classic inline script, which is what the first attempt here
+      // did on every page load.
+      (function () {
+        var endpoint = "%VITE_ANALYTICS_ENDPOINT%";
+        var siteId = "%VITE_ANALYTICS_WEBSITE_ID%";
+
+        // Unset variables are left as the literal token by Vite, so anything
+        // still wrapped in percent signs is a placeholder, not a real value.
+        if (/^%.*%$/.test(endpoint) || /^%.*%$/.test(siteId) || !endpoint || !siteId) return;
+
+        var tag = document.createElement("script");
+        tag.defer = true;
+        tag.src = endpoint + "/umami";
+        tag.setAttribute("data-website-id", siteId);
+        document.head.appendChild(tag);
+      })();
+    </script>
   </body>
 </html>
