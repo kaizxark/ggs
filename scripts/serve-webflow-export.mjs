@@ -54,7 +54,7 @@
  * is.
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -398,6 +398,92 @@ const LOGO = {
   large: `${LOGO_BASE}${LOCKUPS.large.name}`,
 };
 
+/* ------------------------------------------------------------------ */
+/* The brand name in running copy                                    */
+/* ------------------------------------------------------------------ */
+
+// The wordmark is Poppins Bold, but it is baked in as outlines because the
+// template's original logotype is drawn as paths and no live font could ever
+// match it. Running copy cannot use those outlines - the brand name sits inside
+// ordinary sentences - so the same face is loaded as a webfont and applied to
+// every visible "Global Kids".
+//
+// Poppins Bold, latin subset, from Google Fonts (SIL Open Font License 1.1).
+// It covers the full printable Latin range, so it cannot fall back mid-word.
+const BRAND_FONT_FILE = "poppins-bold.woff";
+const BRAND_FONT_URL = `${LOGO_BASE}${BRAND_FONT_FILE}`;
+const BRAND_FONT_SRC = resolve(ROOT, "scripts/fonts/poppins-bold-latin.woff");
+const BRAND_CLASS = "gk-brand";
+
+/** Injected into <head> so the face exists before the copy below it renders. */
+function brandFontStyle(html) {
+  if (!html.includes(BRAND_CLASS)) return html;
+  const css =
+    `<style>@font-face{font-family:'Poppins';font-style:normal;font-weight:700;` +
+    `font-display:swap;src:url(${BRAND_FONT_URL}) format('woff')}` +
+    `.${BRAND_CLASS}{font-family:'Poppins',Parkinsans,sans-serif;font-weight:700}</style>`;
+  if (!html.includes("</head>")) {
+    console.error("A page has no </head> to inject the brand font into.");
+    process.exit(1);
+  }
+  return html.replace("</head>", css + "</head>");
+}
+
+/**
+ * Wrap every visible "Global Kids" in a span carrying BRAND_CLASS.
+ *
+ * Only text between tags is touched. Attribute values are left alone on
+ * purpose: the footer carries `mailto:hello@Global Kids.com` and the copy sits
+ * inside alt text and srcset, and rewriting any of those would corrupt the
+ * address or the image rather than restyle it. <script>, <style> and inline
+ * <svg> are set aside for the same reason - nothing in them is visible copy,
+ * and the clip-path paths are data, not text.
+ */
+function brandFont(html) {
+  const body = html.indexOf("<body");
+  if (body < 0) return { html, wrapped: 0 };
+  const head = html.slice(0, body);
+  let rest = html.slice(body);
+
+  const guarded = [];
+  rest = rest.replace(
+    /<(script|style|svg)\b[^>]*>[\s\S]*?<\/\1>/gi,
+    (block) => {
+      guarded.push(block);
+      return `\u0000${guarded.length - 1}\u0000`;
+    }
+  );
+
+  let wrapped = 0;
+  rest = rest.replace(/>([^<]+)</g, (_tag, text) => {
+    if (!text.includes("Global Kids")) return _tag;
+    const marked = text.replace(/Global Kids/g, () => {
+      wrapped++;
+      return `<span class="${BRAND_CLASS}">Global Kids</span>`;
+    });
+    return `>${marked}<`;
+  });
+
+  rest = rest.replace(/\u0000(\d+)\u0000/g, (_, i) => guarded[Number(i)]);
+  return { html: head + rest, wrapped };
+}
+
+/** Strip the spans brandFont added, so the result can be compared to the input. */
+function unbrandFont(html) {
+  return html
+    .split(`<span class="${BRAND_CLASS}">Global Kids</span>`)
+    .join("Global Kids");
+}
+
+/** Copy the brand face next to the pages. */
+function emitBrandFont() {
+  if (!existsSync(BRAND_FONT_SRC)) {
+    console.error(`Brand font missing at ${BRAND_FONT_SRC} - the wordmark's face would not load.`);
+    process.exit(1);
+  }
+  copyFileSync(BRAND_FONT_SRC, join(MOUNT, BRAND_FONT_FILE));
+}
+
 /** One lockup as a standalone SVG document, at the given pixel height. */
 function logoSvg(lockup, height) {
   // ROUNDEL_PATHS is the template's own navbar artwork: a 32-unit roundel sitting
@@ -459,6 +545,7 @@ function emitLogoAssets() {
 rmSync(MOUNT, { recursive: true, force: true });
 cpSync(resolve(EXPORT, "assets"), resolve(MOUNT, "assets"), { recursive: true });
 emitLogoAssets();
+emitBrandFont();
 
 const templateButton = /<a\b[^>]*class="template-button[^"]*"[\s\S]*?<\/a>/g;
 
@@ -486,6 +573,7 @@ if (pages.length < 10) {
 let totalDropdowns = 0;
 let totalButtons = 0;
 let totalCredits = 0;
+let totalBrandRuns = 0;
 
 for (const page of pages) {
   const source = readFileSync(join(EXPORT, page), "utf8");
@@ -503,7 +591,9 @@ for (const page of pages) {
   const noPrograms = stripNavLink(nav.html, "Programs");
   const rebranded = rebrand(noPrograms.html);
   totalCredits += rebranded.credits;
-  const served = suppressBadge(swapLogo(rebranded.html));
+  const branded = brandFont(rebranded.html);
+  totalBrandRuns += branded.wrapped;
+  const served = brandFontStyle(suppressBadge(swapLogo(branded.html)));
 
   const target = join(MOUNT, page);
   mkdirSync(dirname(target), { recursive: true });
@@ -537,6 +627,45 @@ for (const page of pages) {
   if (/assets\/[^"'\s]*\/webflow\//.test(served) || /main-logo\.svg/.test(served)) {
     console.error(`${page}: a stale logo path survived the swap.`);
     process.exit(1);
+  }
+  // The brand name must be in the wordmark's face everywhere it is visible, and
+  // the wrapping must not have touched anything else. Stripping the spans back
+  // out has to reproduce the rebranded page byte for byte: that is what proves
+  // no href, alt, srcset or path data moved.
+  // Counted the way brandFont targets: text between tags only. The footer also
+  // carries "Global Kids" inside href="mailto:...", which is an address rather
+  // than copy and is deliberately left alone.
+  const visibleRuns = [...(rebranded.html.split("<body")[1] || "")
+    .replace(/<(script|style|svg)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .matchAll(/>([^<]+)</g)]
+    .reduce((n, m) => n + (m[1].split("Global Kids").length - 1), 0);
+  if (visibleRuns !== branded.wrapped) {
+    console.error(
+      `${page}: wrapped ${branded.wrapped} "Global Kids" but found ${visibleRuns} in visible text.`
+    );
+    process.exit(1);
+  }
+  if (unbrandFont(branded.html) !== rebranded.html) {
+    console.error(`${page}: the brand-name wrap changed more than the spans.`);
+    process.exit(1);
+  }
+  if (visibleRuns > 0 && !served.includes(`<span class="${BRAND_CLASS}">Global Kids</span>`)) {
+    console.error(`${page}: the brand name was not set in the wordmark's face.`);
+    process.exit(1);
+  }
+  // The face has to be declared on any page that uses it, or the spans silently
+  // fall back to the body font and the change looks like it did nothing.
+  if (visibleRuns > 0) {
+    const decl = `@font-face{font-family:'Poppins';font-style:normal;font-weight:700;` +
+      `font-display:swap;src:url(${BRAND_FONT_URL}) format('woff')}`;
+    if (!served.includes(decl)) {
+      console.error(`${page}: the brand font is not declared.`);
+      process.exit(1);
+    }
+    if (!served.includes(`.${BRAND_CLASS}{font-family:'Poppins',Parkinsans,sans-serif;font-weight:700}`)) {
+      console.error(`${page}: the brand name carries no rule to render in.`);
+      process.exit(1);
+    }
   }
 
   // The rebrand must have landed, and the vendor credit must be gone.
@@ -597,5 +726,11 @@ for (const page of pages) {
 console.log(`Published ${pages.length} pages to /webflow/`);
 console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns, ${totalCredits} vendor credits`);
 console.log("  rebranded Joyloo -> Global Kids, swapped the logo, removed the Programs nav item")
+console.log(`  set ${totalBrandRuns} "Global Kids" runs in the wordmark face (Poppins Bold)`);
+
+if (!existsSync(join(MOUNT, BRAND_FONT_FILE))) {
+  console.error(`The brand font was not written to ${join(MOUNT, BRAND_FONT_FILE)}.`);
+  process.exit(1);
+}
 console.log("  /            -> /webflow/          webflow-site export");
 console.log("  /login       app.html              React app shell");
