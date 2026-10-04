@@ -44,8 +44,9 @@
  *
  * 5. The logo. The export's wordmark draws "Joyloo" as outlined vector paths -
  *    the letters are <path> data, never text - so it survives every text
- *    replacement and is invisible to grep. The two logo images are swapped for
- *    a "Global Kids" wordmark in the same two sizes and the same brand orange.
+ *    replacement and is invisible to grep. The two logo images are repointed at
+ *    a "Global Kids" lockup built from the template's own roundel and brand
+ *    orange, in the same two lockup geometries. See emitLogoAssets.
  *
  * 6. The "Programs" item is dropped from the header menu.
  *
@@ -294,36 +295,145 @@ function stripNavLink(html, label) {
 /**
  * Replace the template's logo with the school's own.
  *
- * The export's logo is <a class="w-webflow-badge">-free but its wordmark is
- * drawn as outlined vector paths - the letters "Joyloo" exist as <path> data,
- * never as text - so no amount of find-and-replace in the HTML touches it. The
- * images are swapped for an equivalent <img> pointing at a wordmark generated
- * in the same two sizes and the same brand orange.
+ * The export's logo is badge-free but its wordmark is drawn as outlined vector
+ * paths - the letters "Joyloo" exist as <path> data, never as text - so no
+ * amount of find-and-replace in the HTML touches it. The two <img> sources are
+ * repointed at the lockups emitLogoAssets writes.
  */
 function swapLogo(html) {
-  const main = logoAsset(132, 36);
-  const footer = logoAsset(552, 143);
   // The whole src, not just the filename. The export's hrefs are
-  // "assets/<host>/<id>_main-logo.svg", so replacing only the trailing
-  // filename would leave "assets/<host>/" glued in front of the data URI and
-  // break the image.
+  // "assets/<host>/<id>_main-logo.svg" (and, in the footer, the same file from
+  // cdn.prod.website-files.com), so replacing only the trailing filename would
+  // leave a stale path in front of ours.
   return html
-    .replace(/(?:https?:\/\/[^"'\s]*\/)?(?:assets\/[^"'\s]*\/)?699a5a61a516cf380bf13bc4_main-logo\.svg/g, main)
-    .replace(/(?:https?:\/\/[^"'\s]*\/)?(?:assets\/[^"'\s]*\/)?699a704f228b19546a29c7d9_logo\.svg/g, footer);
+    .replace(/(?:https?:\/\/[^'"\s]*\/)?(?:assets\/[^"'\s]*\/)?699a5a61a516cf380bf13bc4_main-logo\.svg/g, LOGO.main)
+    .replace(/(?:https?:\/\/[^'"\s]*\/)?(?:assets\/[^"'\s]*\/)?699a704f228b19546a29c7d9_logo\.svg/g, LOGO.large);
 }
 
-/** A "Global Kids" wordmark, sized to stand in for the export's logo. */
-function logoAsset(width, height) {
-  const fontSize = Math.round(height * 0.42);
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
-    `viewBox="0 0 ${width} ${height}" fill="none" role="img" aria-label="Global Kids">` +
-    `<circle cx="${height / 2}" cy="${height / 2}" r="${height * 0.34}" fill="#F8642B"/>` +
-    `<text x="${height * 0.82}" y="${height / 2}" dominant-baseline="central" ` +
-    `font-family="Avenir Next,Segoe UI,Helvetica,Arial,sans-serif" font-size="${fontSize}" ` +
-    `font-weight="700" fill="#1A1A1A" letter-spacing="-0.5">Global Kids</text>` +
-    `</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+/* ------------------------------------------------------------------ */
+/* The wordmark                                                       */
+/* ------------------------------------------------------------------ */
+
+// 'Global Kids' set in Poppins SemiBold, the geometric face the original
+// Joyloo logotype was cut from (metrics match within ~1%; see the note above).
+// Normalised to cap height 1, baseline on y=0, x=0 at the inked left edge.
+// Letterspacing +0.01777 of cap height (+0.3258 units at cap
+// height 18.33), calibrated so a rebuild of 'Joyloo' reproduces the original
+// wordmark's 87.84 inked width.
+const WORDMARK_PATHS = [
+  'M 0.7917 -0.6961 Q 0.7575 -0.7589 0.6976 -0.7917 Q 0.6377 -0.8245 0.5578 -0.8245 Q 0.4693 -0.8245 0.4009 -0.7846 Q 0.3324 -0.7447 0.2939 -0.6705 Q 0.2553 -0.5963 0.2553 -0.4993 Q 0.2553 -0.3994 0.2946 -0.3252 Q 0.3338 -0.2511 0.4037 -0.2111 Q 0.4736 -0.1712 0.5663 -0.1712 Q 0.6805 -0.1712 0.7532 -0.2318 Q 0.826 -0.2924 0.8488 -0.4009 H 0.5064 V -0.5535 H 1.0456 V -0.3795 Q 1.0257 -0.2753 0.9601 -0.1869 Q 0.8944 -0.0984 0.791 -0.0449 Q 0.6876 0.0086 0.5592 0.0086 Q 0.4151 0.0086 0.2989 -0.0563 Q 0.1826 -0.1213 0.1163 -0.2368 Q 0.0499 -0.3524 0.0499 -0.4993 Q 0.0499 -0.6462 0.1163 -0.7625 Q 0.1826 -0.8787 0.2989 -0.9437 Q 0.4151 -1.0086 0.5578 -1.0086 Q 0.7261 -1.0086 0.8502 -0.9265 Q 0.9743 -0.8445 1.0214 -0.6961 Z',
+  'M 1.4115 -1.0556 V -0 H 1.2118 V -1.0556 Z',
+  'M 1.5762 -0.3951 Q 1.5762 -0.5164 1.6297 -0.6091 Q 1.6832 -0.7019 1.7759 -0.7525 Q 1.8686 -0.8031 1.9828 -0.8031 Q 2.0969 -0.8031 2.1896 -0.7525 Q 2.2823 -0.7019 2.3358 -0.6091 Q 2.3893 -0.5164 2.3893 -0.3951 Q 2.3893 -0.2739 2.3344 -0.1812 Q 2.2795 -0.0884 2.186 -0.0378 Q 2.0926 0.0128 1.9771 0.0128 Q 1.8629 0.0128 1.7716 -0.0378 Q 1.6803 -0.0884 1.6283 -0.1812 Q 1.5762 -0.2739 1.5762 -0.3951 Z M 2.1839 -0.3951 Q 2.1839 -0.5078 2.1247 -0.5685 Q 2.0655 -0.6291 1.9799 -0.6291 Q 1.8943 -0.6291 1.8365 -0.5685 Q 1.7788 -0.5078 1.7788 -0.3951 Q 1.7788 -0.2825 1.8351 -0.2218 Q 1.8915 -0.1612 1.9771 -0.1612 Q 2.0313 -0.1612 2.0791 -0.1876 Q 2.1268 -0.214 2.1554 -0.2668 Q 2.1839 -0.3195 2.1839 -0.3951 Z',
+  'M 3.0148 -0.8031 Q 3.1161 -0.8031 3.1981 -0.7532 Q 3.2801 -0.7033 3.3279 -0.6113 Q 3.3757 -0.5193 3.3757 -0.398 Q 3.3757 -0.2767 3.3279 -0.1833 Q 3.2801 -0.0899 3.1981 -0.0385 Q 3.1161 0.0128 3.0148 0.0128 Q 2.9264 0.0128 2.86 -0.0221 Q 2.7937 -0.0571 2.7537 -0.1127 V -0 H 2.554 V -1.0556 H 2.7537 V -0.6748 Q 2.7923 -0.7318 2.86 -0.7675 Q 2.9278 -0.8031 3.0148 -0.8031 Z M 2.962 -0.6277 Q 2.9078 -0.6277 2.86 -0.5999 Q 2.8122 -0.572 2.783 -0.5193 Q 2.7537 -0.4665 2.7537 -0.3951 Q 2.7537 -0.3238 2.783 -0.271 Q 2.8122 -0.2183 2.86 -0.1904 Q 2.9078 -0.1626 2.962 -0.1626 Q 3.0177 -0.1626 3.0654 -0.1912 Q 3.1132 -0.2197 3.1425 -0.2725 Q 3.1717 -0.3252 3.1717 -0.398 Q 3.1717 -0.4693 3.1425 -0.5214 Q 3.1132 -0.5735 3.0654 -0.6006 Q 3.0177 -0.6277 2.962 -0.6277 Z',
+  'M 3.8485 -0.8031 Q 3.937 -0.8031 4.0033 -0.7675 Q 4.0697 -0.7318 4.1096 -0.6776 V -0.7903 H 4.3107 V -0 H 4.1096 V -0.1155 Q 4.0711 -0.0599 4.0033 -0.0235 Q 3.9356 0.0128 3.8471 0.0128 Q 3.7473 0.0128 3.6652 -0.0385 Q 3.5832 -0.0899 3.5354 -0.1833 Q 3.4876 -0.2767 3.4876 -0.398 Q 3.4876 -0.5178 3.5354 -0.6106 Q 3.5832 -0.7033 3.6652 -0.7532 Q 3.7473 -0.8031 3.8485 -0.8031 Z M 3.8999 -0.6277 Q 3.8443 -0.6277 3.7972 -0.6006 Q 3.7501 -0.5735 3.7209 -0.5214 Q 3.6916 -0.4693 3.6916 -0.398 Q 3.6916 -0.3267 3.7209 -0.2732 Q 3.7501 -0.2197 3.7979 -0.1912 Q 3.8457 -0.1626 3.8999 -0.1626 Q 3.9555 -0.1626 4.004 -0.1904 Q 4.0525 -0.2183 4.0811 -0.2703 Q 4.1096 -0.3224 4.1096 -0.3951 Q 4.1096 -0.4679 4.0811 -0.52 Q 4.0525 -0.572 4.004 -0.5999 Q 3.9555 -0.6277 3.8999 -0.6277 Z',
+  'M 4.7237 -1.0556 V -0 H 4.524 V -1.0556 Z',
+  'M 5.8576 -0 M 5.4953 -0.4437 V -0 H 5.2956 V -0.9957 H 5.4953 V -0.5492 L 5.8576 -0.9957 H 6.0987 L 5.6879 -0.5021 L 6.1101 -0 Z',
+  'M 6.2378 -1.0014 Q 6.2378 -1.0514 6.2727 -1.0849 Q 6.3077 -1.1184 6.3604 -1.1184 Q 6.4132 -1.1184 6.4482 -1.0849 Q 6.4831 -1.0514 6.4831 -1.0014 Q 6.4831 -0.9515 6.4482 -0.918 Q 6.4132 -0.8845 6.3604 -0.8845 Q 6.3077 -0.8845 6.2727 -0.918 Q 6.2378 -0.9515 6.2378 -1.0014 Z M 6.4589 -0.7903 V -0 H 6.2591 V -0.7903 Z',
+  'M 6.9845 -0.8031 Q 7.0615 -0.8031 7.1314 -0.7696 Q 7.2013 -0.7361 7.2427 -0.6805 V -1.0556 H 7.4453 V -0 H 7.2427 V -0.117 Q 7.2056 -0.0585 7.1385 -0.0228 Q 7.0715 0.0128 6.9831 0.0128 Q 6.8832 0.0128 6.8005 -0.0385 Q 6.7177 -0.0899 6.6699 -0.1833 Q 6.6221 -0.2767 6.6221 -0.398 Q 6.6221 -0.5178 6.6699 -0.6106 Q 6.7177 -0.7033 6.8005 -0.7532 Q 6.8832 -0.8031 6.9845 -0.8031 Z M 7.0344 -0.6277 Q 6.9788 -0.6277 6.9317 -0.6006 Q 6.8846 -0.5735 6.8554 -0.5214 Q 6.8261 -0.4693 6.8261 -0.398 Q 6.8261 -0.3267 6.8554 -0.2732 Q 6.8846 -0.2197 6.9324 -0.1912 Q 6.9802 -0.1626 7.0344 -0.1626 Q 7.09 -0.1626 7.1385 -0.1904 Q 7.187 -0.2183 7.2156 -0.2703 Q 7.2441 -0.3224 7.2441 -0.3951 Q 7.2441 -0.4679 7.2156 -0.52 Q 7.187 -0.572 7.1385 -0.5999 Q 7.09 -0.6277 7.0344 -0.6277 Z',
+  'M 7.6157 -0.2496 H 7.8168 Q 7.8225 -0.204 7.8617 -0.174 Q 7.901 -0.1441 7.9595 -0.1441 Q 8.0165 -0.1441 8.0486 -0.1669 Q 8.0807 -0.1897 8.0807 -0.2254 Q 8.0807 -0.2639 8.0415 -0.2832 Q 8.0023 -0.3024 7.9167 -0.3252 Q 7.8282 -0.3466 7.7719 -0.3695 Q 7.7155 -0.3923 7.6749 -0.4394 Q 7.6342 -0.4864 7.6342 -0.5663 Q 7.6342 -0.632 7.672 -0.6862 Q 7.7098 -0.7404 7.7804 -0.7718 Q 7.851 -0.8031 7.9466 -0.8031 Q 8.0878 -0.8031 8.172 -0.7325 Q 8.2562 -0.6619 8.2647 -0.5421 H 8.0736 Q 8.0693 -0.5892 8.0343 -0.617 Q 7.9994 -0.6448 7.9409 -0.6448 Q 7.8867 -0.6448 7.8575 -0.6248 Q 7.8282 -0.6049 7.8282 -0.5692 Q 7.8282 -0.5292 7.8682 -0.5086 Q 7.9081 -0.4879 7.9923 -0.4665 Q 8.0779 -0.4451 8.1335 -0.4223 Q 8.1891 -0.3994 8.2298 -0.3516 Q 8.2704 -0.3039 8.2719 -0.2254 Q 8.2719 -0.1569 8.2341 -0.1027 Q 8.1963 -0.0485 8.1256 -0.0178 Q 8.055 0.0128 7.9609 0.0128 Q 7.8639 0.0128 7.7868 -0.0221 Q 7.7098 -0.0571 7.6649 -0.117 Q 7.6199 -0.1769 7.6157 -0.2496 Z',
+]
+// Inked box at cap height 1: x 0.0499 -> 8.2719, y -1.1184 -> 0.0128. The
+// top is the ascender of G/b/d, which in Poppins stands 1.118x the cap height;
+// the bottom is the round letters' 1.3% overshoot below the baseline.
+const WORDMARK_WIDTH = 8.2220
+const WORDMARK_LEFT = 0.0499
+
+/**
+ * The template's own roundel, lifted verbatim from its navbar logo SVG. It is
+ * the brand mark rather than the wordmark, and it is what carries the orange.
+ */
+const ROUNDEL_PATHS = [
+  "M18 2.3584C26.8366 2.3584 34 9.5218 34 18.3584H31.0901H25.4419C25.4419 14.2484 22.11 10.9165 18 10.9165C13.8902 10.9165 10.5581 14.2484 10.5581 18.3584H4.90828H2C2 9.5218 9.1637 2.3584 18 2.3584Z",
+  "M18 34.3584C9.1637 34.3584 2 27.195 2 18.3584H4.90828H10.5581H25.4419C25.4419 22.4684 22.11 25.8003 18 25.8003C13.8902 25.8003 10.5581 22.4684 10.5581 18.3584H4.90828C4.90828 25.5883 10.7695 31.4494 17.9993 31.4494C25.2291 31.4494 31.0901 25.5883 31.0901 18.3584H34C34 27.195 26.8366 34.3584 18 34.3584Z",
+];
+
+const BRAND_ORANGE = "#F8642B";
+
+/**
+ * The two lockup geometries, as ratios of the artwork height, measured off the
+ * template's own two SVGs. They are not the same ratio - the export uses a
+ * proportionally larger wordmark against the roundel for the footer ticker - and
+ * each is reproduced as drawn rather than unified.
+ */
+const LOCKUPS = {
+  main: {
+    name: "global-kids-logo.svg",
+    roundel: { left: 2 / 36, top: 2.3584 / 36, size: 32 / 36 },
+    gap: 8.91 / 36,
+    baseline: 27.182 / 36,
+    cap: 18.33 / 36,
+    right: 1.25 / 36,
+  },
+  large: {
+    name: "global-kids-logo-large.svg",
+    roundel: { left: 7.78 / 143, top: 9.17 / 143, size: 124.44 / 143 },
+    gap: 23.84 / 143,
+    baseline: 111.812 / 143,
+    cap: 81.78 / 143,
+    right: 4.03 / 143,
+  },
+};
+
+/** Where the logo files are served from; root-absolute because the export's own
+ *  asset refs are relative and the pages sit at two different depths. */
+const LOGO_BASE = "/webflow/";
+const LOGO = {
+  main: `${LOGO_BASE}${LOCKUPS.main.name}`,
+  large: `${LOGO_BASE}${LOCKUPS.large.name}`,
+};
+
+/** One lockup as a standalone SVG document, at the given pixel height. */
+function logoSvg(lockup, height) {
+  // ROUNDEL_PATHS is the template's own navbar artwork: a 32-unit roundel sitting
+  // at x=2 in a 132x36 box. Each lockup wants it at its own size and offset, so
+  // it is scaled by that ratio and nudged onto the lockup's left edge.
+  const markScale = (lockup.roundel.size * height) / 32;
+  const markX = lockup.roundel.left * height - 2 * markScale;
+  const markY = lockup.roundel.top * height - 2.3584 * markScale;
+  const markRight = (lockup.roundel.left + lockup.roundel.size) * height;
+  const baseline = lockup.baseline * height;
+  const cap = lockup.cap * height;
+
+  // The gap is measured ink to ink, as the template's is, so the wordmark's own
+  // left sidebearing is taken back out of the pen position.
+  const textX = markRight + lockup.gap * height - WORDMARK_LEFT * cap;
+  const width = markRight + lockup.gap * height + WORDMARK_WIDTH * cap
+    + lockup.right * height;
+
+  const markPaths = ROUNDEL_PATHS.map(
+    (d) =>
+      `<path d="${d}" transform="translate(${markX.toFixed(3)} ${markY.toFixed(3)}) ` +
+      `scale(${markScale.toFixed(5)})"/>`
+  ).join("");
+  // The outlines are normalised to cap height 1 with the baseline on y=0, so
+  // the whole wordmark is one translate and one scale.
+  const wordmark = WORDMARK_PATHS.map(
+    (d) => `<path d="${d}" transform="translate(${textX.toFixed(2)} ${baseline.toFixed(2)}) scale(${cap.toFixed(4)})"/>`
+  ).join("");
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width.toFixed(2)}" height="${height}" ` +
+    `viewBox="0 0 ${width.toFixed(2)} ${height}" fill="${BRAND_ORANGE}" role="img" aria-label="Global Kids">` +
+    markPaths + wordmark + `</svg>`
+  );
+}
+
+/**
+ * Write both lockups next to the pages. Files rather than data: URIs: the
+ * outlines are ~5 KB, and inlining them would add that to every one of the 31
+ * pages twice over. buildLogoGuards checks they landed.
+ */
+function emitLogoAssets() {
+  for (const key of ["main", "large"]) {
+    const lockup = LOCKUPS[key];
+    const height = key === "main" ? 36 : 143;
+    const svg = logoSvg(lockup, height);
+    if (svg.includes("NaN") || svg.includes("undefined")) {
+      console.error(`The ${key} lockup did not render: ${svg.slice(0, 200)}`);
+      process.exit(1);
+    }
+    writeFileSync(join(MOUNT, lockup.name), svg, "utf8");
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -332,6 +442,7 @@ function logoAsset(width, height) {
 
 rmSync(MOUNT, { recursive: true, force: true });
 cpSync(resolve(EXPORT, "assets"), resolve(MOUNT, "assets"), { recursive: true });
+emitLogoAssets();
 
 const templateButton = /<a\b[^>]*class="template-button[^"]*"[\s\S]*?<\/a>/g;
 
@@ -402,12 +513,13 @@ for (const page of pages) {
     console.error(`${page}: the Joyloo logo survived.`);
     process.exit(1);
   }
-  if (!served.includes("Global%20Kids")) {
-    console.error(`${page}: the Global Kids wordmark was not applied.`);
+  if (!served.includes(LOGO.main) || !served.includes(LOGO.large)) {
+    console.error(`${page}: the Global Kids lockup was not applied.`);
     process.exit(1);
   }
-  if (/assets\/[^"'\s]*data:image/.test(served)) {
-    console.error(`${page}: the logo data URI is prefixed by an asset path.`);
+  // A stale path in front of ours, or the original SVG surviving as a fallback.
+  if (/assets\/[^"'\s]*\/webflow\//.test(served) || /main-logo\.svg/.test(served)) {
+    console.error(`${page}: a stale logo path survived the swap.`);
     process.exit(1);
   }
 
