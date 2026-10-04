@@ -689,25 +689,9 @@ function lazyLoadVideos(html) {
     );
   }
 
-  /*
-    Stop the hero waiting on the animation runtime.
-
-    The template hides the headline, the paragraph and several section headings
-    until Webflow's third-party interaction library finishes initialising and
-    sets w-mod-ix3 on <html>. That library is about ten seconds of script
-    evaluation on a throttled phone, so the gate was holding the first paint
-    back by seconds and a visitor on a slow connection was looking at an empty
-    hero while it ran.
-
-    The class is what the stylesheet tests, so setting it early satisfies the
-    gate exactly as the library would, with no new CSS and no change to any
-    animation. If the library gets there first - which it does on a fast
-    machine - this does nothing at all.
-  */
   const loader = `<script id="gks-video-loader">${VIDEO_LOADER}</script>`;
-  const reveal = `<script id="gks-reveal-gate">${REVEAL_GATE}</script>`;
 
-  return swap(out, "</head>", `${reveal}\n${loader}\n</head>`);
+  return swap(out, "</head>", `${loader}\n</head>`);
 }
 
 /**
@@ -718,38 +702,6 @@ function lazyLoadVideos(html) {
  * background-video module loads everything at once — which is the behaviour
  * being removed here.
  */
-/*
- * Lifts Webflow's "hidden until the interactions are ready" gate.
- *
- * The template's stylesheet hides the headline and several headings while
- * w-mod-ix3 is absent, and that class is only set once GSAP and the Webflow
- * interaction bundles have finished evaluating - roughly ten seconds of main
- * thread on a slow device. Until then the hero is blank.
- *
- * Adding the class ourselves after a short grace period satisfies the same
- * stylesheet rule the library would have satisfied, so the page becomes
- * readable without changing a single animation. On a machine fast enough for
- * the library to win the race this never fires.
- *
- * Reduced motion is honoured by not waiting at all: someone who has asked for
- * no animation should not be served a delayed reveal.
- */
-const REVEAL_GATE = `(function () {
-  "use strict";
-
-  var root = document.documentElement;
-  if (root.classList.contains("w-mod-ix3")) return;
-
-  // Nothing to race against if the interactions are not coming.
-  var immediate =
-    window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var delay = immediate ? 0 : 1200;
-
-  setTimeout(function () {
-    if (!root.classList.contains("w-mod-ix3")) root.classList.add("w-mod-ix3");
-  }, delay);
-})();`;
-
 const VIDEO_LOADER = `(function () {
   "use strict";
 
