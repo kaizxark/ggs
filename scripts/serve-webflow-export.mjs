@@ -410,9 +410,11 @@ const LOGO = {
 //
 // Poppins Bold, latin subset, from Google Fonts (SIL Open Font License 1.1).
 // It covers the full printable Latin range, so it cannot fall back mid-word.
+// It lives in brand/ rather than scripts/ because .vercelignore excludes
+// scripts/* as local-only tooling, and the upload is what the build reads.
 const BRAND_FONT_FILE = "poppins-bold.woff";
 const BRAND_FONT_URL = `${LOGO_BASE}${BRAND_FONT_FILE}`;
-const BRAND_FONT_SRC = resolve(ROOT, "scripts/fonts/poppins-bold-latin.woff");
+const BRAND_FONT_SRC = resolve(ROOT, "brand/poppins-bold-latin.woff");
 const BRAND_CLASS = "gk-brand";
 
 /** Injected into <head> so the face exists before the copy below it renders. */
