@@ -1,39 +1,45 @@
 /**
- * Post-build step: serve the Webflow export at the root, unmodified.
+ * Post-build step: serve the Webflow export, with two small changes.
  *
  * ## What this replaced
  *
  * The build used to run scripts/build-landing.mjs, which rewrote the export
  * into the Global Kids School landing page, and then scripts/finalise-landing.mjs,
- * which swapped that document into the root so `/` served it. Both are gone from
- * the chain. webflow-site/index.html is now served exactly as it sits in the
- * folder - no copy rewriting, no branding, no markup normalisation.
+ * which swapped that document into the root so `/` served it. Both are gone.
+ * The export is served as it sits in the folder.
  *
  * ## Why the page lives under /webflow/ rather than /
  *
  * The export references its assets relatively - "assets/cdn.prod.website-files.com/..."
  * - and a browser resolves those against the document's base URL. At the root
  * that is /assets/, which is the directory Vite writes the React app's hashed
- * bundles into; those requests miss, every script is aborted, and Webflow's
- * interaction library never runs, which leaves the hero heading stuck at
+ * bundles into; those requests miss, every script is aborted, Webflow's
+ * interaction library never runs, and the hero heading is left at
  * visibility:hidden.
  *
  * So vercel.json redirects / to /webflow/ rather than rewriting it. A rewrite
  * would serve the right bytes but leave the base URL at /, and the relative
- * refs would still miss - which is exactly what happened first. Only a
- * redirect moves the base URL, so only a redirect makes the relative paths
- * resolve to /webflow/assets/, where the export's own mirrored copies live.
+ * refs would still miss. Only a redirect moves the base URL. The same applies
+ * to the other pages: their links to "about-us.html" and "programs/play-based-learning.html"
+ * resolve against /webflow/, which is where they are published.
  *
- * ## Why the filenames are swapped
+ * ## The two changes made to each page
  *
- * Vercel resolves the filesystem before it applies rewrites, and Vite always
- * writes a root index.html. Leaving that file in place would mean `/` served
- * the React shell, so it is moved to app.html and the catch-all rewrite in
- * vercel.json picks the app up from there.
+ * 1. The template vendor's own corner button. Webflow pins a "GET THIS
+ *    TEMPLATE" link to the bottom-right, pointing at webflow.com's template
+ *    store. It is an advert pinned over the page, not part of the design.
+ *
+ * 2. The "Parents" and "pages" dropdowns in the header. Both are lists of
+ *    template pages - a changelog, a licence, a styleguide, "about us
+ *    templates" - that belong to the template shop rather than to a school.
+ *    The real sections (Home, About Us, Programs, Gallery, Blogs) are plain
+ *    links and are left alone.
+ *
+ * Both are applied while serving, so webflow-site/ stays exactly as it is.
  */
 
-import { cpSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { resolve, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,7 +66,7 @@ if (!existsSync(resolve(EXPORT, "index.html"))) {
  * unstyled page rather than a build error.
  */
 if (!existsSync(resolve(EXPORT, "assets"))) {
-  console.error(`Export assets missing at ${EXPORT}/assets - the page would render unstyled.`);
+  console.error(`Export assets missing at ${EXPORT}/assets - the pages would render unstyled.`);
   process.exit(1);
 }
 
@@ -76,54 +82,213 @@ if (existsSync(INDEX)) {
   renameSync(INDEX, APP_SHELL);
 }
 
-// The export's own assets, copied verbatim.
+/* ------------------------------------------------------------------ */
+/* Balanced element scanning                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Find where the element starting at `start` ends, counting nesting.
+ *
+ * A regex cannot do this: the nav items being removed contain <ul> and <li>
+ * inside them, so the first "</li>" belongs to a child, not to the element
+ * being cut, and a non-greedy match would leave the tail behind.
+ */
+function elementSpan(html, start, tag) {
+  const open = new RegExp(`<${tag}\\b`, "gi");
+  const close = new RegExp(`</${tag}>`, "gi");
+  let depth = 0;
+  let cursor = start;
+  while (cursor < html.length) {
+    open.lastIndex = cursor;
+    close.lastIndex = cursor;
+    const nextOpen = open.exec(html);
+    const nextClose = close.exec(html);
+    if (!nextClose) return null;
+    if (nextOpen && nextOpen.index < nextClose.index) {
+      depth += 1;
+      cursor = nextOpen.index + nextOpen[0].length;
+    } else {
+      depth -= 1;
+      cursor = nextClose.index + nextClose[0].length;
+      if (depth === 0) return { start, end: cursor };
+    }
+  }
+  return null;
+}
+
+/**
+ * Remove every element of `tag` whose text contains `marker`.
+ *
+ * Walks forward from each match and cuts whole elements, so nested markup goes
+ * with them and nothing is left half-open.
+ */
+function removeElementsContaining(html, tag, marker) {
+  const finder = new RegExp(`<${tag}\\b`, "gi");
+  let out = html;
+  let cursor = 0;
+  let removed = 0;
+
+  for (;;) {
+    finder.lastIndex = cursor;
+    const match = finder.exec(out);
+    if (!match) break;
+    const span = elementSpan(out, match.index, tag);
+    if (!span) break;
+    if (out.slice(span.start, span.end).includes(marker)) {
+      out = out.slice(0, span.start) + out.slice(span.end);
+      removed += 1;
+      cursor = span.start;
+    } else {
+      cursor = span.end;
+    }
+  }
+
+  return { html: out, removed };
+}
+
+/**
+ * Cut the two header dropdowns.
+ *
+ * The desktop items are <li> elements; the mobile one is a <div class="nav-dropdown">
+ * sitting beside the contact button. Both are found by the same marker, the
+ * dropdown toggle, which appears nowhere else in the header.
+ *
+ * Only the header is scanned - the footer's own dropdown-free link columns are
+ * not touched.
+ */
+function stripHeaderDropdowns(html) {
+  if (!html.includes("nav-dropdown-toggle")) return { html, removed: 0 };
+
+  // Not every page in the export opens with the same hero, so the header is
+  // bounded by its own closing tag where there is one and by the first
+  // <section> otherwise.
+  const headerEnd = html.indexOf("</header>") > 0 ? html.indexOf("</header>") : html.indexOf("<section");
+  if (headerEnd < 0) throw new Error("Could not bound the header to strip its dropdowns.");
+
+  const header = html.slice(0, headerEnd);
+  const tail = html.slice(headerEnd);
+
+  // The desktop dropdowns are <li> siblings, so scanning for <li> is safe: none
+  // of them wraps another.
+  const items = removeElementsContaining(header, "li", "nav-dropdown-toggle");
+
+  /*
+    The mobile one is a <div class="nav-dropdown"> inside .navigation-button,
+    and it has to be found from inside that block rather than from the top of
+    the header. Scanning the whole header for a <div> containing the marker
+    finds .header-area first - it wraps everything, so it trivially contains
+    the marker - and removing it takes the entire navigation with it. The scan
+    is therefore bounded to .navigation-button, where the first <div> really is
+    the dropdown.
+  */
+  // Located in the already-shortened text, not in `header`: cutting the <li>
+  // blocks moves everything after them, and an offset taken before the cut
+  // points at the wrong place.
+  let working = items.html;
+  let mobile = 0;
+  const navButton = /<div class="navigation-button">/.exec(working);
+  if (navButton) {
+    const span = elementSpan(working, navButton.index, "div");
+    if (span) {
+      const inner = removeElementsContaining(
+        working.slice(span.start, span.end),
+        "div",
+        "nav-dropdown-toggle"
+      );
+      mobile = inner.removed;
+      working = working.slice(0, span.start) + inner.html + working.slice(span.end);
+    }
+  }
+
+  return { html: working + tail, removed: items.removed + mobile };
+}
+
+/* ------------------------------------------------------------------ */
+/* Publish                                                            */
+/* ------------------------------------------------------------------ */
+
 rmSync(MOUNT, { recursive: true, force: true });
 cpSync(resolve(EXPORT, "assets"), resolve(MOUNT, "assets"), { recursive: true });
 
-/*
- * The one edit this build makes: removing the template's own shopfront link.
- *
- * Webflow ships a fixed "GET THIS TEMPLATE" button pinned to the bottom-right
- * corner, linking to webflow.com's template store. It is not the school's, it
- * is not in the export's own design - it is the template vendor's advert - and
- * it sits over the page rather than in it. Removing it here rather than in the
- * export file keeps webflow-site/index.html exactly as it is in the folder.
- *
- * Matched on the element rather than its text so the arrow icon and the
- * paragraph come away with it, and anchored on the class so it cannot match
- * anything else in the document.
- */
-const source = readFileSync(resolve(EXPORT, "index.html"), "utf8");
-
 const templateButton = /<a\b[^>]*class="template-button[^"]*"[\s\S]*?<\/a>/g;
-const found = source.match(templateButton) || [];
-if (found.length !== 1) {
-  console.error(
-    `Expected exactly 1 "GET THIS TEMPLATE" element in the export, found ${found.length}. ` +
-      "If the export changed, check the removal in serve-webflow-export.mjs."
-  );
+
+/** Every page in the export, as an export-relative path. */
+function exportPages(dir = EXPORT, base = "") {
+  const found = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const rel = join(base, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "assets") continue;
+      found.push(...exportPages(join(dir, entry.name), rel));
+    } else if (entry.name.endsWith(".html")) {
+      found.push(rel);
+    }
+  }
+  return found;
+}
+
+const pages = exportPages();
+if (pages.length < 10) {
+  console.error(`Expected the export's full page set, found ${pages.length}.`);
   process.exit(1);
 }
 
-const expected = source.replace(templateButton, "");
-if (expected.length !== source.length - found[0].length) {
-  console.error("The removal changed more than the template link — refusing to continue.");
-  process.exit(1);
+let totalDropdowns = 0;
+let totalButtons = 0;
+
+for (const page of pages) {
+  const source = readFileSync(join(EXPORT, page), "utf8");
+
+  const buttonMatches = source.match(templateButton) || [];
+  if (buttonMatches.length > 1) {
+    console.error(`${page}: expected at most 1 template button, found ${buttonMatches.length}.`);
+    process.exit(1);
+  }
+  totalButtons += buttonMatches.length;
+
+  const stripped = removeElementsContaining(source, "a", "template-button", "template button");
+  const nav = stripHeaderDropdowns(stripped.html);
+  totalDropdowns += nav.removed;
+
+  const target = join(MOUNT, page);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, nav.html, "utf8");
+
+  // Neither removal may survive, and the real sections must still be there.
+  if (nav.html.includes("template-button") || nav.html.includes("GET THIS TEMPLATE")) {
+    console.error(`${page}: the template link survived the removal.`);
+    process.exit(1);
+  }
+  if (nav.html.includes("nav-dropdown-toggle")) {
+    console.error(`${page}: a header dropdown survived the removal.`);
+    process.exit(1);
+  }
+  if (source.includes("nav-dropdown-toggle") && nav.removed !== 3) {
+    console.error(
+      `${page}: expected to remove 3 header dropdowns (Parents, pages, and the mobile copy), removed ${nav.removed}.`
+    );
+    process.exit(1);
+  }
+  // The header must keep the links that are actually the site's, and the brand
+  // lockup - a removal that took the whole nav would still pass every other
+  // check above, so this is what catches it.
+  for (const label of ["Home", "About Us", "Programs", "Gallery", "Blogs"]) {
+    if (!nav.html.includes(`>${label}</a>`)) {
+      console.error(`${page}: the "${label}" nav link is missing from the served header.`);
+      process.exit(1);
+    }
+  }
+  if (source.includes('class="navbar-brand-header"') && !nav.html.includes('class="navbar-brand-header"')) {
+    console.error(`${page}: the brand lockup went missing from the served header.`);
+    process.exit(1);
+  }
+  if (source.includes('navbar-wrapper') && !nav.html.includes('navbar-wrapper')) {
+    console.error(`${page}: the navbar wrapper went missing from the served header.`);
+    process.exit(1);
+  }
 }
 
-writeFileSync(resolve(MOUNT, "index.html"), expected, "utf8");
-
-// Nothing else may differ from the file in the folder.
-const served = readFileSync(resolve(MOUNT, "index.html"), "utf8");
-if (served !== expected) {
-  console.error("Served index.html does not match the export — refusing to continue.");
-  process.exit(1);
-}
-if (served.includes("template-button") || served.includes("GET THIS TEMPLATE")) {
-  console.error("The template link survived the removal — refusing to continue.");
-  process.exit(1);
-}
-
-console.log("Root document resolved:");
-console.log("  /            -> /webflow/          webflow-site export, minus the template link");
+console.log(`Published ${pages.length} pages to /webflow/`);
+console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns`);
+console.log("  /            -> /webflow/          webflow-site export");
 console.log("  /login       app.html              React app shell");
