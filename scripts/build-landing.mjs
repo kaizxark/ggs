@@ -43,7 +43,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE = resolve(ROOT, "joyloo.webflow.io/joyloo.webflow.io/index.html");
+const SOURCE = resolve(ROOT, "webflow-site/index.html");
 const OUT_DIR = resolve(ROOT, "client/public");
 const OUT = resolve(OUT_DIR, "landing.html");
 
@@ -899,7 +899,7 @@ function replaceBlogWithAdmissions(html) {
         .replace(/Ethan Blake|Ayesha Rahman|Daniel Brooks/g, "Admissions")
         .replace(/>Read More</g, `>${action}<`)
         .replace(
-          />Supporting Early Learning Through Play with Love and Care<|>Nurturing Confidence and Curiosity in Every Child&#x27;s Journey<|>Growing Together: Where Play Meets Purpose in Early Education</g,
+          />Supporting Early Learning Through Play with Love and Care<|>Nurturing Confidence and Curiosity in Every Child's Journey<|>Growing Together: Where Play Meets Purpose in Early Education</g,
           `>${label}<`
         )
         // Every link in the card pointed at a blog post that no longer exists.
@@ -923,8 +923,54 @@ function replaceBlogWithAdmissions(html) {
  * The transform
  * ================================================================== */
 
+/**
+ * Restore clean internal URLs from the export's .html filenames.
+ *
+ * webflow-site/ is the raw export, so every internal link names a file:
+ * "contact-enorrlment.html", "programs/play-based-learning.html". The build
+ * matches on clean paths - "/contact-enorrlment" - because that is what the
+ * site actually serves, and because vercel.json rewrites those paths.
+ *
+ * This is the only difference between the two exports: both have 303 links and
+ * identical structure, differing only in how the paths are spelled. Rewriting
+ * them here means every other pass in the build keeps matching what it already
+ * matches, instead of each one growing a second spelling to look for.
+ *
+ * External URLs are left alone - only a bare relative .html path is an internal
+ * document, and "index.html" becomes the site root.
+ *
+ * The same pass decodes &nbsp;. The two exports spell a non-breaking space
+ * differently - the raw one writes the entity, the cleaned one the character -
+ * and the copy patterns below are written to tolerate the character but not the
+ * seven characters of its own name, so it has to arrive as the character.
+ *
+ * It also restores the XHTML-style slash on void elements, for the same reason.
+ * The raw export writes <meta ...> where the copy patterns expect
+ * <meta ... />; there are eleven metas and around sixty images in the document
+ * and every one of them is a literal a pass matches against. Adding the slash
+ * back once here is cheaper and far less fragile than loosening each pattern.
+ */
+function cleanInternalLinks(html) {
+  return html
+    .replace(
+      /\b(href|src)="(?!\/|#|https?:|mailto:|tel:|data:)([^"]+?)\.html"/g,
+      (match, attribute, path) => {
+        const clean = `/${path}`.replace(/\/index$/, "/");
+        return `${attribute}="${clean}"`;
+      }
+    )
+    .replace(/&nbsp;/g, "\u00a0")
+    .replace(/\b(href|src)="assets\/([^"]+)"/g, (match, attribute, rest) =>
+      `${attribute}="https://${rest.replace(/%25/g, "%")}"`
+    )
+    .replace(
+      /<(area|base|br|col|embed|hr|img|input|link|meta|source|track|wbr)\b([^>]*[^/])>/g,
+      "<$1$2 />"
+    );
+}
+
 function transform(html) {
-  let out = replaceLogos(html);
+  let out = replaceLogos(cleanInternalLinks(html));
 
   /* ---------------- Branding ---------------- */
 
@@ -959,13 +1005,13 @@ function transform(html) {
     "Ages 1–6",
     INTRO_CARDS[0][0]
   );
-  out = swap(out, "Tailored programs for every stage of your child&#x27;s unique learning journey", INTRO_CARDS[0][1]);
+  out = swap(out, "Tailored programs for every stage of your child's unique learning journey", INTRO_CARDS[0][1]);
   out = swap(out, "Certified Educators", INTRO_CARDS[1][0]);
-  out = swap(out, "Experienced, loving teachers who care deeply about your child&#x27;s growth.", INTRO_CARDS[1][1]);
+  out = swap(out, "Experienced, loving teachers who care deeply about your child's growth.", INTRO_CARDS[1][1]);
   out = swap(out, "Safe Environment", INTRO_CARDS[2][0]);
   out = swap(out, "Secure, clean, nurturing spaces designed specifically to inspire curiosity.", INTRO_CARDS[2][1]);
   out = swap(out, "Parent Updates", INTRO_CARDS[3][0]);
-  out = swap(out, "Daily communication and photos so you stay connected to child&#x27;s special moments", INTRO_CARDS[3][1]);
+  out = swap(out, "Daily communication and photos so you stay connected to child's special moments", INTRO_CARDS[3][1]);
 
   /* ---------------- Approach ---------------- */
 
@@ -1128,7 +1174,7 @@ function transform(html) {
   out = swap(out, "Clear Communication with Parents", WHY.cards[3][0]);
   out = swap(
     out,
-    "Stay connected through daily updates, photos, and real-time messages. We believe parents should always know how their child&#x27;s day how they&#x27;re reaching.",
+    "Stay connected through daily updates, photos, and real-time messages. We believe parents should always know how their child's day how they're reaching.",
     WHY.cards[3][1]
   );
 
@@ -1199,10 +1245,19 @@ function transform(html) {
   // family who has read the whole page and decided to act meets the one number
   // the school has confirmed. `.cta-top-block` is the heading's wrapper, so the
   // new line lands directly beneath the heading and inherits its layout.
-  out = swap(
-    out,
-    "</h2>\u2028                        </div>\u2028                        <div data-w-id=\"ff577e1d-a51a-3a83-4432-274e56c63a91\"",
-    `</h2><p class="cta-subtitle">Call the school office on ${CONTACT.phone}, or write to us and we will arrange a visit.</p>\u2028                        </div>\u2028                        <div data-w-id="ff577e1d-a51a-3a83-4432-274e56c63a91"`
+  // Written as a pattern rather than a literal because the gap between the two
+  // tags is pure indentation, and the two exports disagree about what it is
+  // made of: one pads with U+2028 and twenty-four spaces, the other with
+  // nothing at all. Matching "some whitespace" covers both.
+  const ctaButton = /<\/h2>\s*<\/div>\s*(<div data-w-id="ff577e1d-a51a-3a83-4432-274e56c63a91")/;
+  if (!ctaButton.test(out)) {
+    throw new Error(
+      "Could not find the CTA button to insert the subtitle above; the CTA markup has probably changed."
+    );
+  }
+  out = out.replace(
+    ctaButton,
+    `</h2><p class="cta-subtitle">Call the school office on ${CONTACT.phone}, or write to us and we will arrange a visit.</p></div>$1`
   );
 
   /* ---------------- Footer ---------------- */
