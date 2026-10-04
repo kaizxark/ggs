@@ -3,8 +3,7 @@
 # scripts/build-landing.mjs must ship: vercel.json and the build both need it.
 # Only the operational scripts are local-only.
 scripts/*
-!scripts/build-landing.mjs
-!scripts/finalise-landing.mjs
+!scripts/serve-webflow-export.mjs
 supabase/
 tmp/
 test.html
@@ -18,3 +17,5 @@ node_modules/
 .vercel/
 .vscode/
 .idea/
+
+# The export is the landing page: the build reads it and copies its assets.
