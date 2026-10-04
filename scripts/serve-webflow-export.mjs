@@ -32,7 +32,7 @@
  * vercel.json picks the app up from there.
  */
 
-import { cpSync, existsSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -76,19 +76,54 @@ if (existsSync(INDEX)) {
   renameSync(INDEX, APP_SHELL);
 }
 
-// The export and its mirrored assets, copied verbatim.
+// The export's own assets, copied verbatim.
 rmSync(MOUNT, { recursive: true, force: true });
-cpSync(resolve(EXPORT, "index.html"), resolve(MOUNT, "index.html"));
 cpSync(resolve(EXPORT, "assets"), resolve(MOUNT, "assets"), { recursive: true });
 
-// Byte-for-byte check: the served document must be the file in the folder.
-const source = readFileSync(resolve(EXPORT, "index.html"));
-const served = readFileSync(resolve(MOUNT, "index.html"));
-if (!source.equals(served)) {
-  console.error("Served index.html differs from webflow-site/index.html — refusing to continue.");
+/*
+ * The one edit this build makes: removing the template's own shopfront link.
+ *
+ * Webflow ships a fixed "GET THIS TEMPLATE" button pinned to the bottom-right
+ * corner, linking to webflow.com's template store. It is not the school's, it
+ * is not in the export's own design - it is the template vendor's advert - and
+ * it sits over the page rather than in it. Removing it here rather than in the
+ * export file keeps webflow-site/index.html exactly as it is in the folder.
+ *
+ * Matched on the element rather than its text so the arrow icon and the
+ * paragraph come away with it, and anchored on the class so it cannot match
+ * anything else in the document.
+ */
+const source = readFileSync(resolve(EXPORT, "index.html"), "utf8");
+
+const templateButton = /<a\b[^>]*class="template-button[^"]*"[\s\S]*?<\/a>/g;
+const found = source.match(templateButton) || [];
+if (found.length !== 1) {
+  console.error(
+    `Expected exactly 1 "GET THIS TEMPLATE" element in the export, found ${found.length}. ` +
+      "If the export changed, check the removal in serve-webflow-export.mjs."
+  );
+  process.exit(1);
+}
+
+const expected = source.replace(templateButton, "");
+if (expected.length !== source.length - found[0].length) {
+  console.error("The removal changed more than the template link — refusing to continue.");
+  process.exit(1);
+}
+
+writeFileSync(resolve(MOUNT, "index.html"), expected, "utf8");
+
+// Nothing else may differ from the file in the folder.
+const served = readFileSync(resolve(MOUNT, "index.html"), "utf8");
+if (served !== expected) {
+  console.error("Served index.html does not match the export — refusing to continue.");
+  process.exit(1);
+}
+if (served.includes("template-button") || served.includes("GET THIS TEMPLATE")) {
+  console.error("The template link survived the removal — refusing to continue.");
   process.exit(1);
 }
 
 console.log("Root document resolved:");
-console.log("  /            -> /webflow/          webflow-site export, unmodified");
+console.log("  /            -> /webflow/          webflow-site export, minus the template link");
 console.log("  /login       app.html              React app shell");
