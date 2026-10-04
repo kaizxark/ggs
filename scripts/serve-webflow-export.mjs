@@ -339,16 +339,16 @@ function swapLogo(html) {
 // height 18.33), calibrated so a rebuild of 'Joyloo' reproduces the original
 // wordmark's 87.84 inked width.
 const WORDMARK_PATHS = [
-  'M 0.7489 -0.6809 Q 0.722 -0.7305 0.6716 -0.7567 Q 0.6213 -0.783 0.5532 -0.783 Q 0.4355 -0.783 0.3645 -0.7057 Q 0.2936 -0.6284 0.2936 -0.4993 Q 0.2936 -0.3617 0.3681 -0.2844 Q 0.4426 -0.2071 0.573 -0.2071 Q 0.6624 -0.2071 0.7241 -0.2525 Q 0.7858 -0.2979 0.8142 -0.383 H 0.5064 V -0.5617 H 1.034 V -0.3362 Q 1.0071 -0.2454 0.9426 -0.1674 Q 0.878 -0.0894 0.7787 -0.0411 Q 0.6794 0.0071 0.5546 0.0071 Q 0.4071 0.0071 0.2915 -0.0574 Q 0.1759 -0.122 0.1113 -0.2369 Q 0.0468 -0.3518 0.0468 -0.4993 Q 0.0468 -0.6468 0.1113 -0.7624 Q 0.1759 -0.878 0.2908 -0.9426 Q 0.4057 -1.0071 0.5532 -1.0071 Q 0.7319 -1.0071 0.8546 -0.9206 Q 0.9773 -0.834 1.017 -0.6809 Z',
-  'M 1.4163 -1.0496 V -0 H 1.1737 V -1.0496 Z',
-  'M 1.5489 -0.3957 Q 1.5489 -0.5177 1.6028 -0.6106 Q 1.6567 -0.7035 1.7503 -0.7532 Q 1.8439 -0.8028 1.9603 -0.8028 Q 2.0766 -0.8028 2.1702 -0.7532 Q 2.2638 -0.7035 2.3177 -0.6106 Q 2.3716 -0.5177 2.3716 -0.3957 Q 2.3716 -0.2738 2.317 -0.1809 Q 2.2624 -0.0879 2.1681 -0.0383 Q 2.0737 0.0113 1.9574 0.0113 Q 1.8411 0.0113 1.7482 -0.0383 Q 1.6553 -0.0879 1.6021 -0.1801 Q 1.5489 -0.2723 1.5489 -0.3957 Z M 2.1248 -0.3957 Q 2.1248 -0.4908 2.0773 -0.5418 Q 2.0298 -0.5929 1.9603 -0.5929 Q 1.8893 -0.5929 1.8425 -0.5426 Q 1.7957 -0.4922 1.7957 -0.3957 Q 1.7957 -0.3007 1.8418 -0.2496 Q 1.8879 -0.1986 1.9574 -0.1986 Q 2.0269 -0.1986 2.0759 -0.2496 Q 2.1248 -0.3007 2.1248 -0.3957 Z',
-  'M 2.9922 -0.8028 Q 3.09 -0.8028 3.1695 -0.7532 Q 3.2489 -0.7035 3.295 -0.6113 Q 3.3411 -0.5191 3.3411 -0.3972 Q 3.3411 -0.2752 3.295 -0.1823 Q 3.2489 -0.0894 3.1695 -0.039 Q 3.09 0.0113 2.9922 0.0113 Q 2.9085 0.0113 2.8461 -0.022 Q 2.7837 -0.0553 2.7482 -0.1106 V -0 H 2.5056 V -1.0496 H 2.7482 V -0.6794 Q 2.7822 -0.7348 2.8461 -0.7688 Q 2.9099 -0.8028 2.9922 -0.8028 Z M 2.9198 -0.5915 Q 2.8475 -0.5915 2.7971 -0.539 Q 2.7468 -0.4865 2.7468 -0.3957 Q 2.7468 -0.305 2.7971 -0.2525 Q 2.8475 -0.2 2.9198 -0.2 Q 2.9922 -0.2 3.0432 -0.2532 Q 3.0943 -0.3064 3.0943 -0.3972 Q 3.0943 -0.4879 3.0439 -0.5397 Q 2.9936 -0.5915 2.9198 -0.5915 Z',
-  'M 3.7744 -0.8028 Q 3.8581 -0.8028 3.9212 -0.7688 Q 3.9844 -0.7348 4.0184 -0.6794 V -0.7915 H 4.2609 V -0 H 4.0184 V -0.1121 Q 3.9829 -0.0567 3.9198 -0.0227 Q 3.8567 0.0113 3.773 0.0113 Q 3.6765 0.0113 3.5971 -0.039 Q 3.5177 -0.0894 3.4716 -0.1823 Q 3.4255 -0.2752 3.4255 -0.3972 Q 3.4255 -0.5191 3.4716 -0.6113 Q 3.5177 -0.7035 3.5971 -0.7532 Q 3.6765 -0.8028 3.7744 -0.8028 Z M 3.8453 -0.5915 Q 3.773 -0.5915 3.7226 -0.5397 Q 3.6723 -0.4879 3.6723 -0.3972 Q 3.6723 -0.3064 3.7226 -0.2532 Q 3.773 -0.2 3.8453 -0.2 Q 3.9177 -0.2 3.968 -0.2525 Q 4.0184 -0.305 4.0184 -0.3957 Q 4.0184 -0.4865 3.968 -0.539 Q 3.9177 -0.5915 3.8453 -0.5915 Z',
-  'M 4.6843 -1.0496 V -0 H 4.4418 V -1.0496 Z',
-  'M 5.7481 -0 M 5.4134 -0.4397 V -0 H 5.1708 V -0.9957 H 5.4134 V -0.5589 L 5.7453 -0.9957 H 6.0304 L 5.6446 -0.5078 L 6.0446 -0 Z',
-  'M 6.1418 -1.0043 Q 6.1418 -1.061 6.1822 -1.0986 Q 6.2226 -1.1362 6.2864 -1.1362 Q 6.3488 -1.1362 6.3893 -1.0986 Q 6.4297 -1.061 6.4297 -1.0043 Q 6.4297 -0.9489 6.3893 -0.9113 Q 6.3488 -0.8738 6.2864 -0.8738 Q 6.2226 -0.8738 6.1822 -0.9113 Q 6.1418 -0.9489 6.1418 -1.0043 Z M 6.407 -0.7915 V -0 H 6.1644 V -0.7915 Z',
-  'M 6.8885 -0.8028 Q 6.9666 -0.8028 7.0311 -0.7702 Q 7.0956 -0.7376 7.1325 -0.6823 V -1.0496 H 7.3751 V -0 H 7.1325 V -0.1135 Q 7.0985 -0.0567 7.0354 -0.0227 Q 6.9722 0.0113 6.8885 0.0113 Q 6.7907 0.0113 6.7112 -0.039 Q 6.6318 -0.0894 6.5857 -0.1823 Q 6.5396 -0.2752 6.5396 -0.3972 Q 6.5396 -0.5191 6.5857 -0.6113 Q 6.6318 -0.7035 6.7112 -0.7532 Q 6.7907 -0.8028 6.8885 -0.8028 Z M 6.9595 -0.5915 Q 6.8871 -0.5915 6.8368 -0.5397 Q 6.7864 -0.4879 6.7864 -0.3972 Q 6.7864 -0.3064 6.8368 -0.2532 Q 6.8871 -0.2 6.9595 -0.2 Q 7.0318 -0.2 7.0822 -0.2525 Q 7.1325 -0.305 7.1325 -0.3957 Q 7.1325 -0.4865 7.0822 -0.539 Q 7.0318 -0.5915 6.9595 -0.5915 Z',
-  'M 7.5134 -0.2596 H 7.7531 Q 7.7573 -0.2184 7.7914 -0.1929 Q 7.8254 -0.1674 7.8751 -0.1674 Q 7.9205 -0.1674 7.9453 -0.1851 Q 7.9701 -0.2028 7.9701 -0.2312 Q 7.9701 -0.2652 7.9346 -0.2816 Q 7.8992 -0.2979 7.8197 -0.3177 Q 7.7346 -0.3376 7.6779 -0.3596 Q 7.6212 -0.3816 7.58 -0.4291 Q 7.5389 -0.4766 7.5389 -0.5574 Q 7.5389 -0.6255 7.5765 -0.6816 Q 7.6141 -0.7376 7.6871 -0.7702 Q 7.7602 -0.8028 7.8609 -0.8028 Q 8.0098 -0.8028 8.0956 -0.7291 Q 8.1814 -0.6553 8.1942 -0.5333 H 7.9701 Q 7.9644 -0.5745 7.9339 -0.5986 Q 7.9034 -0.6227 7.8538 -0.6227 Q 7.8112 -0.6227 7.7885 -0.6064 Q 7.7658 -0.5901 7.7658 -0.5617 Q 7.7658 -0.5277 7.802 -0.5106 Q 7.8382 -0.4936 7.9148 -0.4766 Q 8.0027 -0.4539 8.058 -0.4319 Q 8.1134 -0.4099 8.1552 -0.361 Q 8.197 -0.3121 8.1985 -0.2298 Q 8.1985 -0.1603 8.1595 -0.1057 Q 8.1205 -0.0511 8.0474 -0.0199 Q 7.9744 0.0113 7.8779 0.0113 Q 7.7744 0.0113 7.6935 -0.0241 Q 7.6127 -0.0596 7.5658 -0.1213 Q 7.519 -0.183 7.5134 -0.2596 Z',
+  'L 0.7489 -0.6809 Q 0.722 -0.7305 0.6716 -0.7567 Q 0.6213 -0.783 0.5532 -0.783 Q 0.4355 -0.783 0.3645 -0.7057 Q 0.2936 -0.6284 0.2936 -0.4993 Q 0.2936 -0.3617 0.3681 -0.2844 Q 0.4426 -0.2071 0.573 -0.2071 Q 0.6624 -0.2071 0.7241 -0.2525 Q 0.7858 -0.2979 0.8142 -0.383 H 0.5064 V -0.5617 H 1.034 V -0.3362 Q 1.0071 -0.2454 0.9426 -0.1674 Q 0.878 -0.0894 0.7787 -0.0411 Q 0.6794 0.0071 0.5546 0.0071 Q 0.4071 0.0071 0.2915 -0.0574 Q 0.1759 -0.122 0.1113 -0.2369 Q 0.0468 -0.3518 0.0468 -0.4993 Q 0.0468 -0.6468 0.1113 -0.7624 Q 0.1759 -0.878 0.2908 -0.9426 Q 0.4057 -1.0071 0.5532 -1.0071 Q 0.7319 -1.0071 0.8546 -0.9206 Q 0.9773 -0.834 1.017 -0.6809 Z',
+  'L 1.4163 -1.0496 V -0 H 1.1737 V -1.0496 Z',
+  'L 1.5489 -0.3957 Q 1.5489 -0.5177 1.6028 -0.6106 Q 1.6567 -0.7035 1.7503 -0.7532 Q 1.8439 -0.8028 1.9603 -0.8028 Q 2.0766 -0.8028 2.1702 -0.7532 Q 2.2638 -0.7035 2.3177 -0.6106 Q 2.3716 -0.5177 2.3716 -0.3957 Q 2.3716 -0.2738 2.317 -0.1809 Q 2.2624 -0.0879 2.1681 -0.0383 Q 2.0737 0.0113 1.9574 0.0113 Q 1.8411 0.0113 1.7482 -0.0383 Q 1.6553 -0.0879 1.6021 -0.1801 Q 1.5489 -0.2723 1.5489 -0.3957 Z L 2.1248 -0.3957 Q 2.1248 -0.4908 2.0773 -0.5418 Q 2.0298 -0.5929 1.9603 -0.5929 Q 1.8893 -0.5929 1.8425 -0.5426 Q 1.7957 -0.4922 1.7957 -0.3957 Q 1.7957 -0.3007 1.8418 -0.2496 Q 1.8879 -0.1986 1.9574 -0.1986 Q 2.0269 -0.1986 2.0759 -0.2496 Q 2.1248 -0.3007 2.1248 -0.3957 Z',
+  'L 2.9922 -0.8028 Q 3.09 -0.8028 3.1695 -0.7532 Q 3.2489 -0.7035 3.295 -0.6113 Q 3.3411 -0.5191 3.3411 -0.3972 Q 3.3411 -0.2752 3.295 -0.1823 Q 3.2489 -0.0894 3.1695 -0.039 Q 3.09 0.0113 2.9922 0.0113 Q 2.9085 0.0113 2.8461 -0.022 Q 2.7837 -0.0553 2.7482 -0.1106 V -0 H 2.5056 V -1.0496 H 2.7482 V -0.6794 Q 2.7822 -0.7348 2.8461 -0.7688 Q 2.9099 -0.8028 2.9922 -0.8028 Z L 2.9198 -0.5915 Q 2.8475 -0.5915 2.7971 -0.539 Q 2.7468 -0.4865 2.7468 -0.3957 Q 2.7468 -0.305 2.7971 -0.2525 Q 2.8475 -0.2 2.9198 -0.2 Q 2.9922 -0.2 3.0432 -0.2532 Q 3.0943 -0.3064 3.0943 -0.3972 Q 3.0943 -0.4879 3.0439 -0.5397 Q 2.9936 -0.5915 2.9198 -0.5915 Z',
+  'L 3.7744 -0.8028 Q 3.8581 -0.8028 3.9212 -0.7688 Q 3.9844 -0.7348 4.0184 -0.6794 V -0.7915 H 4.2609 V -0 H 4.0184 V -0.1121 Q 3.9829 -0.0567 3.9198 -0.0227 Q 3.8567 0.0113 3.773 0.0113 Q 3.6765 0.0113 3.5971 -0.039 Q 3.5177 -0.0894 3.4716 -0.1823 Q 3.4255 -0.2752 3.4255 -0.3972 Q 3.4255 -0.5191 3.4716 -0.6113 Q 3.5177 -0.7035 3.5971 -0.7532 Q 3.6765 -0.8028 3.7744 -0.8028 Z L 3.8453 -0.5915 Q 3.773 -0.5915 3.7226 -0.5397 Q 3.6723 -0.4879 3.6723 -0.3972 Q 3.6723 -0.3064 3.7226 -0.2532 Q 3.773 -0.2 3.8453 -0.2 Q 3.9177 -0.2 3.968 -0.2525 Q 4.0184 -0.305 4.0184 -0.3957 Q 4.0184 -0.4865 3.968 -0.539 Q 3.9177 -0.5915 3.8453 -0.5915 Z',
+  'L 4.6843 -1.0496 V -0 H 4.4418 V -1.0496 Z',
+  'L 5.7481 -0 L 5.4134 -0.4397 V -0 H 5.1708 V -0.9957 H 5.4134 V -0.5589 L 5.7453 -0.9957 H 6.0304 L 5.6446 -0.5078 L 6.0446 -0 Z',
+  'L 6.1418 -1.0043 Q 6.1418 -1.061 6.1822 -1.0986 Q 6.2226 -1.1362 6.2864 -1.1362 Q 6.3488 -1.1362 6.3893 -1.0986 Q 6.4297 -1.061 6.4297 -1.0043 Q 6.4297 -0.9489 6.3893 -0.9113 Q 6.3488 -0.8738 6.2864 -0.8738 Q 6.2226 -0.8738 6.1822 -0.9113 Q 6.1418 -0.9489 6.1418 -1.0043 Z L 6.407 -0.7915 V -0 H 6.1644 V -0.7915 Z',
+  'L 6.8885 -0.8028 Q 6.9666 -0.8028 7.0311 -0.7702 Q 7.0956 -0.7376 7.1325 -0.6823 V -1.0496 H 7.3751 V -0 H 7.1325 V -0.1135 Q 7.0985 -0.0567 7.0354 -0.0227 Q 6.9722 0.0113 6.8885 0.0113 Q 6.7907 0.0113 6.7112 -0.039 Q 6.6318 -0.0894 6.5857 -0.1823 Q 6.5396 -0.2752 6.5396 -0.3972 Q 6.5396 -0.5191 6.5857 -0.6113 Q 6.6318 -0.7035 6.7112 -0.7532 Q 6.7907 -0.8028 6.8885 -0.8028 Z L 6.9595 -0.5915 Q 6.8871 -0.5915 6.8368 -0.5397 Q 6.7864 -0.4879 6.7864 -0.3972 Q 6.7864 -0.3064 6.8368 -0.2532 Q 6.8871 -0.2 6.9595 -0.2 Q 7.0318 -0.2 7.0822 -0.2525 Q 7.1325 -0.305 7.1325 -0.3957 Q 7.1325 -0.4865 7.0822 -0.539 Q 7.0318 -0.5915 6.9595 -0.5915 Z',
+  'L 7.5134 -0.2596 H 7.7531 Q 7.7573 -0.2184 7.7914 -0.1929 Q 7.8254 -0.1674 7.8751 -0.1674 Q 7.9205 -0.1674 7.9453 -0.1851 Q 7.9701 -0.2028 7.9701 -0.2312 Q 7.9701 -0.2652 7.9346 -0.2816 Q 7.8992 -0.2979 7.8197 -0.3177 Q 7.7346 -0.3376 7.6779 -0.3596 Q 7.6212 -0.3816 7.58 -0.4291 Q 7.5389 -0.4766 7.5389 -0.5574 Q 7.5389 -0.6255 7.5765 -0.6816 Q 7.6141 -0.7376 7.6871 -0.7702 Q 7.7602 -0.8028 7.8609 -0.8028 Q 8.0098 -0.8028 8.0956 -0.7291 Q 8.1814 -0.6553 8.1942 -0.5333 H 7.9701 Q 7.9644 -0.5745 7.9339 -0.5986 Q 7.9034 -0.6227 7.8538 -0.6227 Q 7.8112 -0.6227 7.7885 -0.6064 Q 7.7658 -0.5901 7.7658 -0.5617 Q 7.7658 -0.5277 7.802 -0.5106 Q 7.8382 -0.4936 7.9148 -0.4766 Q 8.0027 -0.4539 8.058 -0.4319 Q 8.1134 -0.4099 8.1552 -0.361 Q 8.197 -0.3121 8.1985 -0.2298 Q 8.1985 -0.1603 8.1595 -0.1057 Q 8.1205 -0.0511 8.0474 -0.0199 Q 7.9744 0.0113 7.8779 0.0113 Q 7.7744 0.0113 7.6935 -0.0241 Q 7.6127 -0.0596 7.5658 -0.1213 Q 7.519 -0.183 7.5134 -0.2596 Z',
 ]
 const WORDMARK_WIDTH = 8.1517
 const WORDMARK_LEFT = 0.0468
@@ -397,79 +397,6 @@ const LOGO = {
   main: `${LOGO_BASE}${LOCKUPS.main.name}`,
   large: `${LOGO_BASE}${LOCKUPS.large.name}`,
 };
-
-/* ------------------------------------------------------------------ */
-/* The brand name in running copy                                    */
-/* ------------------------------------------------------------------ */
-
-// The brand name in running copy is set in Parkinsans - the template's own
-// primary face, already loaded by its font loader for the rest of the page. So
-// this needs no webfont and no extra request: the span only has to override the
-// parents that use a different face, which are the Caveat Brush headings and the
-// Source Sans 3 captions.
-//
-// The logo wordmark is a different matter and stays as it is: Poppins Bold baked
-// in as outlines, because the template's original logotype is drawn as paths and
-// no live font could ever match it.
-const BRAND_FONT_STACK = "Parkinsans, sans-serif";
-const BRAND_CLASS = "gk-brand";
-
-/** Injected into <head> so the rule is in place before the copy below renders. */
-function brandFontStyle(html) {
-  if (!html.includes(BRAND_CLASS)) return html;
-  const css = `<style>.${BRAND_CLASS}{font-family:${BRAND_FONT_STACK}}</style>`;
-  if (!html.includes("</head>")) {
-    console.error("A page has no </head> to inject the brand-name rule into.");
-    process.exit(1);
-  }
-  return html.replace("</head>", css + "</head>");
-}
-
-/**
- * Wrap every visible "Global Kids" in a span carrying BRAND_CLASS.
- *
- * Only text between tags is touched. Attribute values are left alone on
- * purpose: the footer carries `mailto:hello@Global Kids.com` and the copy sits
- * inside alt text and srcset, and rewriting any of those would corrupt the
- * address or the image rather than restyle it. <script>, <style> and inline
- * <svg> are set aside for the same reason - nothing in them is visible copy,
- * and the clip-path paths are data, not text.
- */
-function brandFont(html) {
-  const body = html.indexOf("<body");
-  if (body < 0) return { html, wrapped: 0 };
-  const head = html.slice(0, body);
-  let rest = html.slice(body);
-
-  const guarded = [];
-  rest = rest.replace(
-    /<(script|style|svg)\b[^>]*>[\s\S]*?<\/\1>/gi,
-    (block) => {
-      guarded.push(block);
-      return `\u0000${guarded.length - 1}\u0000`;
-    }
-  );
-
-  let wrapped = 0;
-  rest = rest.replace(/>([^<]+)</g, (_tag, text) => {
-    if (!text.includes("Global Kids")) return _tag;
-    const marked = text.replace(/Global Kids/g, () => {
-      wrapped++;
-      return `<span class="${BRAND_CLASS}">Global Kids</span>`;
-    });
-    return `>${marked}<`;
-  });
-
-  rest = rest.replace(/\u0000(\d+)\u0000/g, (_, i) => guarded[Number(i)]);
-  return { html: head + rest, wrapped };
-}
-
-/** Strip the spans brandFont added, so the result can be compared to the input. */
-function unbrandFont(html) {
-  return html
-    .split(`<span class="${BRAND_CLASS}">Global Kids</span>`)
-    .join("Global Kids");
-}
 
 /** One lockup as a standalone SVG document, at the given pixel height. */
 function logoSvg(lockup, height) {
@@ -559,7 +486,6 @@ if (pages.length < 10) {
 let totalDropdowns = 0;
 let totalButtons = 0;
 let totalCredits = 0;
-let totalBrandRuns = 0;
 
 for (const page of pages) {
   const source = readFileSync(join(EXPORT, page), "utf8");
@@ -577,9 +503,7 @@ for (const page of pages) {
   const noPrograms = stripNavLink(nav.html, "Programs");
   const rebranded = rebrand(noPrograms.html);
   totalCredits += rebranded.credits;
-  const branded = brandFont(rebranded.html);
-  totalBrandRuns += branded.wrapped;
-  const served = brandFontStyle(suppressBadge(swapLogo(branded.html)));
+  const served = suppressBadge(swapLogo(rebranded.html));
 
   const target = join(MOUNT, page);
   mkdirSync(dirname(target), { recursive: true });
@@ -614,40 +538,6 @@ for (const page of pages) {
     console.error(`${page}: a stale logo path survived the swap.`);
     process.exit(1);
   }
-  // The brand name must be in the wordmark's face everywhere it is visible, and
-  // the wrapping must not have touched anything else. Stripping the spans back
-  // out has to reproduce the rebranded page byte for byte: that is what proves
-  // no href, alt, srcset or path data moved.
-  // Counted the way brandFont targets: text between tags only. The footer also
-  // carries "Global Kids" inside href="mailto:...", which is an address rather
-  // than copy and is deliberately left alone.
-  const visibleRuns = [...(rebranded.html.split("<body")[1] || "")
-    .replace(/<(script|style|svg)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
-    .matchAll(/>([^<]+)</g)]
-    .reduce((n, m) => n + (m[1].split("Global Kids").length - 1), 0);
-  if (visibleRuns !== branded.wrapped) {
-    console.error(
-      `${page}: wrapped ${branded.wrapped} "Global Kids" but found ${visibleRuns} in visible text.`
-    );
-    process.exit(1);
-  }
-  if (unbrandFont(branded.html) !== rebranded.html) {
-    console.error(`${page}: the brand-name wrap changed more than the spans.`);
-    process.exit(1);
-  }
-  if (visibleRuns > 0 && !served.includes(`<span class="${BRAND_CLASS}">Global Kids</span>`)) {
-    console.error(`${page}: the brand name was not set in the wordmark's face.`);
-    process.exit(1);
-  }
-  // The rule has to be on any page that uses it, or the spans inherit whatever
-  // face the surrounding copy uses and the change looks like it did nothing.
-  if (visibleRuns > 0) {
-    if (!served.includes(`.${BRAND_CLASS}{font-family:${BRAND_FONT_STACK}}`)) {
-      console.error(`${page}: the brand name carries no rule to render in.`);
-      process.exit(1);
-    }
-  }
-
   // The rebrand must have landed, and the vendor credit must be gone.
   if (!served.includes("a.w-webflow-badge{display:none!important}")) {
     console.error(`${page}: the Webflow badge is not suppressed.`);
@@ -706,7 +596,6 @@ for (const page of pages) {
 console.log(`Published ${pages.length} pages to /webflow/`);
 console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns, ${totalCredits} vendor credits`);
 console.log("  rebranded Joyloo -> Global Kids, swapped the logo, removed the Programs nav item")
-console.log(`  set ${totalBrandRuns} "Global Kids" runs in Parkinsans, the primary face`);
 
 console.log("  /            -> /webflow/          webflow-site export");
 console.log("  /login       app.html              React app shell");
