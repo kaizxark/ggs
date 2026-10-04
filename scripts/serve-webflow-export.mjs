@@ -54,7 +54,7 @@
  * is.
  */
 
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -402,30 +402,24 @@ const LOGO = {
 /* The brand name in running copy                                    */
 /* ------------------------------------------------------------------ */
 
-// The wordmark is Poppins Bold, but it is baked in as outlines because the
-// template's original logotype is drawn as paths and no live font could ever
-// match it. Running copy cannot use those outlines - the brand name sits inside
-// ordinary sentences - so the same face is loaded as a webfont and applied to
-// every visible "Global Kids".
+// The brand name in running copy is set in Parkinsans - the template's own
+// primary face, already loaded by its font loader for the rest of the page. So
+// this needs no webfont and no extra request: the span only has to override the
+// parents that use a different face, which are the Caveat Brush headings and the
+// Source Sans 3 captions.
 //
-// Poppins Bold, latin subset, from Google Fonts (SIL Open Font License 1.1).
-// It covers the full printable Latin range, so it cannot fall back mid-word.
-// It lives in brand/ rather than scripts/ because .vercelignore excludes
-// scripts/* as local-only tooling, and the upload is what the build reads.
-const BRAND_FONT_FILE = "poppins-bold.woff";
-const BRAND_FONT_URL = `${LOGO_BASE}${BRAND_FONT_FILE}`;
-const BRAND_FONT_SRC = resolve(ROOT, "brand/poppins-bold-latin.woff");
+// The logo wordmark is a different matter and stays as it is: Poppins Bold baked
+// in as outlines, because the template's original logotype is drawn as paths and
+// no live font could ever match it.
+const BRAND_FONT_STACK = "Parkinsans, sans-serif";
 const BRAND_CLASS = "gk-brand";
 
-/** Injected into <head> so the face exists before the copy below it renders. */
+/** Injected into <head> so the rule is in place before the copy below renders. */
 function brandFontStyle(html) {
   if (!html.includes(BRAND_CLASS)) return html;
-  const css =
-    `<style>@font-face{font-family:'Poppins';font-style:normal;font-weight:700;` +
-    `font-display:swap;src:url(${BRAND_FONT_URL}) format('woff')}` +
-    `.${BRAND_CLASS}{font-family:'Poppins',Parkinsans,sans-serif;font-weight:700}</style>`;
+  const css = `<style>.${BRAND_CLASS}{font-family:${BRAND_FONT_STACK}}</style>`;
   if (!html.includes("</head>")) {
-    console.error("A page has no </head> to inject the brand font into.");
+    console.error("A page has no </head> to inject the brand-name rule into.");
     process.exit(1);
   }
   return html.replace("</head>", css + "</head>");
@@ -475,15 +469,6 @@ function unbrandFont(html) {
   return html
     .split(`<span class="${BRAND_CLASS}">Global Kids</span>`)
     .join("Global Kids");
-}
-
-/** Copy the brand face next to the pages. */
-function emitBrandFont() {
-  if (!existsSync(BRAND_FONT_SRC)) {
-    console.error(`Brand font missing at ${BRAND_FONT_SRC} - the wordmark's face would not load.`);
-    process.exit(1);
-  }
-  copyFileSync(BRAND_FONT_SRC, join(MOUNT, BRAND_FONT_FILE));
 }
 
 /** One lockup as a standalone SVG document, at the given pixel height. */
@@ -547,7 +532,6 @@ function emitLogoAssets() {
 rmSync(MOUNT, { recursive: true, force: true });
 cpSync(resolve(EXPORT, "assets"), resolve(MOUNT, "assets"), { recursive: true });
 emitLogoAssets();
-emitBrandFont();
 
 const templateButton = /<a\b[^>]*class="template-button[^"]*"[\s\S]*?<\/a>/g;
 
@@ -655,16 +639,10 @@ for (const page of pages) {
     console.error(`${page}: the brand name was not set in the wordmark's face.`);
     process.exit(1);
   }
-  // The face has to be declared on any page that uses it, or the spans silently
-  // fall back to the body font and the change looks like it did nothing.
+  // The rule has to be on any page that uses it, or the spans inherit whatever
+  // face the surrounding copy uses and the change looks like it did nothing.
   if (visibleRuns > 0) {
-    const decl = `@font-face{font-family:'Poppins';font-style:normal;font-weight:700;` +
-      `font-display:swap;src:url(${BRAND_FONT_URL}) format('woff')}`;
-    if (!served.includes(decl)) {
-      console.error(`${page}: the brand font is not declared.`);
-      process.exit(1);
-    }
-    if (!served.includes(`.${BRAND_CLASS}{font-family:'Poppins',Parkinsans,sans-serif;font-weight:700}`)) {
+    if (!served.includes(`.${BRAND_CLASS}{font-family:${BRAND_FONT_STACK}}`)) {
       console.error(`${page}: the brand name carries no rule to render in.`);
       process.exit(1);
     }
@@ -728,11 +706,7 @@ for (const page of pages) {
 console.log(`Published ${pages.length} pages to /webflow/`);
 console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns, ${totalCredits} vendor credits`);
 console.log("  rebranded Joyloo -> Global Kids, swapped the logo, removed the Programs nav item")
-console.log(`  set ${totalBrandRuns} "Global Kids" runs in the wordmark face (Poppins Bold)`);
+console.log(`  set ${totalBrandRuns} "Global Kids" runs in Parkinsans, the primary face`);
 
-if (!existsSync(join(MOUNT, BRAND_FONT_FILE))) {
-  console.error(`The brand font was not written to ${join(MOUNT, BRAND_FONT_FILE)}.`);
-  process.exit(1);
-}
 console.log("  /            -> /webflow/          webflow-site export");
 console.log("  /login       app.html              React app shell");
