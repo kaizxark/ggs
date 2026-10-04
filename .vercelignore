@@ -1,0 +1,20 @@
+# Local-only tooling — never upload.
+# scripts/seed-erp.mjs embeds the Supabase service-role key.
+# scripts/build-landing.mjs must ship: vercel.json and the build both need it.
+# Only the operational scripts are local-only.
+scripts/*
+!scripts/build-landing.mjs
+!scripts/finalise-landing.mjs
+supabase/
+tmp/
+test.html
+*.pdf
+
+# Build output and deps (Vercel builds from source).
+dist/
+node_modules/
+
+# Vercel + editor metadata
+.vercel/
+.vscode/
+.idea/

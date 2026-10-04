@@ -1,0 +1,1327 @@
+/* ------------------------------------------------------------------ *
+ * ERP view layer
+ *
+ * The dashboard UI reads flat, denormalised rows (a student's `name`,
+ * `grade`, `attendance`, `fees`, ...). The database stores normalised
+ * tables (students, enrollments, classrooms, attendance, exam_results,
+ * invoices, ...). Querying one table and handing the rows straight to a
+ * component therefore renders undefined for every derived field.
+ *
+ * This module fetches the real tables and composes them into the shapes
+ * the UI expects. If Supabase is unreachable it falls back to the mock
+ * rows, so the dashboard still renders offline.
+ * ------------------------------------------------------------------ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "./supabase";
+import {
+  ROLE_LABELS,
+  effectiveRole,
+  isSuperAdminId,
+} from "@shared/super-admin";
+import {
+  mockActivityLog,
+  mockAnnouncements,
+  mockAssignments,
+  mockAttendanceData,
+  mockClassAttendance,
+  mockExamResults,
+  mockExams,
+  mockFeeCategories,
+  mockRevenueData,
+  mockHealthMetrics,
+  mockInvoices,
+  mockLibraryBooks,
+  mockMessages,
+  mockNotifications,
+  mockPayments,
+  mockPerformanceTrend,
+  mockReportExports,
+  mockSchedule,
+  mockStaff,
+  mockStudents,
+  mockSubjectAverages,
+  mockSubjects,
+  mockTimetable,
+  mockTransportRoutes,
+  mockVehicles,
+  type ActivityCategory,
+  type ActivityItem,
+  type Announcement,
+  type Assignment,
+  type AttendanceDaily,
+  type ClassAttendanceRow,
+  type Exam,
+  type ExamResult,
+  type FeeCategory,
+  type FinanceMonth,
+  type HealthMetric,
+  type Invoice,
+  type LibraryBook,
+  type NotificationItem,
+  type ParentMessage,
+  type Payment,
+  type PerformanceTrend,
+  type ReportExport,
+  type ScheduleItem,
+  type StaffMember,
+  type Student,
+  type SubjectAverage,
+  type SubjectRow,
+  type TimetableEntry,
+  type TransportRoute,
+  type Vehicle,
+} from "./school-data";
+
+/* ------------------------------------------------------------------ */
+/* Low-level fetching                                                  */
+/* ------------------------------------------------------------------ */
+
+/** PostgREST caps a response at 1000 rows; page through the rest. */
+const PAGE = 1000;
+
+/**
+ * Row-level cache.
+ *
+ * Several views need the same table (attendance is read by five of them), and
+ * each read was paging through the whole table independently. That turned the
+ * first paint into dozens of duplicate round trips. Caching on table+columns
+ * collapses those into one request per distinct projection, and the in-flight
+ * promise is shared so concurrent callers await the same fetch.
+ */
+const rowCache = new Map<string, Promise<Record<string, unknown>[]>>();
+
+function fetchAll(
+  table: string,
+  columns: string,
+  orderBy?: string
+): Promise<Record<string, unknown>[]> {
+  const key = `${table}|${columns}|${orderBy ?? ""}`;
+  const hit = rowCache.get(key);
+  if (hit) return hit;
+
+  const promise = (async () => {
+    const applyOrder = <T extends { order: (c: string, o: { ascending: boolean }) => T }>(
+      q: T,
+    ): T => (orderBy ? q.order(orderBy, { ascending: true }) : q);
+
+    // Ask for the exact row count up front. Paging serially cost one round trip
+    // per 1000 rows (~13 for attendance alone, each ~0.6s, all sequential);
+    // knowing the total lets every page be requested in parallel instead, so
+    // the table costs roughly one network round trip rather than N.
+    const { count, error: countError } = await applyOrder(
+      supabase.from(table).select(columns, { count: "exact" }).limit(1),
+    );
+    if (countError) throw new Error(`${table}: ${countError.message}`);
+
+    const total = count ?? 0;
+    if (total <= PAGE) {
+      const { data, error } = await applyOrder(
+        supabase.from(table).select(columns).range(0, PAGE - 1),
+      );
+      if (error) throw new Error(`${table}: ${error.message}`);
+      return (data ?? []) as unknown as Record<string, unknown>[];
+    }
+
+    const pageCount = Math.ceil(total / PAGE);
+    const pages = await Promise.all(
+      Array.from({ length: pageCount }, (_, i) =>
+        applyOrder(
+          supabase.from(table).select(columns).range(i * PAGE, i * PAGE + PAGE - 1),
+        ).then(({ data, error }) => {
+          if (error) throw new Error(`${table}: ${error.message}`);
+          return (data ?? []) as unknown as Record<string, unknown>[];
+        })
+      )
+    );
+    const out: Record<string, unknown>[] = [];
+    for (const page of pages) out.push(...page);
+    return out;
+  })().catch((e) => {
+    rowCache.delete(key); // never cache a failure
+    throw e;
+  });
+
+  rowCache.set(key, promise);
+  return promise;
+}
+
+/* ------------------------------------------------------------------ */
+/* Formatting helpers                                                  */
+/* ------------------------------------------------------------------ */
+
+const TONES = ["teal", "violet", "amber", "rose", "blue", "orange", "indigo", "pink"] as const;
+
+/** Stable pseudo-random tone from a string, so a student keeps their colour. */
+function toneFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return TONES[h % TONES.length];
+}
+
+const initialsOf = (first: string, last: string) =>
+  `${(first?.[0] ?? "").toUpperCase()}${(last?.[0] ?? "").toUpperCase()}`;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const fmtDate = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+};
+const fmtDay = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+};
+const fmtTime = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
+};
+
+/** "2 days ago" / "3 hrs ago" / "Yesterday" */
+function relative(iso: string, now = Date.now()): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const mins = Math.round((now - t) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hr`;
+  const days = Math.round(hrs / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return fmtDay(iso);
+}
+
+const num = (v: unknown, fallback = 0) => {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const titleCase = (s: string) =>
+  s.replace(/(^|[\s-])([a-z])/g, (_, a, b) => a + b.toUpperCase());
+
+/* ------------------------------------------------------------------ */
+/* Cache: one fetch per dataset per session, shared across views       */
+/* ------------------------------------------------------------------ */
+
+type CacheEntry = { at: number; promise: Promise<unknown> };
+const cache = new Map<string, CacheEntry>();
+const TTL = 30_000;
+
+function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < TTL) return hit.promise as Promise<T>;
+  const promise = load().catch((e) => {
+    cache.delete(key); // never cache a failure
+    throw e;
+  });
+  cache.set(key, { at: Date.now(), promise });
+  return promise as Promise<T>;
+}
+
+/** Called on sign-out / refresh so a new login never shows stale data. */
+export function clearErpCache() {
+  cache.clear();
+  rowCache.clear();
+}
+
+/* ------------------------------------------------------------------ */
+/* View loader                                                         */
+/* ------------------------------------------------------------------ */
+
+export interface ErpView<T> {
+  rows: T[];
+  loading: boolean;
+  error: string | null;
+  source: "mock" | "db";
+  reload: () => void;
+  /** Optimistic local patch for view-only flags (published, graded, unread). */
+  update: (id: string | number, patch: Partial<T>) => Promise<boolean>;
+}
+
+function useErpView<T extends { id: string | number }>(
+  key: string,
+  load: () => Promise<T[]>,
+  mockRows: T[],
+  deps: unknown[] = []
+): ErpView<T> {
+  // Start empty rather than seeded with the mock rows. Seeding them made the
+  // dashboard paint placeholder students (and their counts) for a frame before
+  // the real query resolved, which read as a glitch. The mocks are now only a
+  // genuine fallback for when Supabase is actually unreachable.
+  const [rows, setRows] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<"mock" | "db">("db");
+  const [nonce, setNonce] = useState(0);
+  const mockRef = useRef(mockRows);
+  mockRef.current = mockRows;
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const data = await cached(`${key}:${nonce}`, () => loadRef.current());
+        if (cancelled) return;
+        setRows(data);
+        setSource("db");
+      } catch (e) {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Supabase unreachable");
+        setRows(mockRef.current);
+        setSource("mock");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, nonce, ...deps]);
+
+  const reload = useCallback(() => {
+    cache.delete(`${key}:${nonce}`);
+    setNonce((n) => n + 1);
+  }, [key, nonce]);
+
+  // These flags are presentation state, not schema columns, so they are
+  // patched locally only. A reload returns them to the database truth.
+  const update = useCallback(async (id: string | number, patch: Partial<T>) => {
+    setRows((current) =>
+      current.map((row) =>
+        String(row.id) === id ? ({ ...row, ...patch } as T) : row
+      )
+    );
+    return true;
+  }, []);
+
+  return { rows, loading, error, source, reload, update };
+}
+
+/* ------------------------------------------------------------------ */
+/* Students — needs students + enrollments + classrooms + attendance    */
+/*           + exam_results + invoices + transport_allocations          */
+/* ------------------------------------------------------------------ */
+
+async function loadStudents(): Promise<Student[]> {
+  const [students, enrollments, classrooms, attendance, results, invoices, allocations, routes] =
+    await Promise.all([
+      fetchAll("students", "id,first_name,last_name,status,admission_no"),
+      fetchAll("enrollments", "student_id,classroom_id,active"),
+      fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+      fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
+      fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
+      fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
+      fetchAll("transport_allocations", "id,student_id,route_id,active"),
+      fetchAll("transport_routes", "id,code,name,vehicle_no,driver_name,active"),
+    ]);
+
+  const classroomById = new Map(classrooms.map((c) => [String(c.id), c]));
+  const routeById = new Map(routes.map((r) => [String(r.id), r]));
+
+  // grade / section from the active enrollment
+  const classOf = new Map<string, Record<string, unknown>>();
+  for (const e of enrollments) {
+    if (e.active === false) continue;
+    const room = classroomById.get(String(e.classroom_id));
+    if (room) classOf.set(String(e.student_id), room);
+  }
+
+  // attendance rate: present + late count as attending
+  const attTotal = new Map<string, { total: number; ok: number }>();
+  for (const a of attendance) {
+    const key = String(a.student_id);
+    const cur = attTotal.get(key) ?? { total: 0, ok: 0 };
+    cur.total++;
+    if (a.status === "present" || a.status === "late") cur.ok++;
+    attTotal.set(key, cur);
+  }
+
+  // academic average across all published papers
+  const marks = new Map<string, { sum: number; n: number }>();
+  for (const r of results) {
+    if (r.grade === "Ab") continue; // absent — not a mark
+    const max = num(r.max_marks);
+    if (max <= 0) continue;
+    const key = String(r.student_id);
+    const cur = marks.get(key) ?? { sum: 0, n: 0 };
+    cur.sum += num(r.marks) / max;
+    cur.n++;
+    marks.set(key, cur);
+  }
+
+  // fee standing
+  const feeByStudent = new Map<string, { total: number; paid: number; status: string }>();
+  for (const inv of invoices) {
+    const key = String(inv.student_id);
+    const cur =
+      feeByStudent.get(key) ?? { total: 0, paid: 0, status: String(inv.status) };
+    cur.total += num(inv.total);
+    cur.paid += num(inv.paid_amount);
+    // the worst status across a student's invoices is what matters
+    if (cur.status !== "overdue" && inv.status === "overdue") cur.status = "overdue";
+    else if (cur.status === "paid" && inv.status !== "paid") cur.status = String(inv.status);
+    feeByStudent.set(key, cur);
+  }
+
+  const transportByStudent = new Map<string, string>();
+  for (const a of allocations) {
+    if (a.active === false) continue;
+    const route = routeById.get(String(a.route_id));
+    if (route) transportByStudent.set(String(a.student_id), String(route.code));
+  }
+
+  return students.map((s) => {
+    const first = String(s.first_name ?? "");
+    const last = String(s.last_name ?? "");
+    const id = String(s.id);
+    const room = classOf.get(id);
+    const att = attTotal.get(id);
+    const mk = marks.get(id);
+    const fee = feeByStudent.get(id);
+
+    const attendancePct = att && att.total > 0 ? Math.round((att.ok / att.total) * 100) : 0;
+    const average = mk && mk.n > 0 ? Math.round((mk.sum / mk.n) * 100) : 0;
+    // The raw counts travel with the row because 0 is ambiguous on its own:
+    // a pupil with no attendance rows looks identical to one who was absent
+    // every single day, and the assistant would report the latter.
+    const attendance_records = att?.total ?? 0;
+    const scored_papers = mk?.n ?? 0;
+    const outstanding = fee ? fee.total - fee.paid : 0;
+
+    return {
+      id,
+      name: `${first} ${last}`.trim(),
+      initials: initialsOf(first, last),
+      grade: room ? `Grade ${room.grade}` : "Unassigned",
+      section: room ? String(room.section) : "—",
+      attendance: attendancePct,
+      attendance_records,
+      average,
+      scored_papers,
+      fees: outstanding <= 0 ? "Paid" : fee?.status === "draft" ? "Draft" : "Due",
+      transport: transportByStudent.get(id) ?? "Self",
+      status: s.status === "active" ? "Active" : "Review",
+      tone: toneFor(id),
+      // the human-facing admission number, e.g. ADM/26-27/0041
+      admission_no: String(s.admission_no ?? id),
+    } as unknown as Student;
+  });
+}
+
+export function useStudentsView() {
+  // the offline mock rows predate the admission_no, attendance_records and
+  // scored_papers fields; give them one each so the table column is never
+  // empty and the assistant does not read the mock percentages as unmarked
+  const fallback = mockStudents.map((s) => ({
+    ...s,
+    admission_no: String(s.id),
+    attendance_records: 60,
+    scored_papers: 5,
+  })) as Student[];
+  return useErpView<Student>("students", loadStudents, fallback);
+}
+
+/* ------------------------------------------------------------------ */
+/* Staff                                                               */
+/* ------------------------------------------------------------------ */
+
+async function loadStaff(): Promise<StaffMember[]> {
+  const staff = await fetchAll("staff", "id,name,designation,department,email,active");
+  return staff.map((s) => {
+    const name = String(s.name ?? "");
+    const parts = name.replace(/^(Dr|Mr|Mrs|Ms|Smt)\.?\s+/i, "").trim().split(/\s+/);
+    const first = parts[0] ?? "";
+    const last = parts[parts.length - 1] ?? "";
+    return {
+      id: String(s.id),
+      name,
+      initials: initialsOf(first, last),
+      role: String(s.designation ?? "Staff"),
+      department: String(s.department ?? "—"),
+      email: String(s.email ?? ""),
+      // staff attendance is not tracked in the schema; show them as on duty
+      attendance: 100,
+      status: s.active === false ? "On leave" : "On campus",
+      tone: toneFor(String(s.id)),
+    };
+  });
+}
+
+export function useStaffView() {
+  return useErpView<StaffMember>("staff", loadStaff, mockStaff);
+}
+
+/* ------------------------------------------------------------------ */
+/* Attendance — aggregate the per-day rows into a weekly roll-up         */
+/* ------------------------------------------------------------------ */
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+async function loadAttendanceDaily(): Promise<AttendanceDaily[]> {
+  const rows = await fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status");
+  const byDate = new Map<string, { present: number; absent: number; late: number; leave: number; n: number }>();
+  for (const r of rows) {
+    const d = String(r.attendance_date);
+    const cur = byDate.get(d) ?? { present: 0, absent: 0, late: 0, leave: 0, n: 0 };
+    const st = String(r.status);
+    if (st === "present") cur.present++;
+    else if (st === "absent") cur.absent++;
+    else if (st === "late") cur.late++;
+    else if (st === "leave") cur.leave++;
+    cur.n++;
+    byDate.set(d, cur);
+  }
+  return Array.from(byDate.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-7)
+    .map(([d, v]) => ({
+      id: d,
+      day: DAY_LABELS[new Date(`${d}T00:00:00Z`).getUTCDay()] ?? d,
+      present: v.present,
+      absent: v.absent,
+      late: v.late,
+      leave: v.leave,
+    }));
+}
+
+export function useAttendanceDailyView() {
+  return useErpView<AttendanceDaily>("attendance_daily", loadAttendanceDaily, mockAttendanceData);
+}
+
+async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
+  const [attendance, classrooms, staff] = await Promise.all([
+    fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
+    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+    fetchAll("staff", "id,name,designation,department,email,active"),
+  ]);
+  const staffById = new Map(staff.map((s) => [String(s.id), String(s.name ?? "")]));
+  const stat = new Map<string, { ok: number; total: number }>();
+  for (const a of attendance) {
+    if (!a.classroom_id) continue;
+    const key = String(a.classroom_id);
+    const cur = stat.get(key) ?? { ok: 0, total: 0 };
+    cur.total++;
+    if (a.status === "present" || a.status === "late") cur.ok++;
+    stat.set(key, cur);
+  }
+  return classrooms
+    .map((c) => {
+      const s = stat.get(String(c.id)) ?? { ok: 0, total: 0 };
+      return {
+        id: String(c.id),
+        label: `Grade ${c.grade} — ${c.section}`,
+        value: s.total > 0 ? Math.round((s.ok / s.total) * 100) : 0,
+        present: s.ok,
+        total: s.total,
+        teacher: staffById.get(String(c.class_teacher_id)) ?? "Unassigned",
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export function useClassAttendanceView() {
+  return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, mockClassAttendance);
+}
+
+/* ------------------------------------------------------------------ */
+/* Finance                                                             */
+/* ------------------------------------------------------------------ */
+
+async function loadInvoices(): Promise<Invoice[]> {
+  const [invoices, students] = await Promise.all([
+    fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
+    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+  ]);
+  const byId = new Map(students.map((s) => [String(s.id), s]));
+  return invoices
+    .map((i) => {
+      const s = byId.get(String(i.student_id));
+      const name = s ? `${s.first_name} ${s.last_name}`.trim() : "Unknown student";
+      const surname = s ? String(s.last_name) : "—";
+      const outstanding = num(i.total) - num(i.paid_amount);
+      const status = String(i.status);
+      return {
+        id: String(i.invoice_no ?? i.id),
+        family: `${surname} family`,
+        student: name,
+        due_date: i.due_on ? fmtDate(String(i.due_on)) : "—",
+        amount: outstanding > 0 ? outstanding : num(i.total),
+        status: status === "overdue" ? "Overdue" : outstanding > 0 ? "Partial" : "Paid",
+      };
+    })
+    .sort((a, b) => b.amount - a.amount);
+}
+
+export function useInvoicesView() {
+  return useErpView<Invoice>("invoices", loadInvoices, mockInvoices);
+}
+
+async function loadPayments(): Promise<Payment[]> {
+  const [payments, invoices, students] = await Promise.all([
+    fetchAll("payments", "id,invoice_id,amount,method,paid_at"),
+    fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
+    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+  ]);
+  const invById = new Map(invoices.map((i) => [String(i.id), i]));
+  const stuById = new Map(students.map((s) => [String(s.id), s]));
+  return payments
+    .map((p) => {
+      const inv = invById.get(String(p.invoice_id));
+      const s = inv ? stuById.get(String(inv.student_id)) : undefined;
+      return {
+        id: String(p.id),
+        invoice_id: inv ? String(inv.invoice_no) : null,
+        student: s ? `${s.first_name} ${s.last_name}`.trim() : "Unknown student",
+        amount: num(p.amount),
+        method: String(p.method ?? ""),
+        paid_at: String(p.paid_at ?? ""),
+      };
+    })
+    .sort((a, b) => b.paid_at.localeCompare(a.paid_at));
+}
+
+export function usePaymentsView() {
+  return useErpView<Payment>("payments", loadPayments, mockPayments);
+}
+
+async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
+  const [payments, invoices] = await Promise.all([
+    fetchAll("payments", "id,invoice_id,amount,method,paid_at"),
+    fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
+  ]);
+  const collected = new Map<string, number>();
+  for (const p of payments) {
+    const m = String(p.paid_at).slice(0, 7);
+    collected.set(m, (collected.get(m) ?? 0) + num(p.amount));
+  }
+  const billed = new Map<string, number>();
+  for (const i of invoices) {
+    const m = String(i.created_at ?? "2026-04-01").slice(0, 7);
+    billed.set(m, (billed.get(m) ?? 0) + num(i.total));
+  }
+  const months = Array.from(new Set([...Array.from(collected.keys()), ...Array.from(billed.keys())])).sort();
+  return months.map((m) => { 
+    const got = Math.round((collected.get(m) ?? 0) / 100000);
+    const due = Math.round(Math.max(0, (billed.get(m) ?? 0) - (collected.get(m) ?? 0)) / 100000);
+    return { id: m, month: `${MONTHS[Number(m.slice(5, 7)) - 1] ?? m}`, collected: got, pending: due };
+  });
+}
+
+export function useFinanceMonthlyView() {
+  return useErpView<FinanceMonth>("finance_monthly", loadFinanceMonthly, mockRevenueData);
+}
+
+async function loadFeeCategories(): Promise<FeeCategory[]> {
+  const [cats, items] = await Promise.all([
+    fetchAll("fee_categories", "id,name,active"),
+    fetchAll("invoice_items", "category_id,amount"),
+  ]);
+  const totals = new Map<string, number>();
+  let grand = 0;
+  for (const it of items) {
+    if (!it.category_id) continue;
+    const key = String(it.category_id);
+    const v = num(it.amount);
+    totals.set(key, (totals.get(key) ?? 0) + v);
+    grand += v;
+  }
+  const palette = ["#2f6f68", "#7662bc", "#cf845a", "#3b82b4", "#e0b45c", "#94a3b8"];
+  return cats
+    .filter((c) => c.active !== false)
+    .map((c, i) => ({
+      id: String(c.id),
+      name: String(c.name),
+      value: grand > 0 ? Math.round(((totals.get(String(c.id)) ?? 0) / grand) * 100) : 0,
+      color: palette[i % palette.length],
+    }));
+}
+
+export function useFeeCategoriesView() {
+  return useErpView<FeeCategory>("fee_categories", loadFeeCategories, mockFeeCategories);
+}
+
+/* ------------------------------------------------------------------ */
+/* Academics                                                           */
+/* ------------------------------------------------------------------ */
+
+async function loadExams(): Promise<Exam[]> {
+  const [exams, classrooms] = await Promise.all([
+    fetchAll("examinations", "id,name,starts_on,ends_on,published"),
+    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+  ]);
+  const out: Exam[] = [];
+  for (const e of exams) {
+    const published = e.published === true;
+    for (const c of classrooms) {
+      out.push({
+        id: `${e.id}-${c.id}`,
+        name: String(e.name),
+        subject: "All subjects",
+        grade: `Grade ${c.grade}`,
+        date: fmtDate(String(e.starts_on)),
+        time: "09:00 – 12:00",
+        venue: String(c.room ?? "—"),
+        status: published ? "Published" : "Scheduled",
+      });
+    }
+  }
+  return out;
+}
+
+export function useExamsView() {
+  return useErpView<Exam>("exams", loadExams, mockExams);
+}
+
+async function loadExamResults(): Promise<ExamResult[]> {
+  const [results, exams, students, classrooms, enrollments] = await Promise.all([
+    fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
+    fetchAll("examinations", "id,name,starts_on,ends_on,published"),
+    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+    fetchAll("enrollments", "student_id,classroom_id,active"),
+  ]);
+  const examById = new Map(exams.map((e) => [String(e.id), e]));
+  const stuById = new Map(students.map((s) => [String(s.id), s]));
+  const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
+  const classOf = new Map<string, Record<string, unknown>>();
+  for (const e of enrollments) {
+    if (e.active === false) continue;
+    const room = roomById.get(String(e.classroom_id));
+    if (room) classOf.set(String(e.student_id), room);
+  }
+
+  // aggregate per (exam, subject, grade) so the table reads as a mark sheet
+  const agg = new Map<string, { sum: number; n: number; grades: string[]; published: boolean; id: string }>();
+  for (const r of results) {
+    const exam = examById.get(String(r.examination_id));
+    const s = stuById.get(String(r.student_id));
+    const room = classOf.get(String(r.student_id));
+    if (!s || !room) continue;
+    const gradeLetter = String(r.grade ?? "");
+    const gradeLabel = gradeLetter === "Ab" ? "Absent" : gradeLetter;
+    const key = `${exam?.name ?? "Exam"}|${r.subject}|${room.grade}|${gradeLabel}`;
+    const cur = agg.get(key) ?? {
+      sum: 0,
+      n: 0,
+      grades: [],
+      published: exam?.published === true,
+      id: String(r.id),
+    };
+    if (gradeLetter !== "Ab") {
+      cur.sum += num(r.marks);
+      cur.n++;
+    }
+    agg.set(key, cur);
+  }
+
+  return Array.from(agg.entries()).map(([key, v]) => {
+    const [, subject, grade, gradeLetter] = key.split("|");
+    return {
+      id: v.id,
+      subject: String(subject),
+      grade: `Grade ${grade} — ${gradeLetter}`,
+      graded: v.n,
+      total: v.n,
+      published: v.published,
+    };
+  });
+}
+
+export function useExamResultsView() {
+  return useErpView<ExamResult>("exam_results", loadExamResults, mockExamResults);
+}
+
+async function loadAssignments(): Promise<Assignment[]> {
+  const [assignments, classrooms, students, enrollments] = await Promise.all([
+    fetchAll("assignments", "id,classroom_id,subject,title,due_at"),
+    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+    fetchAll("enrollments", "student_id,classroom_id,active"),
+  ]);
+  const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
+  const stuById = new Map(students.map((s) => [String(s.id), s]));
+  const members = new Map<string, string[]>();
+  for (const e of enrollments) {
+    if (e.active === false) continue;
+    const key = String(e.classroom_id);
+    members.set(key, [...(members.get(key) ?? []), String(e.student_id)]);
+  }
+
+  const out: Assignment[] = [];
+  for (const a of assignments) {
+    const room = roomById.get(String(a.classroom_id));
+    const roster = members.get(String(a.classroom_id)) ?? [];
+    // the assignment belongs to a class, so list it against its first student
+    const s = roster.length ? stuById.get(roster[0]) : undefined;
+    out.push({
+      id: String(a.id),
+      title: String(a.title),
+      subject: String(a.subject ?? ""),
+      grade: room ? `Grade ${room.grade} — ${room.section}` : "—",
+      student: s ? `${s.first_name} ${s.last_name}`.trim() : `${roster.length} students`,
+      submitted: a.due_at ? `Due ${fmtDate(String(a.due_at))}` : "No due date",
+      late: a.due_at ? new Date(String(a.due_at)).getTime() < Date.now() : false,
+      graded: false, // submissions are not tracked in the schema
+    });
+  }
+  return out;
+}
+
+export function useAssignmentsView() {
+  return useErpView<Assignment>("assignments", loadAssignments, mockAssignments);
+}
+
+async function loadSubjects(): Promise<SubjectRow[]> {
+  const [results, staff, classrooms] = await Promise.all([
+    fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
+    fetchAll("staff", "id,name,designation,department,email,active"),
+    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+  ]);
+  const bySubject = new Map<string, { sum: number; n: number }>();
+  for (const r of results) {
+    if (r.grade === "Ab") continue;
+    const key = String(r.subject);
+    const cur = bySubject.get(key) ?? { sum: 0, n: 0 };
+    const max = num(r.max_marks);
+    if (max > 0) {
+      cur.sum += num(r.marks) / max;
+      cur.n++;
+    }
+    bySubject.set(key, cur);
+  }
+  const teacherFor = (subject: string) => {
+    const hit = staff.find((s) =>
+      String(s.department ?? "").toLowerCase().includes(subject.split(" ")[0].toLowerCase())
+    );
+    return hit ? String(hit.name) : "Unassigned";
+  };
+  const grades = classrooms.length
+    ? `Grades ${Math.min(...classrooms.map((c) => num(c.grade)))}–${Math.max(...classrooms.map((c) => num(c.grade)))}`
+    : "—";
+  return Array.from(bySubject.entries()).map(([subject, v]) => ({
+    id: subject,
+    name: subject,
+    teacher: teacherFor(subject),
+    classes: grades,
+    periods: 0,
+    progress: v.n > 0 ? Math.round((v.sum / v.n) * 100) : 0,
+  }));
+}
+
+export function useSubjectsView() {
+  return useErpView<SubjectRow>("subjects", loadSubjects, mockSubjects);
+}
+
+async function loadSubjectAverages(): Promise<SubjectAverage[]> {
+  const rows = await loadSubjects();
+  return rows.map((r) => ({ id: r.id, subject: r.name.split(" ")[0], average: r.progress }));
+}
+
+export function useSubjectAveragesView() {
+  return useErpView<SubjectAverage>("subject_averages", loadSubjectAverages, mockSubjectAverages);
+}
+
+async function loadGradeOutcomes(): Promise<{ id: string; grade: string; average: number; attendance: number; change: string }[]> {
+  const [results, students, classrooms, enrollments, attendance] = await Promise.all([
+    fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
+    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+    fetchAll("enrollments", "student_id,classroom_id,active"),
+    fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
+  ]);
+  const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
+  const classOf = new Map<string, string>();
+  for (const e of enrollments) {
+    if (e.active === false) continue;
+    const room = roomById.get(String(e.classroom_id));
+    if (room) classOf.set(String(e.student_id), String(room.grade));
+  }
+  const marks = new Map<string, { sum: number; n: number }>();
+  for (const r of results) {
+    if (r.grade === "Ab") continue;
+    const key = classOf.get(String(r.student_id));
+    if (!key) continue;
+    const max = num(r.max_marks);
+    if (max <= 0) continue;
+    const cur = marks.get(key) ?? { sum: 0, n: 0 };
+    cur.sum += num(r.marks) / max;
+    cur.n++;
+    marks.set(key, cur);
+  }
+  const att = new Map<string, { ok: number; total: number }>();
+  for (const a of attendance) {
+    const key = classOf.get(String(a.student_id));
+    if (!key) continue;
+    const cur = att.get(key) ?? { ok: 0, total: 0 };
+    cur.total++;
+    if (a.status === "present" || a.status === "late") cur.ok++;
+    att.set(key, cur);
+  }
+  return Array.from(new Set(classOf.values()))
+    .sort((a, b) => Number(a) - Number(b))
+    .map((g) => {
+      const m = marks.get(g);
+      const a = att.get(g);
+      return {
+        id: `grade-${g}`,
+        grade: `Grade ${g}`,
+        average: m && m.n > 0 ? Math.round((m.sum / m.n) * 100) : 0,
+        attendance: a && a.total > 0 ? Math.round((a.ok / a.total) * 100) : 0,
+        change: "—", // no prior term in the database to compare against
+      };
+    });
+}
+
+export function useGradeOutcomesView() {
+  return useErpView("grade_outcomes", loadGradeOutcomes, [
+    { id: "go-1", grade: "Grade 5", average: 88, attendance: 96, change: "+2.1%" },
+    { id: "go-2", grade: "Grade 6", average: 84, attendance: 94, change: "+1.4%" },
+    { id: "go-3", grade: "Grade 7", average: 86, attendance: 95, change: "+3.0%" },
+    { id: "go-4", grade: "Grade 8", average: 83, attendance: 93, change: "+0.8%" },
+    { id: "go-5", grade: "Grade 10", average: 85, attendance: 97, change: "+2.6%" },
+    { id: "go-6", grade: "Grade 12", average: 87, attendance: 96, change: "+4.2%" },
+  ]);
+}
+
+async function loadPerformanceTrend(): Promise<PerformanceTrend[]> {
+  const [exams, results] = await Promise.all([
+    fetchAll("examinations", "id,name,starts_on,ends_on,published"),
+    fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
+  ]);
+  const out: PerformanceTrend[] = [];
+  for (const e of exams) {
+    if (e.published !== true) continue;
+    const rows = results.filter((r) => String(r.examination_id) === String(e.id));
+    if (!rows.length) continue;
+    const avgFor = (subjects: string[]) => {
+      const subset = rows.filter((r) => subjects.some((s) => String(r.subject).includes(s)) && r.grade !== "Ab");
+      if (!subset.length) return 0;
+      const sum = subset.reduce((acc, r) => acc + (num(r.marks) / Math.max(1, num(r.max_marks))) * 100, 0);
+      return Math.round(sum / subset.length);
+    };
+    out.push({
+      id: String(e.id),
+      month: fmtDay(String(e.starts_on)),
+      mathematics: avgFor(["Math"]),
+      science: avgFor(["Science"]),
+      english: avgFor(["English"]),
+    });
+  }
+  return out;
+}
+
+export function usePerformanceTrendView() {
+  return useErpView<PerformanceTrend>("performance_trend", loadPerformanceTrend, mockPerformanceTrend);
+}
+
+async function loadHealthMetrics(): Promise<HealthMetric[]> {
+  const [attendance, results, invoices] = await Promise.all([
+    fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
+    fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
+    fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
+  ]);
+  const ok = attendance.filter((a) => a.status === "present" || a.status === "late").length;
+  const attPct = attendance.length ? Math.round((ok / attendance.length) * 100) : 0;
+
+  const scored = results.filter((r) => r.grade !== "Ab" && num(r.max_marks) > 0);
+  const avgPct = scored.length
+    ? Math.round(
+        (scored.reduce((a, r) => a + (num(r.marks) / num(r.max_marks)) * 100, 0) / scored.length)
+      )
+    : 0;
+
+  const billed = invoices.reduce((a, i) => a + num(i.total), 0);
+  const collected = invoices.reduce((a, i) => a + num(i.paid_amount), 0);
+  const feePct = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+
+  return [
+    { id: "hm-1", label: "Attendance", value: `${attPct}%`, change: "term to date", progress: attPct, color: "#2f6f68" },
+    { id: "hm-2", label: "Academic average", value: `${avgPct}%`, change: "term to date", progress: avgPct, color: "#7662bc" },
+    { id: "hm-3", label: "Fee collection", value: `${feePct}%`, change: "term to date", progress: feePct, color: "#cf845a" },
+  ];
+}
+
+export function useHealthMetricsView() {
+  return useErpView<HealthMetric>("health_metrics", loadHealthMetrics, mockHealthMetrics);
+}
+
+/* ------------------------------------------------------------------ */
+/* Communication                                                       */
+/* ------------------------------------------------------------------ */
+
+async function loadAnnouncements(): Promise<Announcement[]> {
+  const rows = await fetchAll("announcements", "id,title,body,audience,published_at");
+  const palette = ["teal", "violet", "orange", "blue"];
+  return rows
+    .map((r) => {
+      const published = r.published_at ? new Date(String(r.published_at)).getTime() : 0;
+      return {
+        id: String(r.id),
+        title: String(r.title),
+        audience: String(r.audience ?? ""),
+        date: r.published_at ? relative(String(r.published_at)) : "Draft",
+        status: published && published <= Date.now() ? "Published" : "Scheduled",
+        color: palette[Math.abs(hashCode(String(r.id))) % palette.length],
+        image_url: null,
+        body: r.body ? String(r.body) : null,
+      };
+    })
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function hashCode(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+export function useAnnouncementsView() {
+  return useErpView<Announcement>("announcements", loadAnnouncements, mockAnnouncements);
+}
+
+async function loadMessages(): Promise<ParentMessage[]> {
+  const [messages, profiles] = await Promise.all([
+    fetchAll("messages", "id,sender_id,recipient_id,subject,status,created_at"),
+    fetchAll("profiles", "id,full_name,role"),
+  ]);
+  const byId = new Map(profiles.map((p) => [String(p.id), p]));
+  return messages
+    .map((m) => {
+      const sender = byId.get(String(m.sender_id));
+      const name = sender ? String(sender.full_name ?? "Unknown") : "Unknown";
+      const parts = name.split(/\s+/);
+      return {
+        id: String(m.id),
+        initials: initialsOf(parts[0] ?? "", parts[parts.length - 1] ?? ""),
+        name: titleCase(name),
+        subject: String(m.subject ?? ""),
+        time: relative(String(m.created_at)),
+        unread: m.status === "unread",
+      };
+    })
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
+
+export function useMessagesView() {
+  return useErpView<ParentMessage>("messages", loadMessages, mockMessages);
+}
+
+/**
+ * Classify a notification so the row can be colour-coded.
+ *
+ * Previously every row used the same faint tint, so a fee overdue notice
+ * looked identical to a routine exam reminder. The kind is derived from the
+ * link target first (most reliable), then the title, then defaults to info.
+ */
+function classifyNotification(title: string, link: string): {
+  kind: string;
+  tone: string;
+  icon: string;
+} {
+  const hay = `${title} ${link}`.toLowerCase();
+  if (/overdue|unpaid|fee|invoice|payment|due|outstanding/.test(hay))
+    return { kind: "Finance", tone: "coral", icon: "rupee" };
+  if (/exam|grade|result|academ|assignment|publish/.test(hay))
+    return { kind: "Academic", tone: "violet", icon: "file" };
+  if (/absent|attendance|leave/.test(hay))
+    return { kind: "Attendance", tone: "amber", icon: "alert" };
+  if (/transport|bus|route|vehicle/.test(hay))
+    return { kind: "Transport", tone: "blue", icon: "bus" };
+  if (/message|parent|family|enquir/.test(hay))
+    return { kind: "Message", tone: "teal", icon: "message" };
+  return { kind: "Info", tone: "slate", icon: "info" };
+}
+
+async function loadNotifications() {
+  const rows = await fetchAll("notifications", "id,title,body,read_at,created_at,link");
+  return rows
+    .map((n) => {
+      const title = String(n.title);
+      const link = String(n.link ?? "");
+      const { kind, tone, icon } = classifyNotification(title, link);
+      return {
+        id: String(n.id),
+        title,
+        detail: n.body ? String(n.body) : "",
+        time: relative(String(n.created_at)),
+        unread: !n.read_at,
+        kind,
+        tone,
+        icon,
+      };
+    })
+    .sort((a, b) => String(b.id).localeCompare(String(a.id)));
+}
+
+export function useNotificationsView() {
+  return useErpView<NotificationItem>("notifications", loadNotifications, mockNotifications);
+}
+
+/* ------------------------------------------------------------------ */
+/* Signed-in administrator                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The person actually signed in, read from `profiles`.
+ *
+ * The sidebar and the overview greeting used to hardcode a placeholder
+ * principal, which showed the wrong name to every admin. This resolves the
+ * signed-in user instead, so the UI names whoever is logged in.
+ */
+export interface CurrentUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  /**
+   * The name this person signs in with.
+   *
+   * Read from `profiles.username`, falling back to the email local part for any
+   * row that predates the column (migration 003). The email is deliberately
+   * separate and is never rewritten by a rename — it is where password recovery
+   * sends the link, so it has to keep working whatever the username becomes.
+   */
+  username: string;
+}
+
+export function useCurrentUser(): CurrentUser | null {
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled) setSession(data.session ?? null);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_e, next) => {
+      if (!cancelled) setSession(next ?? null);
+    });
+    return () => {
+      cancelled = true;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  const [profile, setProfile] = useState<CurrentUser | null>(null);
+  const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    if (!userId) {
+      setProfile(null);
+      return;
+    }
+    let cancelled = false;
+    const resolveFallback = () => {
+      const email = session?.user?.email ?? "";
+      const local = email.split("@")[0] ?? "";
+      const fallbackName = local.replace(/[._-]+/g, " ");
+      setProfile({
+        id: userId,
+        fullName: titleCase(fallbackName) || email,
+        email,
+        role: "admin",
+        username: local,
+      });
+    };
+
+    void (async () => {
+      try {
+        const { data: row } = await supabase
+          .from("profiles")
+          .select("id,full_name,email,role,username")
+          .eq("id", userId)
+          .maybeSingle();
+        if (cancelled) return;
+        const email = session?.user?.email ?? "";
+        const local = email.split("@")[0] ?? "";
+        const fallbackName = local.replace(/[._-]+/g, " ");
+        setProfile({
+          id: userId,
+          fullName: String(row?.full_name ?? "").trim() || titleCase(fallbackName) || email,
+          email: String(row?.email ?? email),
+          role: String(row?.role ?? "admin"),
+          username:
+            String(row?.username ?? "").trim() || local,
+        });
+      } catch {
+        // never leave the UI nameless: fall back to the email local-part
+        if (!cancelled) resolveFallback();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, session?.user?.email]);
+
+  return profile;
+}
+
+/* ------------------------------------------------------------------ */
+/* People (accounts that can sign in)                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Everyone with a sign-in: admins and staff from `staff`, plus any `profiles`
+ * row that is not already represented (e.g. an invited admin before they have
+ * a staff record).
+ */
+export interface PeopleRow {
+  id: string;
+  name: string;
+  initials: string;
+  email: string;
+  role: string;
+  access: string;
+  tone: string;
+  /**
+   * The permanent super admin. The row is locked in the UI: it cannot be
+   * demoted, re-roled or removed by anyone, including other admins.
+   */
+  protected: boolean;
+}
+
+const ACCESS_LABELS: Record<string, string> = ROLE_LABELS;
+
+async function loadPeople(): Promise<PeopleRow[]> {
+  const [staffRows, profileRows] = await Promise.all([
+    fetchAll("staff", "id,full_name,email,role,department,employment_status,organisation_id"),
+    fetchAll("profiles", "id,full_name,email,role"),
+  ]);
+
+  const seen = new Set<string>();
+  const out: PeopleRow[] = [];
+
+  for (const row of [...profileRows, ...staffRows]) {
+    const id = String(row.id);
+    const email = String(row.email ?? "");
+    // de-dupe on email: the same person appears in both tables
+    const key = email || id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const name = String(row.full_name ?? email.split("@")[0] ?? "User");
+    const role = String(row.role ?? "staff");
+    const tone = toneFor(id);
+    /*
+     * The super admin's access is derived from his id, not from the stored
+     * role. `app_role` cannot hold "super_admin" yet, so the raw column reads
+     * "admin" and the user list would otherwise present him as one of several
+     * admins he outranks.
+     */
+    const effective = effectiveRole(id, role);
+    const protectedRow = isSuperAdminId(id);
+    out.push({
+      id,
+      name,
+      initials: initialsOf(name.split(" ")[0] ?? "", name.split(" ").slice(1).join(" ")),
+      email,
+      role: effective,
+      access: ROLE_LABELS[effective] ?? effective,
+      tone,
+      protected: protectedRow,
+    });
+  }
+
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function usePeopleView() {
+  return useErpView<PeopleRow>("people", loadPeople, []);
+}
+
+/* ------------------------------------------------------------------ */
+/* Transport                                                           */
+/* ------------------------------------------------------------------ */
+
+async function loadTransportRoutes(): Promise<TransportRoute[]> {
+  const [routes, allocations] = await Promise.all([
+    fetchAll("transport_routes", "id,code,name,vehicle_no,driver_name,active"),
+    fetchAll("transport_allocations", "id,student_id,route_id,active"),
+  ]);
+  const counts = new Map<string, number>();
+  for (const a of allocations) {
+    if (a.active === false) continue;
+    const key = String(a.route_id);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return routes.map((r) => ({
+    id: String(r.code ?? r.id),
+    vehicle: String(r.vehicle_no ?? "—"),
+    driver: String(r.driver_name ?? "—"),
+    pickup: "07:10 – 07:40",
+    students: counts.get(String(r.id)) ?? 0,
+    status: r.active === false ? "Off route" : "On time",
+  }));
+}
+
+export function useTransportRoutesView() {
+  return useErpView<TransportRoute>("transport_routes", loadTransportRoutes, mockTransportRoutes);
+}
+
+async function loadVehicles(): Promise<Vehicle[]> {
+  const routes = await fetchAll(
+    "transport_routes",
+    "id,code,name,vehicle_no,driver_name,driver_phone,active"
+  );
+  return routes.map((r) => ({
+    id: String(r.vehicle_no ?? r.id),
+    driver: String(r.driver_name ?? "—"),
+    driverPhone: String(r.driver_phone ?? ""),
+    routeCode: String(r.code ?? ""),
+    routeName: String(r.name ?? ""),
+    /*
+     * `transport_routes` records no seat count, and there is no vehicles table
+     * to read one from. This used to hardcode 40, which printed "Capacity 40
+     * seats" under every single bus — four identical facts presented as data.
+     * null renders as nothing instead.
+     */
+    capacity: null,
+    status: r.active === false ? "Maintenance" : "Active",
+  }));
+}
+
+export function useVehiclesView() {
+  return useErpView<Vehicle>("vehicles", loadVehicles, mockVehicles);
+}
+
+/* ------------------------------------------------------------------ */
+/* Tables with no counterpart in the database                          */
+/* These keep the mock rows; the database has no source for them.      */
+/* ------------------------------------------------------------------ */
+
+export function useLibraryBooksView() {
+  return useErpView<LibraryBook>("library_books", async () => mockLibraryBooks, mockLibraryBooks);
+}
+
+export function useScheduleView() {
+  return useErpView<ScheduleItem>("schedule", async () => mockSchedule, mockSchedule);
+}
+
+export function useReportExportsView() {
+  return useErpView<ReportExport>("report_exports", async () => mockReportExports, mockReportExports);
+}
+
+export function useTimetableView(day: string) {
+  return useErpView<TimetableEntry>(
+    "timetable",
+    async () => mockTimetable.filter((r) => r.day === day),
+    mockTimetable.filter((r) => r.day === day),
+    [day]
+  );
+}
+
+export function useActivityFeedView(category: ActivityCategory) {
+  return useErpView<ActivityItem>(
+    "activity_log",
+    async () => mockActivityLog.filter((r) => r.category === category),
+    mockActivityLog.filter((r) => r.category === category),
+    [category]
+  );
+}

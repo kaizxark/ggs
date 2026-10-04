@@ -1,5 +1,10 @@
 {
-  "include": ["client/src/**/*", "shared/**/*", "server/**/*"],
+  /*
+   * api/ holds the Vercel edge functions. It was missing here, which meant
+   * `tsc --noEmit` reported a clean project while the functions build failed on
+   * a type error only Vercel's compiler saw.
+   */
+  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "api/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "incremental": true,

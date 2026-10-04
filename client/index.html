@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <meta name="theme-color" content="#0f1115" />
     <meta name="description" content="Global Kids School — a calmer operating system for modern school leadership." />
+    <!-- Round logo. The favicons are the full emblem rather than a zoomed crop:
+         cropping it turned into an unreadable egg at tab size, and the whole
+         mark keeps its circular silhouette down to 32px. Transparent PNG rather
+         than .ico so the round edge survives on dark browser chrome. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" />
+    <link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png" />
+    <!-- iOS masks the icon itself, so this one is composited onto an opaque
+         white plate; a transparent circle would show as black corners. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="mask-icon" href="/favicon-128.png" color="#3fb8a2" />
     <title>Global Kids School · School OS</title>
   </head>
   <body>

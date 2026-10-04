@@ -21,12 +21,9 @@ export default function Navbar() {
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="w-8 h-8 rounded-[8px] bg-[#9e3b26] text-[#f6eddd] flex items-center justify-center shadow-xs"
+            className="h-9 rounded-[8px] bg-[#9e3b26] px-2 flex items-center justify-center shadow-xs"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M4 10.5L12 4L20 10.5V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V10.5Z" stroke="#f6eddd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="12" cy="13.5" r="2.5" fill="#f6eddd"/>
-            </svg>
+            <img src="/logo.png" alt="Global Kids School" className="h-5 w-auto rounded-full" />
           </motion.div>
           <span className="font-bold text-base sm:text-lg text-[#34291C] font-['Space_Grotesk'] tracking-tight group-hover:opacity-80 transition-opacity">
             Global Kids School

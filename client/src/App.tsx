@@ -6,22 +6,44 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
+import { useSession } from "./lib/supabase";
 
-const isLoggedIn = () => sessionStorage.getItem("loggedIn") === "true";
+function AuthSplash() {
+  return (
+    <div
+      className="min-h-screen bg-[#0b0c10] flex items-center justify-center"
+      style={{ fontFamily: "system-ui, sans-serif" }}
+    >
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#3fb8a2]/30 border-t-[#3fb8a2]" />
+    </div>
+  );
+}
 
 function GuardedDashboard() {
-  if (!isLoggedIn()) return <Redirect to="/login" />;
+  const { isAuthenticated, loading } = useSession();
+  if (loading) return <AuthSplash />;
+  if (!isAuthenticated) return <Redirect to="/login" />;
   return <Dashboard />;
 }
 
 function LoginGate() {
-  if (isLoggedIn()) return <Redirect to="/dashboard" />;
+  const { isAuthenticated, loading } = useSession();
+  if (loading) return <AuthSplash />;
+  if (isAuthenticated) return <Redirect to="/dashboard" />;
   return <Login />;
 }
 
 function Router() {
   return (
     <Switch>
+      {/*
+        Deliberately outside LoginGate. The recovery link signs the person in on
+        arrival, so a gate that redirects any authenticated visitor to the
+        dashboard would send them there before they could choose a password —
+        leaving them signed in and with the old password still in force.
+      */}
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/login" component={LoginGate} />
       <Route path="/" component={GuardedDashboard} />
       <Route path="/dashboard" component={GuardedDashboard} />

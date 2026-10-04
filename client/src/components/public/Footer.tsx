@@ -20,11 +20,8 @@ export default function Footer() {
           {/* Col 1: School Identity */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[10px] bg-[#9e3b26] text-[#f6eddd] flex items-center justify-center shadow-md">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M4 11L12 4L20 11V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V11Z" stroke="#f6eddd" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <circle cx="12" cy="13" r="2" fill="#f6eddd"/>
-                </svg>
+              <div className="h-11 rounded-[10px] bg-[#9e3b26] px-2.5 flex items-center justify-center shadow-md">
+                <img src="/logo.png" alt="Global Kids School" className="h-6 w-auto rounded-full" />
               </div>
               <div>
                 <span className="font-bold text-xl text-[#f6eddd] font-['Space_Grotesk'] tracking-tight block">

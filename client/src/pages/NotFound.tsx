@@ -19,23 +19,23 @@ export default function NotFound() {
             />
             <AlertCircle
               className="relative h-16 w-16"
-              style={{ color: "#f0886a" }}
+              style={{ color: "var(--danger)" }}
             />
           </div>
         </div>
 
-        <h1 className="text-4xl font-bold mb-2" style={{ color: "#e7ebef" }}>
+        <h1 className="text-4xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
           404
         </h1>
 
         <h2
           className="text-xl font-semibold mb-4"
-          style={{ color: "#d7dee4" }}
+          style={{ color: "var(--text-secondary)" }}
         >
           Page Not Found
         </h2>
 
-        <p className="mb-8 leading-relaxed" style={{ color: "#8b96a0" }}>
+        <p className="mb-8 leading-relaxed" style={{ color: "var(--text-muted)" }}>
           Sorry, the page you are looking for doesn't exist.
           <br />
           It may have been moved or deleted.

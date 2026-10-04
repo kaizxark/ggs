@@ -14,7 +14,7 @@ import {
   ChevronLeft,
   Loader2
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 const easeOutQuint = [0.22, 1, 0.36, 1] as const;
 

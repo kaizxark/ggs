@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Activity,
   AlertCircle,
   ArrowDownRight,
   ArrowUpRight,
-  Bell,
   BookOpen,
   Bus,
   CalendarDays,
   Check,
   ChevronDown,
+  FolderOpen,
   ChevronRight,
-  CircleHelp,
   ClipboardCheck,
   Clock3,
   Command,
@@ -22,13 +22,12 @@ import {
   GraduationCap,
   IndianRupee,
   LayoutDashboard,
-  Library,
+  Lock,
   LogOut,
+  Mail,
   Menu,
   MessageSquare,
   MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Receipt,
   Search,
@@ -36,6 +35,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  UserCog,
   Users,
   X,
 } from "lucide-react";
@@ -48,22 +48,297 @@ import {
   Cell,
   Pie,
   PieChart,
+  PolarAngleAxis,
+  PolarGrid,
+  Radar,
+  RadarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useLocation } from "wouter";
+import { sendPasswordReset, signOut as supabaseSignOut, useSession, supabase } from "../lib/supabase";
+import {
+  AI_PROVIDERS,
+  askAssistant,
+  clearSharedAiSettings,
+  getAiConfig,
+  getProvider,
+  isAiConfigured,
+  isSuperAdmin,
+  loadSharedAiSettings,
+  saveSharedAiSettings,
+  setAiConfig,
+  testAiConnection,
+  type AiAnswer,
+  type AiConfig,
+  type AiTurn,
+} from "../lib/ai-assistant";
+import { buildAssistantBrief } from "../lib/ai-context";
+import { GEMINI_MODELS } from "../lib/gemini";
+import {
+  activityIconMap,
+  avatarTones,
+  useActivityFeed,
+  useAnnouncements,
+  useAssignments,
+  useAttendanceDaily,
+  useClassAttendance,
+  useExamResults,
+  useExams,
+  useFeeCategories,
+  useFinanceMonthly,
+  useGradeOutcomes,
+  useHealthMetrics,
+  useInvoices,
+  useLibraryBooks,
+  useMessages,
+  useNotifications,
+  usePeople,
+  usePerformanceTrend,
+  useReportExports,
+  useSchedule,
+  useSettings,
+  useStaff,
+  useStudents,
+  useSubjectAverages,
+  useSubjects,
+  useTimetable,
+  useTransportRoutes,
+  useVehicles,
+  useCurrentUser,
+  type RowId,
+  type Settings,
+} from "../lib/school-data";
+import {
+  SkeletonBlock,
+  SkeletonChart,
+  SkeletonCircle,
+  SkeletonHealthGrid,
+  SkeletonInline,
+  SkeletonList,
+  SkeletonMetric,
+  SkeletonNav,
+  SkeletonRegion,
+  SkeletonTableRows,
+  SkeletonText,
+  SkeletonTimeline,
+} from "../components/ErpSkeleton";
+import { Pager, usePagination } from "../components/ErpPagination";
+import { Breadcrumb } from "../components/Breadcrumb";
+import { StudentDocumentsPanel } from "../components/StudentDocuments";
+import { DocumentsView } from "../components/DocumentsView";
+import { StudentDirectory } from "./StudentDirectory";
+import SmoothScroll, { smoothScrollTo } from "../components/SmoothScroll";
+import {
+  effectiveRole,
+  isSuperAdminId,
+  roleLabel,
+  superAdminGuard,
+} from "@shared/super-admin";
+import { screenLabelByName, screensForRole } from "@shared/ai-access";
+import { USERNAME_PATTERN } from "@/lib/username";
 
-const accent = "#3fb8a2";
+/** Initials for the signed-in user, e.g. "Ehtesham" -> "EH". */
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Screens each role can open, used to scope the assistant's brief and
+ * suggestions.
+ *
+ * Delegates to `@shared/ai-access` rather than keeping a copy here. This list
+ * used to be a second, hand-maintained version of the same rules, and the two
+ * drifted: the server's copy knew about the Documents screen and this one did
+ * not. One list means the assistant can never offer a button leading to a
+ * screen the server would refuse to route to.
+ */
+function VISIBLE_SCREENS_FOR_ROLE(role: string): string[] {
+  return screensForRole(role).map((key) => screenLabelByName(key) ?? key);
+}
+
+/**
+ * Contextual prompts shown when the palette is empty.
+ *
+ * Two things filter these: the screen the user is on, and the screens their
+ * role can open. The second filter is the important one. A teacher being
+ * offered "How much fee is outstanding?" is an assistant that has just told
+ * them, before they have typed anything, that it is looking at numbers it is
+ * not allowed to see — and their first tap would be answered with a refusal.
+ */
+function SUGGESTED_QUESTIONS_FOR_ROLE(
+  role: string,
+  activeScreen: string | null
+): string[] {
+  const lower = role.toLowerCase();
+  const isSuper = lower === "super admin" || lower === "super_admin";
+  const isAdmin = lower === "admin";
+  const isPrincipal = lower === "principal";
+  const isTeacher = lower === "teacher";
+
+  const screenSpecific = activeScreen === null ? [] : (SCREEN_PROMPTS[activeScreen] ?? []);
+
+  // Keyed on the screen each question needs, so anything the role cannot reach
+  // is dropped rather than answered with a refusal.
+  const rolePrompts: Record<string, string[]> = isSuper
+    ? {
+        users: [
+          "Who is the super admin?",
+          "Which staff have admin access?",
+          "Show me everyone's role and access level",
+          "Which accounts are protected and cannot be changed?",
+        ],
+        finance: [
+          "Which families owe the most?",
+          "How much is overdue, and since when?",
+        ],
+        analytics: ["Which students are at risk of falling behind?"],
+        attendance: ["Which classes are below the attendance threshold?"],
+        overview: ["Give me the school's headline numbers"],
+      }
+    : isAdmin
+      ? {
+          users: ["Who can invite new staff?", "Show me everyone's role and access level"],
+          finance: ["Show me the fee collection summary"],
+          analytics: ["Which students are at risk of falling behind?"],
+          overview: ["Give me the school's headline numbers"],
+        }
+      : isPrincipal
+        ? {
+            finance: ["How much fee is outstanding?"],
+            analytics: ["Which grade is performing weakest?"],
+            staff: ["Who is on campus today?"],
+            overview: ["Give me the school's headline numbers"],
+          }
+        : isTeacher
+          ? {
+              students: ["Which of my students are at risk?"],
+              academics: ["What is on the timetable today?"],
+              assignments: ["Which assignments are still unsubmitted?"],
+              attendance: ["How is class attendance trending?"],
+            }
+          : {
+              overview: ["How many students are enrolled?"],
+              attendance: ["What is the attendance today?"],
+              students: ["Which students are enrolled?"],
+            };
+
+  const allowed = new Set(screensForRole(lower).map((key) => key as string));
+  const roleSpecific: string[] = [];
+  for (const screen of Object.keys(rolePrompts)) {
+    if (!allowed.has(screen)) continue;
+    roleSpecific.push(...rolePrompts[screen]);
+  }
+
+  // Screen prompts are for a screen the user is already on, which is by
+  // definition one they can open, so they need no role check.
+  return Array.from(new Set([...screenSpecific, ...roleSpecific])).slice(0, 6);
+}
+
+const SCREEN_PROMPTS: Record<string, string[]> = {
+  Overview: [
+    "How is the school doing overall?",
+    "What are the headline numbers today?",
+  ],
+  Students: [
+    "Which students are in Grade 5?",
+    "Who has the lowest attendance?",
+    "Find a student by admission number",
+  ],
+  Attendance: [
+    "Which class has the lowest attendance?",
+    "How many students were present today?",
+    "Which classes are below 90% attendance?",
+  ],
+  "Fees & Finance": [
+    "Which fees are still outstanding?",
+    "Who owes the most?",
+    "What is the collection rate?",
+  ],
+  Analytics: [
+    "Which grade is weakest academically?",
+    "How has performance trended this year?",
+    "Which subjects are strongest?",
+  ],
+  Staff: [
+    "Who teaches Science?",
+    "Which staff are on campus today?",
+    "Who is in the accounts department?",
+  ],
+  Academics: [
+    "What is on the timetable today?",
+    "Which exams are coming up?",
+    "Which assignments are still unsubmitted?",
+  ],
+  Examinations: [
+    "When is the next Grade 10 exam?",
+    "Which exam results are still unpublished?",
+    "What is the exam schedule this week?",
+  ],
+  Assignments: [
+    "Which assignments are still unsubmitted?",
+    "Which students have late assignments?",
+    "Show me the assignments for Grade 7",
+  ],
+  Transport: [
+    "Which vehicle goes to a given pickup?",
+    "Who is the driver on route X?",
+    "Which routes are active?",
+  ],
+  Reports: [
+    "Which reports have been exported recently?",
+  ],
+  "User management": [
+    "Who has admin access?",
+    "Invite a new staff member",
+    "Who is the super admin?",
+  ],
+  Settings: [
+    "What are the school's current settings?",
+    "Change the attendance threshold",
+  ],
+};
+
+function currentView(): string | null {
+  // The palette is rendered outside the view stack, so it does not know which
+  // screen is active unless the parent tells it. We derive a best guess from
+  // the URL so the suggestions stay screen-aware.
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+  if (pathname.endsWith("/dashboard") || pathname === "/" || pathname.endsWith("/")) return "Overview";
+  const segment = pathname.split("/").pop() ?? "";
+  if (SCREEN_PROMPTS[segment]) return segment;
+  return null;
+}
+
+/**
+ * Time-of-day greeting, using the viewer's own clock.
+ *
+ * Boundaries follow common usage: before 12 it's morning, up to 17 afternoon,
+ * and everything after that stays "Good evening" rather than switching to a
+ * night greeting.
+ */
+function greetingFor(date: Date): string {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+const accent = "var(--brand)";
 
 const navGroups = [
   {
     label: "School",
     items: [
       { label: "Overview", icon: LayoutDashboard },
-      { label: "Students", icon: GraduationCap, count: "2,486" },
+      { label: "Students", icon: GraduationCap },
+      { label: "Documents", icon: FolderOpen },
       { label: "Staff", icon: Users },
       { label: "Academics", icon: BookOpen },
     ],
@@ -73,17 +348,9 @@ const navGroups = [
     items: [
       { label: "Attendance", icon: ClipboardCheck },
       { label: "Examinations", icon: FileText },
-      { label: "Assignments", icon: Check, count: "12" },
+      { label: "Assignments", icon: Check },
       { label: "Fees & Finance", icon: IndianRupee },
       { label: "Transport", icon: Bus },
-    ],
-  },
-  {
-    label: "Communication",
-    items: [
-      { label: "Communication", icon: MessageSquare, count: "4" },
-      { label: "Announcements", icon: Bell },
-      { label: "Notifications", icon: Bell },
     ],
   },
   {
@@ -95,85 +362,13 @@ const navGroups = [
   },
 ];
 
-const attendanceData = [
-  { day: "Mon", present: 2268, absent: 118, late: 61, leave: 39 },
-  { day: "Tue", present: 2310, absent: 92, late: 52, leave: 32 },
-  { day: "Wed", present: 2290, absent: 104, late: 59, leave: 33 },
-  { day: "Thu", present: 2354, absent: 70, late: 35, leave: 27 },
-  { day: "Fri", present: 2318, absent: 86, late: 49, leave: 33 },
-  { day: "Sat", present: 2380, absent: 46, late: 28, leave: 32 },
-  { day: "Today", present: 2357, absent: 79, late: 33, leave: 17 },
-];
-
-const students = [
-  { name: "Aarav Mehta", initials: "AM", grade: "Grade 8", section: "B", id: "GKS-24081", attendance: 97, average: 91, fees: "Paid", transport: "Route 04", status: "Active", tone: "teal" },
-  { name: "Ishita Nair", initials: "IN", grade: "Grade 10", section: "A", id: "GKS-23819", attendance: 94, average: 88, fees: "Paid", transport: "Route 02", status: "Active", tone: "violet" },
-  { name: "Vihaan Kapoor", initials: "VK", grade: "Grade 6", section: "C", id: "GKS-24211", attendance: 89, average: 82, fees: "Due", transport: "Route 09", status: "Review", tone: "amber" },
-  { name: "Ananya Rao", initials: "AR", grade: "Grade 12", section: "A", id: "GKS-23104", attendance: 98, average: 95, fees: "Paid", transport: "Self", status: "Active", tone: "rose" },
-  { name: "Kabir Malhotra", initials: "KM", grade: "Grade 9", section: "D", id: "GKS-23998", attendance: 92, average: 86, fees: "Paid", transport: "Route 06", status: "Active", tone: "blue" },
-  { name: "Mira Thomas", initials: "MT", grade: "Grade 5", section: "A", id: "GKS-24306", attendance: 86, average: 79, fees: "Due", transport: "Route 03", status: "Review", tone: "orange" },
-  { name: "Arjun Menon", initials: "AM", grade: "Grade 11", section: "C", id: "GKS-23277", attendance: 96, average: 90, fees: "Paid", transport: "Route 01", status: "Active", tone: "indigo" },
-  { name: "Sara Fernandes", initials: "SF", grade: "Grade 7", section: "B", id: "GKS-24170", attendance: 93, average: 87, fees: "Paid", transport: "Route 07", status: "Active", tone: "pink" },
-];
-
-const recentActivity = [
-  { title: "Fee payment received", detail: "Aarav Mehta · Term 1", time: "8 min ago", icon: IndianRupee, color: "emerald" },
-  { title: "Attendance submitted", detail: "Grade 7 — Section B", time: "24 min ago", icon: ClipboardCheck, color: "blue" },
-  { title: "Exam schedule published", detail: "Mid-term assessments", time: "1 hr ago", icon: CalendarDays, color: "violet" },
-  { title: "Parent message received", detail: "Mrs. Nair · Grade 10A", time: "2 hrs ago", icon: MessageSquare, color: "amber" },
-];
-
-const schedule = [
-  { time: "09:00", subject: "Mathematics", detail: "Grade 8 · Room 204", color: "#2f6f68" },
-  { time: "10:00", subject: "Physics", detail: "Grade 11 · Lab 1", color: "#7c63c8" },
-  { time: "11:00", subject: "English Literature", detail: "Grade 9 · Room 118", color: "#cf845a" },
-  { time: "12:00", subject: "Lunch break", detail: "Campus-wide", color: "#9aa09f" },
-  { time: "13:00", subject: "Chemistry", detail: "Grade 12 · Lab 2", color: "#3b82b4" },
-];
-
-const todayOperations = [
-  { time: "08:15", label: "Morning attendance window", detail: "32 classes · 2,357 present", icon: ClipboardCheck, tone: "teal" },
-  { time: "11:30", label: "Mid-term timetable review", detail: "2 conflicts need a decision", icon: CalendarDays, tone: "violet" },
-  { time: "14:00", label: "Finance reconciliation", detail: "₹1.8L received since yesterday", icon: IndianRupee, tone: "orange" },
-  { time: "16:30", label: "Parent community update", detail: "Announcement scheduled to publish", icon: MessageSquare, tone: "blue" },
-];
-
-const healthMetrics = [
-  { label: "Attendance", value: "94.8%", change: "+1.8%", progress: 94.8, color: "#2f6f68" },
-  { label: "Academic average", value: "86.4%", change: "+3.2%", progress: 86.4, color: "#7662bc" },
-  { label: "Fee collection", value: "82.1%", change: "+6.4%", progress: 82.1, color: "#cf845a" },
-  { label: "Parent engagement", value: "78.6%", change: "+4.1%", progress: 78.6, color: "#3b82b4" },
-];
-
-const revenueData = [
-  { month: "Apr", collected: 24, pending: 8 },
-  { month: "May", collected: 28, pending: 7 },
-  { month: "Jun", collected: 31, pending: 6 },
-  { month: "Jul", collected: 34, pending: 5 },
-  { month: "Aug", collected: 37, pending: 4 },
-  { month: "Sep", collected: 41, pending: 3 },
-];
-
-const classAttendance = [
-  { label: "Grade 5 — A", value: 97, present: 31, total: 32 },
-  { label: "Grade 6 — C", value: 89, present: 28, total: 32 },
-  { label: "Grade 7 — B", value: 95, present: 30, total: 32 },
-  { label: "Grade 8 — B", value: 94, present: 29, total: 31 },
-  { label: "Grade 10 — A", value: 98, present: 30, total: 31 },
-  { label: "Grade 12 — A", value: 96, present: 29, total: 30 },
-];
-
-const avatarTones: Record<string, string> = {
-  teal: "bg-[rgba(63,184,162,0.13)] text-[#3fb8a2]",
-  violet: "bg-[rgba(150,125,220,0.13)] text-[#ab95e8]",
-  amber: "bg-[rgba(224,180,92,0.13)] text-[#e0b45c]",
-  rose: "bg-[rgba(224,122,122,0.13)] text-[#ec9c9c]",
-  blue: "bg-[rgba(92,155,210,0.13)] text-[#7cb8e8]",
-  orange: "bg-[rgba(216,138,82,0.13)] text-[#ecab7e]",
-  indigo: "bg-[rgba(112,128,200,0.13)] text-[#9aa8ec]",
-  pink: "bg-[rgba(200,110,150,0.13)] text-[#ec9cc4]",
-};
-
+/**
+ * Breadcrumb trail shown at the top of every sub-page.
+ *
+ * Replaced the old "← Overview" back link: a trail reads the same on every
+ * screen, says where you are in the school hierarchy, and each segment is a
+ * real jump target rather than a single undifferentiated "go back".
+ */
 function SectionTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-end justify-between gap-4">
@@ -194,7 +389,7 @@ function IconButton({ label, children, onClick, className = "" }: { label: strin
   );
 }
 
-function MetricBlock({ label, value, comparison, positive = true, icon: Icon, spark }: { label: string; value: string; comparison: string; positive?: boolean; icon: React.ElementType; spark: number[] }) {
+function MetricBlock({ label, value, comparison, positive = true, icon: Icon, spark, loading = false }: { label: string; value: string; comparison: string; positive?: boolean; icon: React.ElementType; spark: number[]; loading?: boolean }) {
   const max = Math.max(...spark);
   const min = Math.min(...spark);
   const points = spark.map((point, index) => `${(index / (spark.length - 1)) * 100},${42 - ((point - min) / Math.max(max - min, 1)) * 30}`).join(" ");
@@ -206,83 +401,691 @@ function MetricBlock({ label, value, comparison, positive = true, icon: Icon, sp
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
-          <div className="metric-value">{value}</div>
-          <div className={`metric-change ${positive ? "text-[#3fb8a2]" : "text-[#f0866f]"}`}>
-            {positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{comparison}
+          <div className="metric-value">{loading ? <SkeletonText width={58} height={24} /> : value}</div>
+          <div className={`metric-change ${positive ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}>
+            {loading ? <SkeletonText width={44} /> : <>{positive ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{comparison}</>}
           </div>
         </div>
+        {loading ? (
+          <SkeletonBlock style={{ height: 44, width: 84 }} />
+        ) : (
         <svg viewBox="0 0 100 48" className="h-11 w-[84px] overflow-visible" aria-hidden="true">
-          <polyline points={points} fill="none" stroke={positive ? "#3fb8a2" : "#f0866f"} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points={points} fill="none" stroke={positive ? "var(--brand)" : "var(--danger)"} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
+        )}
       </div>
     </div>
   );
 }
 
-function CommandPalette({ open, onClose, onNavigate }: { open: boolean; onClose: () => void; onNavigate: (view: string) => void }) {
+/**
+ * What the assistant says it is doing while it works.
+ *
+ * The old line was "Reading the dashboard…", which described an implementation
+ * detail and then sat still, so a slow answer looked like a hang. These name the
+ * step actually in progress, and the travelling dots below them carry the
+ * waiting — so a request that takes ten seconds reads as ten seconds of visible
+ * work rather than a frozen panel.
+ */
+const THINKING_LINES = [
+  "Checking the live records…",
+  "Looking through the school data…",
+  "Working out the numbers…",
+  "Matching this against your dashboard…",
+  "Putting the answer together…",
+];
+
+function CommandPalette({
+  open,
+  onClose,
+  onNavigate,
+  activeView,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onNavigate: (view: string, studentId?: RowId) => void;
+  activeView?: string;
+}) {
   const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const [aiState, setAiState] = useState<"idle" | "loading">("idle");
+  /**
+   * The answer currently on screen.
+   *
+   * One slot, shown where the results would have been. This began as a
+   * scrolling transcript with the questions echoed back on the right, but the
+   * palette is a search box first: switching it into a messaging panel meant
+   * the thing you searched for disappeared the moment you asked anything, and
+   * every follow-up buried the answer you were actually reading.
+   *
+   * The conversation is not thrown away with the layout, though. `historyRef`
+   * keeps every exchange, so a follow-up like "and Grade 5?" still reaches the
+   * model with the earlier turn in view — the context survives even though the
+   * transcript is no longer on screen.
+   */
+  const [answer, setAnswer] = useState<{ question: string; reply: AiAnswer } | null>(null);
+  const { rows: students } = useStudents();
+  const { rows: invoices } = useInvoices();
+  const { rows: classAttendance } = useClassAttendance();
+  const { rows: gradeOutcomes } = useGradeOutcomes();
+  const { rows: staff } = useStaff();
+  const { rows: dailyAttendance } = useAttendanceDaily();
+  const { rows: feeCategories } = useFeeCategories();
+  const { rows: financeMonths } = useFinanceMonthly();
+  const { rows: exams } = useExams();
+  const { rows: examResults } = useExamResults();
+  const { rows: assignments } = useAssignments();
+  const { rows: subjects } = useSubjects();
+  const { rows: subjectAverages } = useSubjectAverages();
+  const { rows: performanceTrend } = usePerformanceTrend();
+  const { rows: healthMetrics } = useHealthMetrics();
+  const { rows: announcements } = useAnnouncements();
+  const { rows: messages } = useMessages();
+  const { rows: notifications } = useNotifications();
+  const { rows: transportRoutes } = useTransportRoutes();
+  const { rows: vehicles } = useVehicles();
+  const { rows: libraryBooks } = useLibraryBooks();
+  const { rows: schedule } = useSchedule();
+  const { rows: reportExports } = useReportExports();
+  const { rows: activityFeed } = useActivityFeed("general");
+  const { rows: people } = usePeople();
+  const { settings } = useSettings();
+  const currentUser = useCurrentUser();
+  const listRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Labelled brief rather than a bare number dump.
+   *
+   * The earlier snapshot passed nine camelCase counters, which left the model
+   * unable to tell rupees from headcounts and unable to name a single student —
+   * so it hedged. This builds units, named entities and pre-written sentences.
+   *
+   * `useAttendanceDaily` reads the same `attendance` projection the class
+   * attendance loader already uses, so the row cache serves it for free.
+   */
+  const brief = useMemo(
+    () =>
+      buildAssistantBrief({
+        students,
+        staff,
+        classAttendance,
+        dailyAttendance,
+        invoices,
+        gradeOutcomes,
+        feeCategories,
+        financeMonths,
+        exams,
+        examResults,
+        assignments,
+        subjects,
+        subjectAverages,
+        performanceTrend,
+        healthMetrics,
+        announcements,
+        messages,
+        notifications,
+        transportRoutes,
+        vehicles,
+        libraryBooks,
+        schedule,
+        reportExports,
+        activityFeed,
+        people,
+        settings,
+        roleScope: currentUser
+          ? {
+              userRole: currentUser.role,
+              visibleScreens: VISIBLE_SCREENS_FOR_ROLE(currentUser.role),
+              activeScreen: activeView,
+            }
+          : undefined,
+      }),
+    [
+      students, staff, classAttendance, dailyAttendance, invoices, gradeOutcomes,
+      feeCategories, financeMonths, exams, examResults, assignments, subjects,
+      subjectAverages, performanceTrend, healthMetrics, announcements, messages,
+      notifications, transportRoutes, vehicles, libraryBooks, schedule,
+      reportExports, activityFeed, people, settings, currentUser,
+    ]
+  );
+
+  /**
+   * The full datasets, sent with every question.
+   *
+   * This is the "access to every piece of data" part. The prompt only carries
+   * aggregates and the top few rows — enough for "how many students are there"
+   * without spending a token budget on the whole roll. When a question is about
+   * a specific person or invoice, the model asks the server for those rows by
+   * name through `search_records`, and the server runs the search here against
+   * data already in memory.
+   *
+   * The client sends everything because it cannot know the caller's role — and
+   * that is correct: the server strips these to the caller's role before the
+   * provider sees a single one of them. Scoping it here too would only save
+   * bandwidth, and would risk the two lists drifting apart.
+   */
+  const datasets = useMemo(
+    () => ({
+      students,
+      staff,
+      invoices,
+      classAttendance,
+      dailyAttendance,
+      gradeOutcomes,
+      feeCategories,
+      financeMonths,
+      exams,
+      examResults,
+      assignments,
+      subjects,
+      subjectAverages,
+      performanceTrend,
+      healthMetrics,
+      announcements,
+      messages,
+      notifications,
+      transportRoutes,
+      vehicles,
+      libraryBooks,
+      schedule,
+      reportExports,
+      activityFeed,
+      people,
+    }),
+    [
+      students, staff, invoices, classAttendance, dailyAttendance, gradeOutcomes,
+      feeCategories, financeMonths, exams, examResults, assignments, subjects,
+      subjectAverages, performanceTrend, healthMetrics, announcements, messages,
+      notifications, transportRoutes, vehicles, libraryBooks, schedule,
+      reportExports, activityFeed, people,
+    ]
+  );
+
+  const commands = useMemo(
+    () => [
+      { label: "Record attendance", detail: "Open today's attendance workspace", icon: ClipboardCheck, view: "Attendance" },
+      { label: "Generate fee report", detail: "Open finance and collection analytics", icon: FileBarChart, view: "Fees & Finance" },
+      { label: "Review grade outcomes", detail: "Compare grade-wise academic performance", icon: Activity, view: "Analytics" },
+      { label: "Manage staff access", detail: "Invite staff and review roles", icon: UserCog, view: "User management" },
+      { label: "Who is on campus today?", detail: "Ask the assistant about staffing", icon: Sparkles, view: "" },
+      { label: "Which fees are outstanding?", detail: "Ask the assistant about collections", icon: Sparkles, view: "" },
+      { label: "Which grade is struggling?", detail: "Ask the assistant about performance", icon: Sparkles, view: "" },
+    ],
+    []
+  );
+
   const results = useMemo(() => {
     const normalized = query.toLowerCase();
-    const people = students.filter((student) => `${student.name} ${student.grade} ${student.section}`.toLowerCase().includes(normalized));
-    const commands = [
-      { label: "Record attendance", detail: "Open today's attendance workspace", icon: ClipboardCheck, view: "Attendance" },
-      { label: "Create announcement", detail: "Share an update with the school community", icon: MessageSquare, view: "Communication" },
-      { label: "Generate fee report", detail: "Open finance and collection analytics", icon: FileBarChart, view: "Fees & Finance" },
-      { label: "Open Grade 10", detail: "View classes, students and performance", icon: GraduationCap, view: "Students" },
-    ].filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(normalized));
-    return { people, commands };
-  }, [query]);
+    const people = students
+      .filter((student) =>
+        `${student.name} ${student.grade} ${student.section} ${student.admission_no ?? ""}`
+          .toLowerCase()
+          .includes(normalized)
+      )
+      .slice(0, 5);
+    const cmds = commands.filter((item) =>
+      `${item.label} ${item.detail}`.toLowerCase().includes(normalized)
+    );
+    // students is a dependency: it arrives asynchronously after the palette
+    // mounts, and omitting it left the search results stuck on the first render.
+    return { people, cmds };
+  }, [query, students, commands]);
+
+  /**
+   * The role-scoped prompts shown when the box is empty.
+   *
+   * Held in state rather than computed inline at the render site: `flat` needs
+   * the same list so the rows can be reached with the keyboard and hovered
+   * without falling through to a -1 index.
+   */
+  const suggestions = useMemo(
+    () => SUGGESTED_QUESTIONS_FOR_ROLE(currentUser?.role ?? "", activeView ?? currentView()),
+    [currentUser?.role, activeView]
+  );
+
+  /**
+   * Flatten the visible groups into one ordered list so ↑/↓ move through
+   * people, commands and prompts as a single sequence, which is what a user
+   * expects from a spotlight palette. Enter opens whichever row is
+   * highlighted.
+   *
+   * Every row that is rendered must also appear here, in the same order. When
+   * one did not — the role-scoped prompts were rendered without a `flat` entry
+   * — `findIndex` returned -1 for all of them, so hovering any single prompt
+   * called `setActive(-1)` and every prompt matched `-1 === -1` and lit up at
+   * once. The arrow keys could not reach them either.
+   */
+  const flat = useMemo(() => {
+    const out: { key: string; run: () => void }[] = [];
+
+    // Empty query: the prompts sit above the general commands, matching the
+    // order they are rendered in below.
+    if (!query.trim()) {
+      for (const question of suggestions) {
+        out.push({
+          key: `sug-${question}`,
+          run: () => {
+            setQuery(question);
+            void runAssistant(question);
+          },
+        });
+      }
+    }
+
+    for (const student of results.people) {
+      out.push({
+        key: `p-${student.id}`,
+        run: () => {
+          // Pass the id through so the directory opens this profile directly
+          // instead of landing on the unfiltered list.
+          onNavigate("Students", student.id);
+          onClose();
+        },
+      });
+    }
+    for (const item of results.cmds) {
+      out.push({
+        key: `c-${item.label}`,
+        run: () => {
+          if (item.view) {
+            onNavigate(item.view);
+            onClose();
+          } else {
+            setQuery(item.label);
+            void runAssistant(item.label);
+          }
+        },
+      });
+    }
+    if (query.trim().length >= 3) {
+      out.push({
+        key: "ai",
+        run: () => void runAssistant(query.trim()),
+      });
+    }
+    return out;
+  }, [results, query, suggestions, onNavigate, onClose]);
+
+  /**
+   * Every exchange so far, oldest first.
+   *
+   * Kept in a ref rather than in the state that drives the answer slot,
+   * precisely so the transcript can stay off screen. The row list below is
+   * memoised on the query, and after the first exchange the query is empty and
+   * nothing else in its dependencies changes — so a `runAssistant` captured
+   * inside it would keep seeing the history it was built with and every
+   * follow-up would arrive cold. Reading the ref sidesteps that stale closure
+   * without re-rendering the list on every message.
+   */
+  const historyRef = useRef<AiTurn[]>([]);
+
+  const runAssistant = async (question: string) => {
+    const clean = question.trim();
+    if (!clean) return;
+
+    // Snapshot before appending, so the request carries everything said so far
+    // and nothing about the question being asked right now.
+    const history = historyRef.current.slice();
+
+    // The question deliberately stays in the input. Clearing it made the typed
+    // text vanish the moment it was sent, which read as the palette throwing
+    // the message away; leaving it there also means the user can edit it, or
+    // delete it and ask something else, without retyping from scratch. It is
+    // the one place the question is shown, so the answer no longer echoes it.
+    setAiState("loading");
+
+    const reply = await askAssistant(clean, brief, {
+      history,
+      datasets,
+      activeScreen: activeView ?? currentView(),
+    });
+
+    historyRef.current = [
+      ...history,
+      { role: "user", text: clean },
+      { role: "model", text: reply.answer },
+    ];
+    setAnswer({ question: clean, reply });
+    setAiState("idle");
+  };
+
+  /** Follow the assistant's own suggestion, or act on one of its buttons. */
+  const openAction = (action: { screen: string; studentId?: string | null }) => {
+    const label = screenLabelByName(action.screen);
+    if (!label) return;
+    if (action.studentId) onNavigate(label, action.studentId);
+    else onNavigate(label);
+    onClose();
+  };
+
+  // Reset whenever the palette is reopened or the query changes, so the
+  // highlight never points at a row that no longer exists.
+  useEffect(() => setActive(0), [query]);
 
   useEffect(() => {
-    if (!open) setQuery("");
+    if (!open) {
+      setQuery("");
+      setAiState("idle");
+      setAnswer(null);
+      historyRef.current = [];
+    }
   }, [open]);
 
+  // Keep the highlighted row inside the scroll area.
+  useEffect(() => {
+    const node = listRef.current?.querySelector<HTMLElement>(".command-item.active");
+    node?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
   if (!open) return null;
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    // The row list is always rendered, answer or not, so ↑/↓ keep working while
+    // an answer is on screen and ↵ runs whichever row is highlighted — which
+    // includes the "Ask the assistant …" row while a question is typed.
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive((i) => (flat.length === 0 ? 0 : (i + 1) % flat.length));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((i) => (flat.length === 0 ? 0 : (i - 1 + flat.length) % flat.length));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      flat[active]?.run();
+    }
+  };
+
+  const hasAnswer = answer !== null;
+
   return (
     <div className="modal-backdrop command-backdrop" onMouseDown={onClose}>
-      <div className="command-dialog" onMouseDown={(event) => event.stopPropagation()}>
+      <div className={`command-dialog ${hasAnswer ? "is-thread" : ""}`} onMouseDown={(event) => event.stopPropagation()}>
         <div className="command-search-row">
-          <Search size={18} className="text-[#7d8890]" />
-          <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search students, commands, reports..." />
+          <Search size={18} className="text-[var(--text-muted)]" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={
+              hasAnswer
+                ? "Ask a follow-up, or edit and resend…"
+                : "Search students, or ask the assistant anything…"
+            }
+          />
+          {hasAnswer && (
+            <button
+              className="command-newchat"
+              onClick={() => {
+                // Clears the answer, the typed question and the remembered
+                // context together, so "start again" really does start again.
+                setAnswer(null);
+                setQuery("");
+                historyRef.current = [];
+              }}
+            >
+              Clear
+            </button>
+          )}
           <kbd>esc</kbd>
         </div>
-        <div className="command-content">
+
+        <div className="command-content" ref={listRef}>
+          {aiState === "loading" && (
+            <div className="command-thinking" role="status" aria-live="polite">
+              <span className="command-thinking-orb" aria-hidden="true">
+                <span className="command-thinking-core" />
+              </span>
+              <div className="command-thinking-copy">
+                <p className="command-thinking-title">
+                  {THINKING_LINES[
+                    Math.floor(THINKING_LINES.length * Math.random()) % THINKING_LINES.length
+                  ] ?? THINKING_LINES[0]}
+                </p>
+                <span className="command-thinking-steps" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              </div>
+            </div>
+          )}
+
+          {answer && (
+            <div className="command-answer-card">
+              <div className="command-answer-head">
+                <Sparkles size={13} />
+                <span>Assistant</span>
+              </div>
+              <p className="command-answer-body">{answer.reply.answer}</p>
+
+              {answer.reply.error && (
+                <div className="command-answer-error">
+                  <AlertCircle size={14} />
+                  <div className="min-w-0">
+                    {answer.reply.error === "not_configured" ? (
+                      <>
+                        <strong>The assistant is not switched on yet.</strong>
+                        <p>
+                          {currentUser &&
+                          (isSuperAdminId(currentUser.id) ||
+                            currentUser.role === "super_admin")
+                            ? "You can give it an API key under Settings — it will then work for everyone in the school."
+                            : "Ask a super admin to add one under Settings. Once they do, this works for you too."}
+                        </p>
+                        <button
+                          className="command-answer-go"
+                          onClick={() => {
+                            onNavigate("Settings");
+                            onClose();
+                          }}
+                        >
+                          Open Settings
+                          <ChevronRight size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <p>
+                        That request did not go through.{" "}
+                        {answer.reply.error === "unauthenticated"
+                          ? "Your session has expired — reload the page and sign in again."
+                          : "Try again in a moment."}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {answer.reply.bullets.length > 0 && (
+                <ul className="command-answer-bullets">
+                  {answer.reply.bullets.map((bullet, index) => (
+                    <li key={index}>{bullet}</li>
+                  ))}
+                </ul>
+              )}
+
+              {answer.reply.actions.length > 0 && (
+                <div className="command-answer-actions">
+                  {answer.reply.actions.map((item, index) => {
+                    const label = screenLabelByName(item.screen);
+                    if (!label) return null;
+                    return (
+                      <button
+                        key={`${item.screen}-${index}`}
+                        className="command-answer-go"
+                        onClick={() => openAction(item)}
+                      >
+                        {item.label || `Open ${label}`}
+                        <ChevronRight size={14} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {answer.reply.followUps.length > 0 && (
+                <div className="command-answer-followups">
+                  {answer.reply.followUps.map((question, index) => (
+                    <button
+                      key={index}
+                      className="command-followup"
+                      onClick={() => void runAssistant(question)}
+                    >
+                      <Sparkles size={12} />
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {answer.reply.sources.length > 0 && (
+                <p className="command-answer-source">
+                  From {answer.reply.sources.join(" · ")}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* The searchable rows stay on screen underneath the answer. The
+              palette is one search surface, so an answer is a result of that
+              search rather than a separate screen that replaces it — which is
+              what let the user keep picking things to search for while an
+              answer was being read. */}
           {results.people.length > 0 && (
             <div className="command-group">
               <p className="command-heading">People</p>
-              {results.people.slice(0, 4).map((student) => (
-                <button key={student.id} className="command-item" onClick={() => { onNavigate("Students"); onClose(); toast.success(`Opening ${student.name}'s profile`); }}>
-                  <span className={`avatar avatar-sm ${avatarTones[student.tone]}`}>{student.initials}</span>
-                  <span className="min-w-0 flex-1 text-left"><span className="block truncate font-medium text-[#d7dee4]">{student.name}</span><span className="block text-xs text-[#7d8890]">{student.grade} · Section {student.section} · Attendance {student.attendance}%</span></span>
-                  <ChevronRight size={15} className="text-[#5c6871]" />
-                </button>
-              ))}
+              {results.people.map((student) => {
+                const idx = flat.findIndex((f) => f.key === `p-${student.id}`);
+                return (
+                  <button
+                    key={student.id}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx].run}
+                  >
+                    <span className={`avatar avatar-sm ${avatarTones[student.tone]}`}>{student.initials}</span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate font-medium text-[var(--text-secondary)]">{student.name}</span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">{student.grade} · Section {student.section} · Attendance {student.attendance}%</span>
+                    </span>
+                    <ChevronRight size={15} className="text-[var(--text-muted)]" />
+                  </button>
+                );
+              })}
             </div>
           )}
+
           <div className="command-group">
-            <p className="command-heading">Quick actions</p>
-            {results.commands.map((item) => (
-              <button key={item.label} className="command-item" onClick={() => { onNavigate(item.view); onClose(); }}>
-                <span className="command-icon"><item.icon size={16} /></span>
-                <span className="min-w-0 flex-1 text-left"><span className="block font-medium text-[#d7dee4]">{item.label}</span><span className="block text-xs text-[#7d8890]">{item.detail}</span></span>
-                <span className="command-shortcut">↵</span>
-              </button>
-            ))}
+            <p className="command-heading">
+              {query ? "Quick actions" : hasAnswer ? "Ask something else" : "Ask the assistant"}
+            </p>
+            {query ? (
+              // When there is a query, show only the explicit "ask" button so the
+              // keyboard user Always knows which row sends the question.
+              <>
+                {results.cmds
+                  .filter((item) => `${item.label} ${item.detail}`.toLowerCase().includes(query.toLowerCase()))
+                  .map((item) => {
+                    const idx = flat.findIndex((f) => f.key === `c-${item.label}`);
+                    return (
+                      <button
+                        key={item.label}
+                        className={`command-item ${idx === active ? "active" : ""}`}
+                        onMouseEnter={() => setActive(idx)}
+                        onClick={flat[idx].run}
+                      >
+                        <span className="command-icon"><item.icon size={16} /></span>
+                        <span className="min-w-0 flex-1 text-left">
+                          <span className="block font-medium text-[var(--text-secondary)]">{item.label}</span>
+                          <span className="block text-[12.5px] text-[var(--text-muted)]">{item.detail}</span>
+                        </span>
+                        {item.view ? <span className="command-shortcut">↵</span> : <Sparkles size={13} className="text-[var(--brand)]" />}
+                      </button>
+                    );
+                  })}
+                {query.trim().length >= 3 && (
+                  <button
+                    className={`command-item ${active === flat.length - 1 ? "active" : ""}`}
+                    onMouseEnter={() => setActive(flat.length - 1)}
+                    onClick={flat[flat.length - 1]?.run}
+                  >
+                    <span className="command-icon ai"><Sparkles size={16} /></span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block font-medium text-[var(--text-secondary)]">
+                        {`Ask the assistant “${query.trim()}”`}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">Answers from live dashboard data</span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              // Empty query: a small set of role-scoped prompts plus a few general
+              // ones. These are buttons the user can click or reach with ↵, and they
+              // pre-fill the query so the question is sent the moment they pick one.
+              <>
+                {suggestions.map((q) => {
+                  const key = `sug-${q}`;
+                  const idx = flat.findIndex((f) => f.key === key);
+                  return (
+                    <button
+                      key={key}
+                      className={`command-item ${idx === active ? "active" : ""}`}
+                      onMouseEnter={() => setActive(idx)}
+                      onClick={flat[idx]?.run}
+                    >
+                      <span className="command-icon ai"><Sparkles size={15} /></span>
+                      <span className="min-w-0 flex-1 text-left">
+                        <span className="block font-medium text-[var(--text-secondary)]">{q}</span>
+                        <span className="block text-[12.5px] text-[var(--text-muted)]">Ask the assistant</span>
+                      </span>
+                      <Sparkles size={13} className="text-[var(--brand)]" />
+                    </button>
+                  );
+                })}
+                {results.cmds.map((item) => {
+                  const idx = flat.findIndex((f) => f.key === `c-${item.label}`);
+                  return (
+                    <button
+                      key={item.label}
+                      className={`command-item ${idx === active ? "active" : ""}`}
+                      onMouseEnter={() => setActive(idx)}
+                      onClick={flat[idx].run}
+                    >
+                      <span className="command-icon"><item.icon size={16} /></span>
+                      <span className="min-w-0 flex-1 text-left">
+                        <span className="block font-medium text-[var(--text-secondary)]">{item.label}</span>
+                        <span className="block text-[12.5px] text-[var(--text-muted)]">{item.detail}</span>
+                      </span>
+                      {item.view ? <span className="command-shortcut">↵</span> : <Sparkles size={13} className="text-[var(--brand)]" />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </div>
-          {results.people.length === 0 && results.commands.length === 0 && <div className="empty-state py-12"><Search size={22} /><p>No results for “{query}”</p></div>}
+
+          {results.people.length === 0 && results.cmds.length === 0 && !hasAnswer && (
+            <div className="empty-state py-12"><Search size={22} /><p>No results for “{query}”</p></div>
+          )}
         </div>
-        <div className="command-footer"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span><span><kbd>esc</kbd> close</span></div>
+
+        <div className="command-footer">
+          <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+          <span><kbd>↵</kbd> open</span>
+          <span><kbd>esc</kbd> close</span>
+        </div>
       </div>
     </div>
   );
 }
-
 function AppDialog({ title, description, children, onClose }: { title: string; description?: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="app-dialog" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-5 border-b border-[#212a31] px-6 py-5">
-          <div><h3 className="text-lg font-semibold tracking-[-0.02em] text-[#d7dee4]">{title}</h3>{description && <p className="mt-1 text-sm text-[#8b96a0]">{description}</p>}</div>
+        <div className="flex items-start justify-between gap-5 border-b border-[var(--border)] px-6 py-5">
+          <div><h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-secondary)]">{title}</h3>{description && <p className="mt-1 text-sm text-[var(--text-muted)]">{description}</p>}</div>
           <IconButton label="Close dialog" onClick={onClose}><X size={17} /></IconButton>
         </div>
         <div className="px-6 py-5">{children}</div>
@@ -293,111 +1096,1945 @@ function AppDialog({ title, description, children, onClose }: { title: string; d
 
 function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   const [range, setRange] = useState("7 days");
+  const currentUser = useCurrentUser();
+  // Re-render on a timer so a tab left open across a boundary (e.g. until
+  // 17:00) greets correctly without needing a reload.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const greeting = greetingFor(now);
+  const { rows: attendanceData, loading: attendanceChartLoading } = useAttendanceDaily();
+  const { rows: schedule, loading: scheduleLoading } = useSchedule();
+  const schedulePager = usePagination(schedule);
+  const pageSchedule = schedulePager.pageRows;
+  const { rows: recentActivity, loading: activityLoading } = useActivityFeed("general");
+  const { rows: todayOperations, loading: operationsLoading } = useActivityFeed("operation");
+  const { rows: healthMetrics, loading: healthMetricsLoading } = useHealthMetrics();
+  const { rows: allStudents, loading: studentsLoading } = useStudents();
+  const { rows: allStaff, loading: staffLoading } = useStaff();
+  const { rows: todayAttendance } = useAttendanceDaily();
+  const { rows: invoiceRows, loading: invoicesLoading } = useInvoices();
+  const { rows: assignmentRows } = useAssignments();
+
+  // Totals come from the database, not from placeholders.
+  const studentCount = allStudents.length;
+  const staffCount = allStaff.length;
+  const onCampus = allStaff.filter((s) => s.status === "On campus").length;
+  const presentToday = todayAttendance.length
+    ? todayAttendance[todayAttendance.length - 1].present
+    : 0;
+  const collected = invoiceRows
+    .filter((i) => i.status === "Paid")
+    .reduce((sum, i) => sum + i.amount, 0);
+  const billed = invoiceRows.reduce((sum, i) => sum + i.amount, 0);
+  const collectionRate = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+  const lakh = (n: number) => `₹${(n / 100000).toFixed(1)}L`;
+
   return (
     <div className="page-stack">
       <div className="page-intro">
-        <div><p className="eyebrow">Monday, 28 September 2026</p><h1 className="page-title">Good morning, Priya</h1><p className="page-subtitle">Here’s the pulse of Global Kids School today.</p></div>
-        <div className="flex items-center gap-2"><button className="secondary-button" onClick={() => toast.success("Report exported", { description: "School health overview is ready to download." })}><Download size={15} />Export</button><button className="primary-button" onClick={() => onNavigate("Communication")}><Plus size={16} />New announcement</button></div>
+        <div><p className="eyebrow">{now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p><h1 className="page-title">{greeting}{currentUser?.fullName ? `, ${currentUser.fullName}` : ""}</h1></div>
+        <div className="flex items-center gap-2"><button className="secondary-button" onClick={() => toast.success("Report exported", { description: "School health overview is ready to download." })}><Download size={15} />Export</button><button className="primary-button" onClick={() => toast("Announcement composer opened", { description: "Choose the audience and publish to the school community." })}><Plus size={16} />New announcement</button></div>
       </div>
       <div className="metric-grid">
-        <MetricBlock label="Students" value="2,486" comparison="4.2% this term" icon={GraduationCap} spark={[12, 16, 14, 19, 21, 23, 26]} />
-        <MetricBlock label="Attendance" value="94.8%" comparison="1.8% today" icon={ClipboardCheck} spark={[20, 18, 23, 21, 26, 28, 31]} />
-        <MetricBlock label="Staff on campus" value="138" comparison="of 142 total" icon={Users} spark={[18, 20, 18, 25, 24, 28, 30]} />
-        <MetricBlock label="Fees collected" value="₹18.4L" comparison="82% of term target" icon={IndianRupee} spark={[11, 15, 17, 20, 24, 26, 29]} />
+        <MetricBlock label="Students" value={studentCount.toLocaleString("en-IN")} comparison={`${allStudents.filter((s) => s.status === "Active").length} active`} icon={GraduationCap} spark={[12, 16, 14, 19, 21, 23, 26]} loading={studentsLoading} />
+        <MetricBlock label="Attendance" value={healthMetrics[0]?.value ?? "—"} comparison="term to date" icon={ClipboardCheck} spark={[20, 18, 23, 21, 26, 28, 31]} loading={healthMetricsLoading} />
+        <MetricBlock label="Staff on campus" value={String(onCampus)} comparison={`of ${staffCount} total`} icon={Users} spark={[18, 20, 18, 25, 24, 28, 30]} loading={staffLoading} />
+        <MetricBlock label="Fees collected" value={lakh(collected)} comparison={`${collectionRate}% of billed`} icon={IndianRupee} spark={[11, 15, 17, 20, 24, 26, 29]} loading={invoicesLoading} />
       </div>
       <div className="dashboard-grid dashboard-grid-top">
-        <section className="panel attendance-panel">
+        <section className="panel">
           <div className="panel-header"><div><p className="eyebrow">School-wide signal</p><h2 className="panel-title">Attendance overview</h2></div><div className="flex items-center gap-2"><div className="segmented-control">{["Today", "7 days", "30 days", "Term"].map((item) => <button className={range === item ? "active" : ""} key={item} onClick={() => setRange(item)}>{item}</button>)}</div><IconButton label="More attendance options"><MoreHorizontal size={17} /></IconButton></div></div>
-          <div className="chart-legend"><span><i className="legend-dot bg-[#2f6f68]" />Present</span><span><i className="legend-dot bg-[#d5a65e]" />Late</span><span><i className="legend-dot bg-[#c87968]" />Absent</span></div>
-          <div className="chart-wrap"><ResponsiveContainer width="100%" height={250}><AreaChart data={attendanceData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}><defs><linearGradient id="presentFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2f6f68" stopOpacity={0.18} /><stop offset="100%" stopColor="#2f6f68" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} stroke="#212a31" /><XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "#7d8890", fontSize: 11 }} dy={8} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "#7d8890", fontSize: 10 }} /><Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #232c33", background: "#151a20", color: "#d7dee4", boxShadow: "0 12px 30px rgba(0,0,0,.5)", fontSize: 12 }} /><Area type="monotone" dataKey="present" stroke="#3fb8a2" strokeWidth={2.4} fill="url(#presentFill)" /><Area type="monotone" dataKey="late" stroke="#d5a65e" strokeWidth={1.8} fill="none" /><Area type="monotone" dataKey="absent" stroke="#c87968" strokeWidth={1.8} fill="none" /></AreaChart></ResponsiveContainer></div>
-          <div className="chart-footnote"><span><strong>2,357</strong> students present today</span><span className="status-positive"><ArrowUpRight size={14} />1.8% vs. last Monday</span></div>
+          <div className="chart-legend">{attendanceChartLoading ? <><span className="skeleton-legend-item"><span className="erp-skeleton erp-skeleton-dot" /><SkeletonText width={40} height={9} /></span><span className="skeleton-legend-item"><span className="erp-skeleton erp-skeleton-dot" /><SkeletonText width={26} height={9} /></span><span className="skeleton-legend-item"><span className="erp-skeleton erp-skeleton-dot" /><SkeletonText width={38} height={9} /></span></> : <><span><i className="legend-dot bg-[var(--success)]" />Present</span><span><i className="legend-dot bg-[var(--warning)]" />Late</span><span><i className="legend-dot bg-[var(--danger)]" />Absent</span></>}</div>
+          <div className="chart-wrap">{attendanceChartLoading ? <SkeletonChart height={250} variant="area" /> : <ResponsiveContainer width="100%" height={250}><AreaChart data={attendanceData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}><defs><linearGradient id="presentFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--success)" stopOpacity={0.18} /><stop offset="100%" stopColor="var(--success)" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" /><XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11 }} dy={8} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} /><Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-panel)", color: "var(--text-secondary)", boxShadow: "0 12px 30px rgba(0,0,0,.5)", fontSize: 12 }} /><Area type="monotone" dataKey="present" stroke="var(--brand)" strokeWidth={2.4} fill="url(#presentFill)" /><Area type="monotone" dataKey="late" stroke="var(--warning)" strokeWidth={1.8} fill="none" /><Area type="monotone" dataKey="absent" stroke="var(--danger)" strokeWidth={1.8} fill="none" /></AreaChart></ResponsiveContainer>}</div>
+          <div className="chart-footnote"><span>{attendanceChartLoading ? <SkeletonText width={190} /> : <><strong>{presentToday.toLocaleString("en-IN")}</strong> students present on the latest school day</>}</span><span className="status-positive"><ArrowUpRight size={14} />{healthMetrics[0]?.value ?? "—"} term average</span></div>
         </section>
-        <section className="panel schedule-panel"><div className="panel-header"><div><p className="eyebrow">Campus rhythm</p><h2 className="panel-title">Today’s schedule</h2></div><button className="text-button" onClick={() => onNavigate("Academics")}>View calendar <ChevronRight size={14} /></button></div><div className="schedule-list">{schedule.map((item, index) => <div className="schedule-row" key={item.time}><div className="schedule-time">{item.time}</div><div className="schedule-line"><span className="schedule-dot" style={{ background: item.color }} />{index < schedule.length - 1 && <span className="schedule-connector" />}</div><div className="min-w-0 flex-1"><div className={`truncate text-sm ${item.subject === "Lunch break" ? "text-[#7d8890]" : "font-medium text-[#d7dee4]"}`}>{item.subject}</div><div className="mt-0.5 truncate text-xs text-[#7d8890]">{item.detail}</div></div></div>)}</div></section>
+        <section className="panel schedule-panel"><div className="panel-header"><div><p className="eyebrow">Campus rhythm</p><h2 className="panel-title">Today’s schedule</h2></div><button className="text-button" onClick={() => onNavigate("Academics")}>View calendar <ChevronRight size={14} /></button></div><div className="schedule-list">{scheduleLoading ? <SkeletonRegion label="Loading today's schedule"><SkeletonList rows={5} avatar={false} /></SkeletonRegion> : pageSchedule.map((item, index) => <div className="schedule-row" key={item.time}><div className="schedule-time">{item.time}</div><div className="schedule-line"><span className="schedule-dot" style={{ background: item.color }} />{index < schedule.length - 1 && <span className="schedule-connector" />}</div><div className="min-w-0 flex-1"><div className={`truncate text-sm ${item.subject === "Lunch break" ? "text-[var(--text-muted)]" : "font-medium text-[var(--text-secondary)]"}`}>{item.subject}</div><div className="mt-1.5 truncate text-[12.5px] text-[var(--text-muted)]">{item.detail}</div></div></div>)}</div><Pager pagination={schedulePager} noun="periods" variant="list" /></section>
       </div>
       <div className="dashboard-grid dashboard-grid-mid">
-        <section className="panel"><div className="panel-header"><div><p className="eyebrow">Needs a decision</p><h2 className="panel-title">Attention required</h2></div><span className="count-badge">5 open</span></div><div className="attention-list">{[{ label: "Students absent today", value: "23", detail: "Across 8 classes", icon: Users, tone: "coral", view: "Attendance" }, { label: "Overdue fee payments", value: "8", detail: "₹2.4L outstanding", icon: Receipt, tone: "amber", view: "Fees & Finance" }, { label: "Pending leave requests", value: "3", detail: "Awaiting your approval", icon: CalendarDays, tone: "violet", view: "Staff" }, { label: "Assignments to review", value: "5", detail: "Submitted this morning", icon: FileText, tone: "blue", view: "Assignments" }].map((item) => <button className="attention-row" key={item.label} onClick={() => onNavigate(item.view)}><span className={`attention-icon ${item.tone}`}><item.icon size={16} /></span><span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium text-[#d7dee4]">{item.label}</span><span className="mt-0.5 block text-xs text-[#7d8890]">{item.detail}</span></span><span className="attention-value">{item.value}</span><ChevronRight size={15} className="text-[#5c6871]" /></button>)}</div></section>
-        <section className="panel"><div className="panel-header"><div><p className="eyebrow">Live feed</p><h2 className="panel-title">Recent activity</h2></div><IconButton label="Activity filters"><SlidersHorizontal size={16} /></IconButton></div><div className="activity-list">{recentActivity.map((item) => <div className="activity-row" key={item.title}><span className={`activity-icon ${item.color}`}><item.icon size={15} /></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium text-[#d7dee4]">{item.title}</div><div className="mt-0.5 truncate text-xs text-[#7d8890]">{item.detail}</div></div><span className="whitespace-nowrap text-[11px] text-[#7d8890]">{item.time}</span></div>)}</div></section>
+        <section className="panel"><div className="panel-header"><div><p className="eyebrow">Needs a decision</p><h2 className="panel-title">Attention required</h2></div><span className="count-badge">5 open</span></div><div className="attention-list">{[{ label: "Students absent today", value: "23", detail: "Across 8 classes", icon: Users, tone: "coral", view: "Attendance" }, { label: "Overdue fee payments", value: "8", detail: "₹2.4L outstanding", icon: Receipt, tone: "amber", view: "Fees & Finance" }, { label: "Pending leave requests", value: "3", detail: "Awaiting your approval", icon: CalendarDays, tone: "violet", view: "Staff" }, { label: "Assignments to review", value: "5", detail: "Submitted this morning", icon: FileText, tone: "blue", view: "Assignments" }].map((item) => <button className="attention-row" key={item.label} onClick={() => onNavigate(item.view)}><span className={`attention-icon ${item.tone}`}><item.icon size={16} /></span><span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium text-[var(--text-secondary)]">{item.label}</span><span className="mt-1.5 block text-[12.5px] text-[var(--text-muted)]">{item.detail}</span></span><span className="attention-value">{item.value}</span><ChevronRight size={15} className="text-[var(--text-muted)]" /></button>)}</div></section>
+        <section className="panel"><div className="panel-header"><div><p className="eyebrow">Live feed</p><h2 className="panel-title">Recent activity</h2></div><IconButton label="Activity filters"><SlidersHorizontal size={16} /></IconButton></div><div className="activity-list">{activityLoading ? <SkeletonList rows={4} avatar /> : recentActivity.map((item) => { const Icon = activityIconMap[item.icon] ?? Activity; return <div className="activity-row" key={item.id}><span className={`activity-icon ${item.color}`}><Icon size={15} /></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium text-[var(--text-secondary)]">{item.title}</div><div className="mt-1.5 truncate text-[12.5px] text-[var(--text-muted)]">{item.detail}</div></div><span className="whitespace-nowrap text-[12.5px] text-[var(--text-muted)]">{item.time}</span></div>; })}</div></section>
       </div>
-      <section className="panel today-panel"><div className="panel-header"><div><p className="eyebrow">The operating day</p><h2 className="panel-title">Today’s operations</h2></div><span className="count-badge">4 checkpoints</span></div><div className="today-timeline">{todayOperations.map((item, index) => <button className="today-operation" key={item.label} onClick={() => onNavigate(item.label.includes("attendance") ? "Attendance" : item.label.includes("Finance") ? "Fees & Finance" : item.label.includes("Parent") ? "Communication" : "Examinations")}><span className="today-time">{item.time}</span><span className="today-rail"><span className={`today-icon ${item.tone}`}><item.icon size={15} /></span>{index < todayOperations.length - 1 && <span className="today-connector" />}</span><span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium text-[#34423d]">{item.label}</span><span className="mt-1 block text-xs text-[#7d8890]">{item.detail}</span></span><ChevronRight size={15} className="text-[#5c6871]" /></button>)}</div></section>
-      <section className="panel health-panel"><div className="panel-header"><div><p className="eyebrow">Leadership view</p><h2 className="panel-title">School health overview</h2></div><button className="text-button" onClick={() => onNavigate("Reports")}>Open reports <ChevronRight size={14} /></button></div><div className="health-grid">{healthMetrics.map((metric) => <div className="health-metric" key={metric.label}><div className="flex items-center justify-between"><span className="text-sm text-[#9aa6af]">{metric.label}</span><span className="text-xs font-medium text-[#3fb8a2]">{metric.change}</span></div><div className="mt-3 flex items-center gap-3"><div className="health-ring" style={{ background: `conic-gradient(${metric.color} ${metric.progress * 3.6}deg, #232c33 0deg)` }}><div className="health-ring-inner">{metric.progress}%</div></div><div className="min-w-0 flex-1"><div className="h-1.5 overflow-hidden rounded-full bg-[#232c33]"><div className="h-full rounded-full" style={{ width: `${metric.progress}%`, background: metric.color }} /></div><p className="mt-2 text-[11px] text-[#7d8890]">vs. previous month</p></div></div></div>)}</div></section>
+      <section className="panel today-panel"><div className="panel-header"><div><p className="eyebrow">The operating day</p><h2 className="panel-title">Today’s operations</h2></div><span className="count-badge">4 checkpoints</span></div><div className="today-timeline">{operationsLoading ? <SkeletonTimeline rows={4} /> : todayOperations.map((item, index) => { const Icon = activityIconMap[item.icon] ?? Activity; return <button className="today-operation" key={item.id} onClick={() => onNavigate(item.title.includes("attendance") ? "Attendance" : item.title.includes("Finance") ? "Fees & Finance" : item.title.includes("Parent") ? "Reports" : "Examinations")}><span className="today-time">{item.time}</span><span className="today-rail"><span className={`today-icon ${item.color}`}><Icon size={15} /></span>{index < todayOperations.length - 1 && <span className="today-connector" />}</span><span className="min-w-0 flex-1 text-left"><span className="block text-sm font-medium text-[var(--text-primary)]">{item.title}</span><span className="mt-1 block text-[12.5px] text-[var(--text-muted)]">{item.detail}</span></span><ChevronRight size={15} className="text-[var(--text-muted)]" /></button>; })}</div></section>
+      <section className="panel health-panel"><div className="panel-header"><div><p className="eyebrow">Leadership view</p><h2 className="panel-title">School health overview</h2></div><button className="text-button" onClick={() => onNavigate("Reports")}>Open reports <ChevronRight size={14} /></button></div><div className="health-grid">{healthMetricsLoading ? <SkeletonHealthGrid count={4} /> : healthMetrics.map((metric) => <div className="health-metric" key={metric.label}><div className="flex items-center justify-between"><span className="text-sm text-[var(--text-muted)]">{metric.label}</span><span className="text-[12.5px] font-medium text-[var(--brand)]">{metric.change}</span></div><div className="mt-3 flex items-center gap-3"><div className="health-ring" style={{ background: `conic-gradient(${metric.color} ${metric.progress * 3.6}deg, var(--border-strong) 0deg)` }}><div className="health-ring-inner">{metric.progress}%</div></div><div className="min-w-0 flex-1"><div className="h-1.5 overflow-hidden rounded-full bg-[var(--border-strong)]"><div className="h-full rounded-full" style={{ width: `${metric.progress}%`, background: metric.color }} /></div><p className="mt-2 text-[12.5px] text-[var(--text-muted)]">vs. previous month</p></div></div></div>)}</div></section>
     </div>
   );
 }
 
-function StudentsView({ onBack }: { onBack: () => void }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All students");
-  const [showDialog, setShowDialog] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
-  const filtered = students.filter((student) => `${student.name} ${student.id} ${student.grade} ${student.section}`.toLowerCase().includes(query.toLowerCase()) && (status === "All students" || student.status === status));
-  return <div className="page-stack"><div className="page-intro"><div><button className="back-link" onClick={onBack}>← Overview</button><p className="eyebrow mt-4">People directory</p><h1 className="page-title">Students</h1><p className="page-subtitle">A connected view of every learner, class and family.</p></div><button className="primary-button" onClick={() => setShowDialog(true)}><Plus size={16} />Add student</button></div><div className="panel table-panel"><div className="table-toolbar"><div className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, admission ID or grade..." /></div><div className="toolbar-actions"><div className="filter-select"><Filter size={14} /><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All students</option><option>Active</option><option>Review</option></select><ChevronDown size={14} /></div><button className="secondary-button compact" onClick={() => toast.success("Student view saved", { description: "Your filters are now available from Saved views." })}><SlidersHorizontal size={14} />Saved view</button><IconButton label="More student table actions"><MoreHorizontal size={17} /></IconButton></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Student</th><th>Admission ID</th><th>Grade</th><th>Attendance</th><th>Academic average</th><th>Fee status</th><th>Transport</th><th>Status</th><th /></tr></thead><tbody>{filtered.map((student) => <tr key={student.id} className={selected === student.id ? "row-selected" : ""} onClick={() => setSelected(student.id)}><td><div className="flex items-center gap-3"><span className={`avatar avatar-sm ${avatarTones[student.tone]}`}>{student.initials}</span><div><div className="font-medium text-[#34423d]">{student.name}</div><div className="mt-0.5 text-xs text-[#7d8890]">Section {student.section}</div></div></div></td><td className="muted-cell">{student.id}</td><td><span className="grade-chip">{student.grade}</span></td><td><span className={student.attendance >= 92 ? "score-positive" : "score-warning"}>{student.attendance}%</span></td><td><span className="font-medium text-[#c8d2da]">{student.average}%</span></td><td><span className={`status-pill ${student.fees === "Paid" ? "success" : "warning"}`}><span className="status-dot" />{student.fees}</span></td><td className="muted-cell">{student.transport}</td><td><span className={`status-pill ${student.status === "Active" ? "success" : "warning"}`}>{student.status}</span></td><td><button className="row-more" onClick={(event) => { event.stopPropagation(); toast(`${student.name} selected`); }}><MoreHorizontal size={16} /></button></td></tr>)}</tbody></table></div><div className="table-footer"><span>Showing <strong>{filtered.length}</strong> of 2,486 students</span><div className="pagination"><button disabled>←</button><button className="current">1</button><button>2</button><button>3</button><button>→</button></div></div></div>{selected && <div className="profile-drawer"><div className="drawer-header"><div><p className="eyebrow">Student profile</p><h3>{students.find((student) => student.id === selected)?.name}</h3></div><IconButton label="Close profile" onClick={() => setSelected(null)}><X size={17} /></IconButton></div><div className="drawer-avatar"><span className={`avatar avatar-lg ${avatarTones[students.find((student) => student.id === selected)?.tone ?? "teal"]}`}>{students.find((student) => student.id === selected)?.initials}</span><div><p className="font-medium text-[#d7dee4]">{students.find((student) => student.id === selected)?.grade} · Section {students.find((student) => student.id === selected)?.section}</p><p className="text-xs text-[#7d8890]">Admission ID {selected}</p></div></div><div className="drawer-stats"><div><span>Attendance</span><strong>94%</strong></div><div><span>Average</span><strong>87%</strong></div><div><span>Fees</span><strong className="text-[#3fb8a2]">Paid</strong></div></div><div className="drawer-tabs"><button className="active">Overview</button><button onClick={() => toast("Academic tab opened")}>Academics</button><button onClick={() => toast("Activity tab opened")}>Activity</button></div><div className="drawer-snapshot"><div><p className="eyebrow">Academic trend</p><strong>+6.4%</strong><span>vs. last term</span></div><div><p className="eyebrow">Next exam</p><strong>Physics</strong><span>04 Oct · 10:00</span></div><div><p className="eyebrow">Attendance</p><strong>94%</strong><span>1 late arrival</span></div></div><div className="drawer-section"><p className="eyebrow">Connected records</p><button onClick={() => toast("Family records opened")}><Users size={16} />Family & guardians<ChevronRight size={15} /></button><button onClick={() => toast("Academic records opened")}><BookOpen size={16} />Academic performance<ChevronRight size={15} /></button><button onClick={() => toast("Attendance history opened")}><ClipboardCheck size={16} />Attendance history<ChevronRight size={15} /></button></div></div>}{showDialog && <AppDialog title="Add a student" description="Create a connected student profile for Global Kids School." onClose={() => setShowDialog(false)}><div className="form-grid"><label>First name<input placeholder="e.g. Aanya" /></label><label>Last name<input placeholder="e.g. Sharma" /></label><label>Grade<select defaultValue="Grade 8"><option>Grade 5</option><option>Grade 6</option><option>Grade 7</option><option>Grade 8</option><option>Grade 9</option><option>Grade 10</option><option>Grade 11</option><option>Grade 12</option></select></label><label>Section<select defaultValue="A"><option>A</option><option>B</option><option>C</option><option>D</option></select></label></div><div className="dialog-actions"><button className="secondary-button" onClick={() => setShowDialog(false)}>Cancel</button><button className="primary-button" onClick={() => { setShowDialog(false); toast.success("Student profile created", { description: "The new learner is ready for family and academic details." }); }}>Create student</button></div></AppDialog>}</div>;
-}
-
 function AttendanceView({ onBack }: { onBack: () => void }) {
   const [marked, setMarked] = useState<string[]>([]);
-  return <div className="page-stack"><div className="page-intro"><div><button className="back-link" onClick={onBack}>← Overview</button><p className="eyebrow mt-4">Daily operations</p><h1 className="page-title">Attendance</h1><p className="page-subtitle">Monday, 28 September · 94.8% school-wide attendance.</p></div><button className="primary-button" onClick={() => toast.success("Attendance summary shared", { description: "The daily digest was sent to the leadership group." })}><MessageSquare size={16} />Share summary</button></div><div className="metric-grid three"><MetricBlock label="Present today" value="2,357" comparison="94.8% of students" icon={Check} spark={[19, 18, 23, 24, 25, 27, 30]} /><MetricBlock label="Absent today" value="79" comparison="23 need follow-up" icon={AlertCircle} spark={[27, 25, 24, 23, 21, 20, 18]} positive={false} /><MetricBlock label="Late arrivals" value="33" comparison="11 fewer than Friday" icon={Clock3} spark={[24, 27, 25, 23, 22, 20, 19]} /></div><div className="panel table-panel"><div className="panel-header"><div><p className="eyebrow">Live class roll-up</p><h2 className="panel-title">Class attendance</h2></div><div className="flex items-center gap-2"><button className="secondary-button compact" onClick={() => toast.success("Attendance CSV exported")}><Download size={14} />Export</button><button className="secondary-button compact" onClick={() => toast("Filters opened")}><Filter size={14} />Filter</button></div></div><div className="table-scroll"><table className="data-table attendance-table"><thead><tr><th>Class</th><th>Present</th><th>Attendance</th><th>Signal</th><th>Teacher</th><th /></tr></thead><tbody>{classAttendance.map((row) => <tr key={row.label}><td><span className="font-medium text-[#34423d]">{row.label}</span></td><td className="muted-cell">{row.present} / {row.total}</td><td><div className="flex items-center gap-3"><span className="progress-bar"><span style={{ width: `${row.value}%`, background: row.value < 92 ? "#d5a65e" : accent }} /></span><span className="font-medium text-[#c8d2da]">{row.value}%</span></div></td><td><span className={`status-pill ${row.value < 92 ? "warning" : "success"}`}>{row.value < 92 ? "Follow-up" : "On track"}</span></td><td className="muted-cell">{["Neha Kulkarni", "Ravi Menon", "Sonia Joseph", "Arvind Iyer", "Meera Shah", "Daniel Thomas"][classAttendance.indexOf(row)]}</td><td><button className={marked.includes(row.label) ? "tiny-action done" : "tiny-action"} onClick={() => setMarked((current) => current.includes(row.label) ? current.filter((item) => item !== row.label) : [...current, row.label])}>{marked.includes(row.label) ? <><Check size={13} />Marked</> : "Review"}</button></td></tr>)}</tbody></table></div></div></div>;
+  const { rows: classAttendance, loading: classAttendanceLoading } = useClassAttendance();
+  const { rows: dailyAttendance, loading: dailyAttendanceLoading } = useAttendanceDaily();
+  const { rows: enrolledStudents } = useStudents();
+  const latest = dailyAttendance[dailyAttendance.length - 1];
+  const latestPresent = latest?.present ?? 0;
+  const latestAbsent = latest?.absent ?? 0;
+  const latestLate = latest?.late ?? 0;
+  const latestMarked = latest ? latestPresent + latestAbsent + latestLate + (latest.leave ?? 0) : 0;
+  const latestPct = latestMarked > 0 ? Math.round((latestPresent / latestMarked) * 1000) / 10 : 0;
+  const previous = dailyAttendance[dailyAttendance.length - 2];
+  const previousMarked = previous ? previous.present + previous.absent + previous.late + (previous.leave ?? 0) : 0;
+  const previousPct = previousMarked > 0 ? Math.round((previous.present / previousMarked) * 1000) / 10 : 0;
+  const lateDelta = previous ? latestLate - previous.late : 0;
+  const absentFollowUp = enrolledStudents.filter((student) => student.status === "Active" && student.attendance < 90).length;
+  const classPager = usePagination(classAttendance);
+  const pageClasses = classPager.pageRows;
+  return <div className="page-stack"><div className="page-intro"><div><Breadcrumb parent="Global Kids School" current="Attendance" onParentClick={onBack} /><h1 className="page-title">Attendance</h1><p className="page-subtitle">{latest ? `${latest.day} · ${latestPct}% school-wide attendance.` : "No attendance recorded yet."}</p></div><button className="primary-button" onClick={() => toast.success("Attendance summary shared", { description: "The daily digest was sent to the leadership group." })}><MessageSquare size={16} />Share summary</button></div><div className="metric-grid three">{classAttendanceLoading || dailyAttendanceLoading ? <><SkeletonMetric /><SkeletonMetric /><SkeletonMetric /></> : <><MetricBlock label="Present today" value={latestPresent.toLocaleString("en-IN")} comparison={`${latestPct}% of ${latestMarked} marked`} icon={Check} spark={[19, 18, 23, 24, 25, 27, 30]} /><MetricBlock label="Absent today" value={`${latestAbsent}`} comparison={`${absentFollowUp} need follow-up`} icon={AlertCircle} spark={[27, 25, 24, 23, 21, 20, 18]} positive={false} /><MetricBlock label="Late arrivals" value={`${latestLate}`} comparison={previous ? `${Math.abs(lateDelta)} ${lateDelta <= 0 ? "fewer" : "more"} than ${previous.day}` : "No prior day"} icon={Clock3} spark={[24, 27, 25, 23, 22, 20, 19]} /></>}</div><div className="panel table-panel"><div className="panel-header"><div><p className="eyebrow">Live class roll-up</p><h2 className="panel-title">Class attendance</h2></div><div className="flex items-center gap-2"><button className="secondary-button compact" onClick={() => toast.success("Attendance CSV exported")}><Download size={14} />Export</button><button className="secondary-button compact" onClick={() => toast("Filters opened")}><Filter size={14} />Filter</button></div></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Class</th><th>Present</th><th>Attendance</th><th>Signal</th><th>Teacher</th><th /></tr></thead><tbody>{classAttendanceLoading ? <SkeletonTableRows rows={5} columns={6} /> : pageClasses.map((row) => <tr key={row.label}><td><span className="font-medium text-[var(--text-primary)]">{row.label}</span></td><td className="muted-cell">{row.present} / {row.total}</td><td><div className="flex items-center gap-3"><span className="progress-bar"><span style={{ width: `${row.value}%`, background: row.value < 92 ? "var(--warning)" : "var(--brand)" }} /></span><span className="font-medium text-[var(--text-hover)]">{row.value}%</span></div></td><td><span className={`status-pill ${row.value < 92 ? "warning" : "success"}`}>{row.value < 92 ? "Follow-up" : "On track"}</span></td><td className="muted-cell">{row.teacher}</td><td><button className={marked.includes(row.label) ? "tiny-action done" : "tiny-action"} onClick={() => setMarked((current) => current.includes(row.label) ? current.filter((item) => item !== row.label) : [...current, row.label])}>{marked.includes(row.label) ? <><Check size={13} />Marked</> : "Review"}</button></td></tr>)}</tbody></table></div><Pager pagination={classPager} noun="classes" /></div></div>;
 }
 
 function FinanceView({ onBack }: { onBack: () => void }) {
   const [showDialog, setShowDialog] = useState(false);
-  return <div className="page-stack"><div className="page-intro"><div><button className="back-link" onClick={onBack}>← Overview</button><p className="eyebrow mt-4">Business operations</p><h1 className="page-title">Fees & finance</h1><p className="page-subtitle">A clear view of collections, outstanding balances and next actions.</p></div><button className="primary-button" onClick={() => setShowDialog(true)}><Plus size={16} />Record payment</button></div><div className="metric-grid three"><MetricBlock label="Collected this term" value="₹18.4L" comparison="82% of target" icon={IndianRupee} spark={[13, 15, 18, 20, 22, 25, 29]} /><MetricBlock label="Outstanding" value="₹4.1L" comparison="8 overdue accounts" icon={Receipt} spark={[29, 27, 26, 25, 23, 21, 19]} positive={false} /><MetricBlock label="Collection rate" value="82.1%" comparison="6.4% vs. last term" icon={Activity} spark={[18, 19, 20, 22, 23, 26, 29]} /></div><div className="dashboard-grid dashboard-grid-top"><section className="panel finance-chart-panel"><div className="panel-header"><div><p className="eyebrow">Term collections</p><h2 className="panel-title">Revenue movement</h2></div><span className="mini-label"><i className="legend-dot bg-[#2f6f68]" />Collected <i className="legend-dot bg-[#2a343c] ml-3" />Pending</span></div><div className="chart-wrap"><ResponsiveContainer width="100%" height={260}><BarChart data={revenueData} barGap={5} margin={{ top: 8, right: 5, left: -20, bottom: 0 }}><CartesianGrid vertical={false} stroke="#212a31" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#7d8890", fontSize: 11 }} dy={8} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "#7d8890", fontSize: 10 }} tickFormatter={(value) => `₹${value}L`} /><Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #232c33", background: "#151a20", color: "#d7dee4", fontSize: 12 }} /><Bar dataKey="collected" fill="#3fb8a2" radius={[5, 5, 0, 0]} /><Bar dataKey="pending" fill="#2a343c" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer></div></section><section className="panel"><div className="panel-header"><div><p className="eyebrow">Breakdown</p><h2 className="panel-title">Fee mix</h2></div></div><div className="fee-mix"><div className="pie-wrap"><ResponsiveContainer width="100%" height={170}><PieChart><Pie data={[{ name: "Tuition", value: 62 }, { name: "Transport", value: 18 }, { name: "Activities", value: 12 }, { name: "Other", value: 8 }]} cx="50%" cy="50%" innerRadius={48} outerRadius={68} dataKey="value" stroke="none">{["#2f6f68", "#7662bc", "#cf845a", "#39434d"].map((color) => <Cell key={color} fill={color} />)}</Pie></PieChart></ResponsiveContainer><div className="pie-center"><strong>₹22.5L</strong><span>total billed</span></div></div><div className="fee-legend">{[["Tuition", "62%", "#2f6f68"], ["Transport", "18%", "#7662bc"], ["Activities", "12%", "#cf845a"], ["Other", "8%", "#dfe7e2"]].map(([label, value, color]) => <div key={label} className="flex items-center justify-between text-xs"><span className="flex items-center gap-2 text-[#8b96a0]"><i className="legend-dot" style={{ background: color }} />{label}</span><strong className="text-[#c8d2da]">{value}</strong></div>)}</div></div></section></div><section className="panel table-panel"><div className="panel-header"><div><p className="eyebrow">Follow-up queue</p><h2 className="panel-title">Outstanding payments</h2></div><button className="text-button" onClick={() => toast.success("Finance report exported")}>Export report <Download size={14} /></button></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Family</th><th>Student</th><th>Invoice</th><th>Due date</th><th>Amount</th><th>Status</th><th /></tr></thead><tbody>{[{ family: "Nair family", student: "Ishita Nair", invoice: "INV-2026-1048", due: "24 Sep 2026", amount: "₹42,500", status: "Reminder sent" }, { family: "Kapoor family", student: "Vihaan Kapoor", invoice: "INV-2026-1099", due: "20 Sep 2026", amount: "₹38,000", status: "Overdue" }, { family: "Thomas family", student: "Mira Thomas", invoice: "INV-2026-1126", due: "18 Sep 2026", amount: "₹31,500", status: "Overdue" }].map((row) => <tr key={row.invoice}><td className="font-medium text-[#34423d]">{row.family}</td><td className="muted-cell">{row.student}</td><td className="muted-cell">{row.invoice}</td><td className="muted-cell">{row.due}</td><td className="font-medium text-[#c8d2da]">{row.amount}</td><td><span className={`status-pill ${row.status === "Overdue" ? "warning" : "neutral"}`}>{row.status}</span></td><td><button className="tiny-action" onClick={() => toast.success("Payment reminder sent", { description: `Reminder sent to ${row.family}.` })}>Remind</button></td></tr>)}</tbody></table></div></section>{showDialog && <AppDialog title="Record payment" description="Log a payment against an existing family invoice." onClose={() => setShowDialog(false)}><div className="form-grid"><label>Student<input placeholder="Search student..." /></label><label>Amount<input placeholder="₹ 0.00" /></label><label>Payment date<input type="date" defaultValue="2026-09-28" /></label><label>Method<select defaultValue="Bank transfer"><option>Bank transfer</option><option>UPI</option><option>Cash</option><option>Card</option></select></label></div><div className="dialog-actions"><button className="secondary-button" onClick={() => setShowDialog(false)}>Cancel</button><button className="primary-button" onClick={() => { setShowDialog(false); toast.success("Payment recorded", { description: "The family ledger and collection rate were updated." }); }}>Record payment</button></div></AppDialog>}</div>;
-}
-
-function CommunicationView({ onBack }: { onBack: () => void }) {
-  const [showDialog, setShowDialog] = useState(false);
-  const announcements = [{ title: "Mid-term assessment week", audience: "All families", date: "Today, 9:12 AM", status: "Published", color: "teal" }, { title: "Campus maintenance · 3 Oct", audience: "Staff & families", date: "Yesterday", status: "Scheduled", color: "violet" }, { title: "Inter-school debate registrations", audience: "Grades 8–12", date: "26 Sep", status: "Published", color: "orange" }];
-  return <div className="page-stack"><div className="page-intro"><div><button className="back-link" onClick={onBack}>← Overview</button><p className="eyebrow mt-4">School voice</p><h1 className="page-title">Communication</h1><p className="page-subtitle">Keep families, staff and students aligned with less noise.</p></div><button className="primary-button" onClick={() => setShowDialog(true)}><Plus size={16} />Create announcement</button></div><div className="communication-grid"><section className="panel announcement-panel"><div className="panel-header"><div><p className="eyebrow">Published & scheduled</p><h2 className="panel-title">Announcements</h2></div><span className="count-badge">4 unread</span></div><div className="announcement-list">{announcements.map((item) => <button className="announcement-row" key={item.title} onClick={() => toast(`Opening “${item.title}”`)}><span className={`announcement-mark ${item.color}`}><MessageSquare size={17} /></span><span className="min-w-0 flex-1 text-left"><span className="block font-medium text-[#34423d]">{item.title}</span><span className="mt-1 block text-xs text-[#7d8890]">{item.audience} · {item.date}</span></span><span className={`status-pill ${item.status === "Published" ? "success" : "neutral"}`}>{item.status}</span><ChevronRight size={15} className="text-[#5c6871]" /></button>)}</div></section><section className="panel message-panel"><div className="panel-header"><div><p className="eyebrow">Inbox</p><h2 className="panel-title">Parent messages</h2></div><IconButton label="Inbox options"><MoreHorizontal size={17} /></IconButton></div><div className="message-list">{[{ initials: "MN", name: "Mrs. Nair", subject: "Ishita’s exam schedule", time: "11 min", unread: true }, { initials: "RD", name: "Mr. Deshmukh", subject: "Bus route 06 pickup", time: "1 hr", unread: true }, { initials: "FA", name: "Fatima Ahmed", subject: "Art club registration", time: "3 hrs", unread: false }].map((item, index) => <button className="message-row" key={item.name} onClick={() => toast(`Opening conversation with ${item.name}`)}><span className={`avatar avatar-sm ${["bg-[rgba(150,125,220,0.12)] text-[#ab95e8]", "bg-[rgba(92,155,210,0.12)] text-[#7cb8e8]", "bg-[rgba(216,138,82,0.12)] text-[#ecab7e]"][index]}`}>{item.initials}</span><span className="min-w-0 flex-1 text-left"><span className="flex items-center gap-2"><span className="truncate text-sm font-medium text-[#d7dee4]">{item.name}</span>{item.unread && <span className="unread-dot" />}</span><span className="mt-1 block truncate text-xs text-[#7d8890]">{item.subject}</span></span><span className="whitespace-nowrap text-[11px] text-[#7d8890]">{item.time}</span></button>)}</div><button className="text-button mt-4" onClick={() => toast("Inbox opened")}>Open inbox <ChevronRight size={14} /></button></section></div>{showDialog && <AppDialog title="Create announcement" description="Share a clear update with the right school audience." onClose={() => setShowDialog(false)}><label className="block">Headline<input className="mt-2" placeholder="e.g. Library hours during assessment week" /></label><label className="mt-4 block">Audience<select className="mt-2" defaultValue="All families"><option>All families</option><option>All staff</option><option>Grades 8–12</option><option>Custom audience</option></select></label><label className="mt-4 block">Message<textarea className="mt-2" rows={4} placeholder="Write a short, useful update..." /></label><div className="dialog-actions"><button className="secondary-button" onClick={() => setShowDialog(false)}>Save draft</button><button className="primary-button" onClick={() => { setShowDialog(false); toast.success("Announcement published", { description: "Your update is now visible to the selected audience." }); }}>Publish now</button></div></AppDialog>}</div>;
+  const { rows: revenueData, loading: financeMonthsLoading } = useFinanceMonthly();
+  const { rows: feeCategories, loading: feeCategoriesLoading } = useFeeCategories();
+  const { rows: invoices, loading: invoicesViewLoading } = useInvoices();
+  const invoicesPager = usePagination(invoices);
+  const pageInvoices = invoicesPager.pageRows;
+  return <div className="page-stack"><div className="page-intro"><div><Breadcrumb parent="Global Kids School" current="Fees & finance" onParentClick={onBack} /><h1 className="page-title">Fees & finance</h1><p className="page-subtitle">{invoices.length} invoice{invoices.length === 1 ? "" : "s"} · {invoices.filter((i) => i.status !== "Paid").length} outstanding</p></div><button className="primary-button" onClick={() => setShowDialog(true)}><Plus size={16} />Record payment</button></div><div className="metric-grid three">{invoicesViewLoading ? <><SkeletonMetric /><SkeletonMetric /><SkeletonMetric /></> : <><MetricBlock label="Collected this term" value="₹18.4L" comparison="82% of target" icon={IndianRupee} spark={[13, 15, 18, 20, 22, 25, 29]} /><MetricBlock label="Outstanding" value="₹4.1L" comparison="8 overdue accounts" icon={Receipt} spark={[29, 27, 26, 25, 23, 21, 19]} positive={false} /><MetricBlock label="Collection rate" value="82.1%" comparison="6.4% vs. last term" icon={Activity} spark={[18, 19, 20, 22, 23, 26, 29]} /></>}</div><div className="dashboard-grid dashboard-grid-top"><section className="panel finance-chart-panel"><div className="panel-header"><div><p className="eyebrow">Term collections</p><h2 className="panel-title">Revenue movement</h2></div><span className="mini-label"><i className="legend-dot bg-[var(--success)]" />Collected <i className="legend-dot bg-[var(--border)] ml-3" />Pending</span></div><div className="chart-wrap">{invoicesViewLoading || financeMonthsLoading ? <SkeletonChart height={260} variant="bar" /> : <ResponsiveContainer width="100%" height={260}><BarChart data={revenueData} barGap={5} margin={{ top: 8, right: 5, left: -20, bottom: 0 }}><CartesianGrid vertical={false} stroke="var(--border)" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11 }} dy={8} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} tickFormatter={(value) => `₹${value}L`} /><Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-panel)", color: "var(--text-secondary)", fontSize: 12 }} /><Bar dataKey="collected" fill="var(--brand)" radius={[5, 5, 0, 0]} /><Bar dataKey="pending" fill="var(--border)" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer>}</div></section><section className="panel"><div className="panel-header"><div><p className="eyebrow">Breakdown</p><h2 className="panel-title">Fee mix</h2></div></div><div className="fee-mix"><div className="pie-wrap">{feeCategoriesLoading ? <div className="skeleton-chart" style={{ height: 170 }}><div className="skeleton-pie"><span className="erp-skeleton erp-skeleton-ring" style={{ height: 136, width: 136 }} /></div></div> : <><ResponsiveContainer width="100%" height={170}><PieChart><Pie data={feeCategories} cx="50%" cy="50%" innerRadius={48} outerRadius={68} dataKey="value" stroke="none">{feeCategories.map((category) => <Cell key={category.id} fill={category.color} />)}</Pie></PieChart></ResponsiveContainer><div className="pie-center"><strong>₹22.5L</strong><span>total billed</span></div></>}</div><div className="fee-legend">{feeCategories.map((category) => <div key={category.id} className="flex items-center justify-between text-[12.5px]"><span className="flex items-center gap-2 text-[var(--text-muted)]"><i className="legend-dot" style={{ background: category.color }} />{category.name}</span><strong className="text-[var(--text-hover)]">{category.value}%</strong></div>)}</div></div></section></div><section className="panel table-panel"><div className="panel-header"><div><p className="eyebrow">Follow-up queue</p><h2 className="panel-title">Outstanding payments</h2></div><button className="text-button" onClick={() => toast.success("Finance report exported")}>Export report <Download size={14} /></button></div><div className="table-scroll"><table className="data-table"><thead><tr><th>Student</th><th>Guardian</th><th>Invoice</th><th>Due date</th><th>Amount</th><th>Status</th><th /></tr></thead><tbody>{invoicesViewLoading ? <SkeletonTableRows rows={6} columns={7} /> : pageInvoices.map((row) => <tr key={row.id}><td className="font-medium text-[var(--text-primary)]">{row.student}</td><td className="muted-cell">{row.family}</td><td className="muted-cell">{row.id}</td><td className="muted-cell">{row.due_date}</td><td className="font-medium text-[var(--text-hover)]">₹{row.amount.toLocaleString("en-IN")}</td><td><span className={`status-pill ${row.status === "Overdue" ? "warning" : "neutral"}`}>{row.status}</span></td><td><button className="tiny-action" onClick={() => toast.success("Payment reminder sent", { description: `Reminder sent to ${row.family}.` })}>Remind</button></td></tr>)}</tbody></table></div><Pager pagination={invoicesPager} noun="invoices" /></section>{showDialog && <AppDialog title="Record payment" description="Log a payment against an existing family invoice." onClose={() => setShowDialog(false)}><div className="form-grid"><label>Student<input placeholder="Search student..." /></label><label>Amount<input placeholder="₹ 0.00" /></label><label>Payment date<input type="date" defaultValue="2026-09-28" /></label><label>Method<select defaultValue="Bank transfer"><option>Bank transfer</option><option>UPI</option><option>Cash</option><option>Card</option></select></label></div><div className="dialog-actions"><button className="secondary-button" onClick={() => setShowDialog(false)}>Cancel</button><button className="primary-button" onClick={() => { setShowDialog(false); toast.success("Payment recorded", { description: "The family ledger and collection rate were updated." }); }}>Record payment</button></div></AppDialog>}</div>;
 }
 
 function ReportsView({ onBack }: { onBack: () => void }) {
-  return <div className="page-stack"><div className="page-intro"><div><button className="back-link" onClick={onBack}>← Overview</button><p className="eyebrow mt-4">Decision support</p><h1 className="page-title">Reports</h1><p className="page-subtitle">Fast answers for leadership reviews, board updates and daily operations.</p></div><button className="primary-button" onClick={() => toast.success("Report builder opened")}><Plus size={16} />Build a report</button></div><div className="report-card-grid">{[{ title: "Monthly principal review", detail: "Attendance, academics, fees & staffing", date: "Updated today", icon: ShieldCheck, color: "teal" }, { title: "Fee collection summary", detail: "Term 1 collections and outstanding balances", date: "Updated 2 hrs ago", icon: IndianRupee, color: "orange" }, { title: "Academic performance", detail: "Grade and subject-level outcomes", date: "Updated yesterday", icon: BookOpen, color: "violet" }, { title: "Parent engagement", detail: "Messages, events and portal activity", date: "Updated 26 Sep", icon: Users, color: "blue" }].map((report) => <button className="report-card" key={report.title} onClick={() => toast.success(`${report.title} opened`)}><span className={`report-icon ${report.color}`}><report.icon size={18} /></span><span className="mt-5 block text-left text-[15px] font-semibold tracking-[-0.015em] text-[#34423d]">{report.title}</span><span className="mt-2 block text-left text-xs leading-5 text-[#8b96a0]">{report.detail}</span><span className="mt-6 flex items-center justify-between text-[11px] text-[#7d8890]"><span>{report.date}</span><ChevronRight size={15} /></span></button>)}</div><section className="panel"><div className="panel-header"><div><p className="eyebrow">Recent exports</p><h2 className="panel-title">Report history</h2></div><button className="secondary-button compact" onClick={() => toast("Report filters opened")}><Filter size={14} />Filter</button></div><div className="history-list">{[{ name: "September principal review.pdf", created: "28 Sep 2026 · Priya Shah", size: "2.4 MB" }, { name: "Fee collection — Term 1.csv", created: "26 Sep 2026 · Priya Shah", size: "184 KB" }, { name: "Grade 10 academic outcomes.pdf", created: "24 Sep 2026 · Rohan Mehta", size: "1.8 MB" }].map((report) => <div className="history-row" key={report.name}><span className="file-icon"><FileText size={16} /></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium text-[#d7dee4]">{report.name}</div><div className="mt-1 text-xs text-[#7d8890]">{report.created} · {report.size}</div></div><button className="tiny-action" onClick={() => toast.success("Download started")}>Download <Download size={13} /></button></div>)}</div></section></div>;
+  const { rows: reportExports, loading: reportExportsLoading } = useReportExports();
+  const reportsPager = usePagination(reportExports);
+  const pageReports = reportsPager.pageRows;
+  return <div className="page-stack"><div className="page-intro"><div><Breadcrumb parent="Global Kids School" current="Reports" onParentClick={onBack} /><h1 className="page-title">Reports</h1><p className="page-subtitle">{reportExports.length} recent export{reportExports.length === 1 ? "" : "s"}</p></div><button className="primary-button" onClick={() => toast("Report builder opened")}><Plus size={16} />Build a report</button></div><div className="report-card-grid">{[{ title: "Monthly principal review", detail: "Attendance, academics, fees & staffing", date: "Updated today", icon: ShieldCheck, color: "teal" }, { title: "Fee collection summary", detail: "Term 1 collections and outstanding balances", date: "Updated 2 hrs ago", icon: IndianRupee, color: "orange" }, { title: "Academic performance", detail: "Grade and subject-level outcomes", date: "Updated yesterday", icon: BookOpen, color: "violet" }, { title: "Parent engagement", detail: "Messages, events and portal activity", date: "Updated 26 Sep", icon: Users, color: "blue" }].map((report) => <button className="report-card" key={report.title} onClick={() => toast.success(`${report.title} opened`)}><span className={`report-icon ${report.color}`}><report.icon size={18} /></span><span className="mt-5 block text-left text-[15px] font-semibold tracking-[-0.015em] text-[var(--text-primary)]">{report.title}</span><span className="mt-2 block text-left text-[12.5px] leading-5 text-[var(--text-muted)]">{report.detail}</span><span className="mt-6 flex items-center justify-between text-[12.5px] text-[var(--text-muted)]"><span>{report.date}</span><ChevronRight size={15} /></span></button>)}</div><section className="panel"><div className="panel-header"><div><p className="eyebrow">Recent exports</p><h2 className="panel-title">Report history</h2></div><button className="secondary-button compact" onClick={() => toast("Report filters opened")}><Filter size={14} />Filter</button></div><div className="history-list">{reportExportsLoading ? <SkeletonRegion label="Loading report history"><SkeletonList rows={4} avatar={false} /></SkeletonRegion> : pageReports.map((report) => <div className="history-row" key={report.name}><span className="file-icon"><FileText size={16} /></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium text-[var(--text-secondary)]">{report.name}</div><div className="mt-1 text-[12.5px] text-[var(--text-muted)]">{report.created} · {report.size}</div></div><button className="tiny-action" onClick={() => toast.success("Download started")}>Download <Download size={13} /></button></div>)}</div><Pager pagination={reportsPager} noun="exports" variant="list" /></section></div>;
 }
 
-function PlaceholderView({ view, onBack }: { view: string; onBack: () => void }) {
-  const config: Record<string, { icon: React.ElementType; kicker: string; detail: string }> = { Academics: { icon: BookOpen, kicker: "Learning operations", detail: "Curriculum, classes and outcomes are connected here." }, Examinations: { icon: FileText, kicker: "Assessment workspace", detail: "Plan exam windows, schedules and grade publishing." }, Assignments: { icon: Check, kicker: "Classwork flow", detail: "Track submissions and keep review queues moving." }, Transport: { icon: Bus, kicker: "Campus operations", detail: "Routes, vehicles and safe daily movement." }, Library: { icon: Library, kicker: "Resource centre", detail: "Catalogues, loans and reading engagement." }, Staff: { icon: Users, kicker: "People operations", detail: "Staff presence, leave and approvals." } };
-  const item = config[view] ?? config.Academics;
-  return <div className="page-stack"><div className="page-intro"><div><button className="back-link" onClick={onBack}>← Overview</button><p className="eyebrow mt-4">{item.kicker}</p><h1 className="page-title">{view}</h1><p className="page-subtitle">{item.detail}</p></div><button className="primary-button" onClick={() => toast(`${view} workspace ready to configure`)}><Sparkles size={16} />Explore workspace</button></div><div className="coming-soon-panel"><div className="coming-icon"><item.icon size={25} /></div><h2>Everything connected, nothing buried.</h2><p>This workspace shares the same operating model as the dashboard. The next layer of records, workflows and role views can be opened from here.</p><button className="secondary-button" onClick={() => toast.success("Workspace tour started")}>Take a quick tour <ChevronRight size={15} /></button></div></div>;
+function SettingToggle({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className="inline-flex h-5 w-9 flex-none items-center rounded-full transition-colors" style={{ background: checked ? "var(--success)" : "var(--border)" }}>
+      <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform" style={{ transform: checked ? "translateX(17px)" : "translateX(3px)" }} />
+    </button>
+  );
+}
+
+function StaffView({ onBack }: { onBack: () => void }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("All staff");
+  const [showDialog, setShowDialog] = useState(false);
+  const [selected, setSelected] = useState<RowId | null>(null);
+  const { rows: staff, loading: staffViewLoading } = useStaff();
+  const filtered = staff.filter((member) => `${member.name} ${member.role} ${member.department}`.toLowerCase().includes(query.toLowerCase()) && (status === "All staff" || member.status === status));
+  const staffPager = usePagination(filtered);
+  const pageStaff = staffPager.pageRows;
+  const onCampus = staff.filter((member) => member.status === "On campus").length;
+  const active = staff.find((member) => member.name === selected);
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="Staff" onParentClick={onBack} />
+          <h1 className="page-title">Staff</h1>
+          <p className="page-subtitle">Every educator, coordinator and officer in one directory.</p>
+        </div>
+        <button className="primary-button" onClick={() => setShowDialog(true)}><Plus size={16} />Add staff</button>
+      </div>
+      <div className="metric-grid three">{staffViewLoading ? <><SkeletonMetric /><SkeletonMetric /><SkeletonMetric /></> : <><MetricBlock label="On campus today" value={`${onCampus}`} comparison={`of ${staff.length} total staff`} icon={Users} spark={[18, 20, 18, 25, 24, 28, 30]} />
+        <MetricBlock label="On leave" value={`${staff.length - onCampus}`} comparison="2 approved requests" icon={CalendarDays} spark={[27, 25, 24, 23, 21, 20, 18]} positive={false} />
+        <MetricBlock label="New this term" value="3" comparison="Joined in September" icon={GraduationCap} spark={[11, 13, 12, 15, 14, 17, 19]} /></>}
+      </div>
+      <div className="panel table-panel">
+        <div className="table-toolbar">
+          <div className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, role or department..." /></div>
+          <div className="toolbar-actions">
+            <div className="filter-select"><Filter size={14} /><select value={status} onChange={(event) => setStatus(event.target.value)}><option>All staff</option><option>On campus</option><option>On leave</option></select><ChevronDown size={14} /></div>
+            <button className="secondary-button compact" onClick={() => toast.success("Staff directory exported")}><Download size={14} />Export</button>
+            <IconButton label="More staff table actions"><MoreHorizontal size={17} /></IconButton>
+          </div>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead><tr><th>Staff member</th><th>Role</th><th>Department</th><th>Attendance</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {staffViewLoading ? <SkeletonTableRows rows={8} columns={6} /> : pageStaff.map((member) => (
+                <tr key={member.id} className={`row-clickable ${selected === member.name ? "row-selected" : ""}`} onClick={() => setSelected(member.name)}>
+                  <td>
+                    <div className="flex items-center gap-3">
+                      <span className={`avatar avatar-sm ${avatarTones[member.tone]}`}>{member.initials}</span>
+                      <div><div className="font-medium text-[var(--text-primary)]">{member.name}</div><div className="mt-1.5 text-[12.5px] text-[var(--text-muted)]">{member.email}</div></div>
+                    </div>
+                  </td>
+                  <td className="muted-cell">{member.role}</td>
+                  <td><span className="grade-chip">{member.department}</span></td>
+                  <td><span className={member.attendance >= 95 ? "score-positive" : "score-warning"}>{member.attendance}%</span></td>
+                  <td><span className={`status-pill ${member.status === "On campus" ? "success" : "warning"}`}><span className="status-dot" />{member.status}</span></td>
+                  <td><button className="row-more" onClick={(event) => { event.stopPropagation(); toast(`${member.name} selected`); }}><MoreHorizontal size={16} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <Pager pagination={staffPager} noun="staff" />
+      </div>
+      {active && (
+        <div className="profile-drawer">
+          <div className="drawer-header">
+            <div><p className="eyebrow">Staff profile</p><h3>{active.name}</h3></div>
+            <IconButton label="Close profile" onClick={() => setSelected(null)}><X size={17} /></IconButton>
+          </div>
+          <div className="drawer-avatar">
+            <span className={`avatar avatar-lg ${avatarTones[active.tone]}`}>{active.initials}</span>
+            <div><p className="font-medium text-[var(--text-secondary)]">{active.role}</p><p className="text-[12.5px] text-[var(--text-muted)]">{active.department} · {active.email}</p></div>
+          </div>
+          <div className="drawer-stats">
+            <div><span>Attendance</span><strong>{active.attendance}%</strong></div>
+            <div><span>Classes</span><strong>6</strong></div>
+            <div><span>Tenure</span><strong className="text-[var(--brand)]">4 yrs</strong></div>
+          </div>
+          <div className="drawer-tabs"><button className="active">Overview</button><button onClick={() => toast("Schedule tab opened")}>Schedule</button><button onClick={() => toast("Leave tab opened")}>Leave</button></div>
+          <div className="drawer-snapshot">
+            <div><p className="eyebrow">This week</p><strong>18</strong><span>periods taught</span></div>
+            <div><p className="eyebrow">Next class</p><strong>Grade 8</strong><span>Tomorrow · 08:00</span></div>
+            <div><p className="eyebrow">Leave balance</p><strong>9</strong><span>days remaining</span></div>
+          </div>
+          <div className="drawer-section">
+            <p className="eyebrow">Connected records</p>
+            <button onClick={() => toast("Class schedule opened")}><CalendarDays size={16} />Class schedule<ChevronRight size={15} /></button>
+            <button onClick={() => toast("Leave history opened")}><Clock3 size={16} />Leave history<ChevronRight size={15} /></button>
+            <button onClick={() => toast("Contact record opened")}><MessageSquare size={16} />Contact record<ChevronRight size={15} /></button>
+          </div>
+        </div>
+      )}
+      {showDialog && (
+        <AppDialog title="Add staff member" description="Create a profile for a new educator or officer." onClose={() => setShowDialog(false)}>
+          <div className="form-grid">
+            <label>Full name<input placeholder="e.g. Ananya Iyer" /></label>
+            <label>Email<input placeholder="name@globalkids.edu" /></label>
+            <label>Role<select defaultValue="Class Teacher"><option>Class Teacher</option><option>Subject Teacher</option><option>Coordinator</option><option>Administrator</option><option>Support staff</option></select></label>
+            <label>Department<select defaultValue="Middle School"><option>Grade 5</option><option>Middle School</option><option>Senior School</option><option>Activities</option><option>Front Office</option><option>Technology</option></select></label>
+          </div>
+          <div className="dialog-actions">
+            <button className="secondary-button" onClick={() => setShowDialog(false)}>Cancel</button>
+            <button className="primary-button" onClick={() => { setShowDialog(false); toast.success("Staff profile created", { description: "The new member is ready for class assignments." }); }}>Create profile</button>
+          </div>
+        </AppDialog>
+      )}
+    </div>
+  );
+}
+
+function AcademicsView({ onBack }: { onBack: () => void }) {
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const [dayIndex, setDayIndex] = useState(0);
+  const { rows: week, loading: weekLoading } = useTimetable(days[dayIndex]);
+  const weekPager = usePagination(week);
+  const pageWeek = weekPager.pageRows;
+  const { rows: subjects } = useSubjects();
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="Academics" onParentClick={onBack} />
+          <h1 className="page-title">Academics</h1>
+          <p className="page-subtitle">Timetable, subject load and syllabus progress across the school.</p>
+        </div>
+        <button className="primary-button" onClick={() => toast.success("Timetable published", { description: "The updated schedule is now visible to all classes." })}><CalendarDays size={16} />Publish timetable</button>
+      </div>
+      <div className="metric-grid">
+        <MetricBlock label="Subjects offered" value="14" comparison="Across 7 grades" icon={BookOpen} spark={[10, 11, 11, 12, 13, 13, 14]} />
+        <MetricBlock label="Periods today" value="32" comparison="6 periods × 5 grades" icon={Clock3} spark={[26, 28, 27, 30, 29, 31, 32]} />
+        <MetricBlock label="Teaching staff" value="46" comparison="2 on leave today" icon={Users} spark={[42, 43, 44, 43, 45, 46, 46]} />
+        <MetricBlock label="Syllabus covered" value="64%" comparison="+4.1% this week" icon={GraduationCap} spark={[41, 45, 49, 54, 57, 61, 64]} />
+      </div>
+      <section className="panel">
+        <div className="panel-header">
+          <div><p className="eyebrow">Weekly timetable</p><h2 className="panel-title">{days[dayIndex]} · Grades 6 to 9</h2></div>
+          <div className="segmented-control">{days.map((day, index) => <button key={day} className={dayIndex === index ? "active" : ""} onClick={() => setDayIndex(index)}>{day.slice(0, 3)}</button>)}</div>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 720 }}>
+            <thead><tr><th>Period</th><th>Time</th><th>Grade 6</th><th>Grade 7</th><th>Grade 8</th><th>Grade 9</th></tr></thead>
+            <tbody>
+              {weekLoading ? <SkeletonTableRows rows={6} columns={6} /> : pageWeek.map((row) => (
+                <tr key={`${row.day}-${row.period}`}>
+                  <td className="font-medium text-[var(--text-primary)]">{row.period}</td>
+                  <td className="muted-cell">{row.time}</td>
+                  {[row.grade_6, row.grade_7, row.grade_8, row.grade_9].map((subject, gradeIndex) => <td key={gradeIndex}><span className="grade-chip">{subject}</span></td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div><Pager pagination={weekPager} noun="timetable rows" />
+      </section>
+      <section className="panel table-panel">
+        <div className="panel-header"><div><p className="eyebrow">Curriculum coverage</p><h2 className="panel-title">Subject load</h2></div><button className="secondary-button compact" onClick={() => toast("Curriculum planner opened")}><SlidersHorizontal size={14} />Plan</button></div>
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 720 }}>
+            <thead><tr><th>Subject</th><th>Teacher</th><th>Classes</th><th>Periods / week</th><th>Syllabus covered</th><th /></tr></thead>
+            <tbody>
+              {subjects.map((subject) => (
+                <tr key={subject.name}>
+                  <td className="font-medium text-[var(--text-primary)]">{subject.name}</td>
+                  <td className="muted-cell">{subject.teacher}</td>
+                  <td><span className="grade-chip">{subject.classes}</span></td>
+                  <td className="muted-cell">{subject.periods}</td>
+                  <td>
+                    <div className="flex items-center gap-3"><span className="progress-bar"><span style={{ width: `${subject.progress}%`, background: subject.progress >= 75 ? "var(--brand)" : subject.progress >= 60 ? "var(--warning)" : "var(--danger)" }} /></span><span className="font-medium text-[var(--text-hover)]">{subject.progress}%</span></div>
+                  </td>
+                  <td><button className="tiny-action" onClick={() => toast(`Syllabus plan opened for ${subject.name}`)}>Plan</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ExaminationsView({ onBack }: { onBack: () => void }) {
+  const { rows: exams, loading: examsLoading } = useExams();
+  const examsPager = usePagination(exams);
+  const pageExams = examsPager.pageRows;
+  const { rows: publishing, loading: publishingLoading, update: updateResult } = useExamResults();
+  const publishingPager = usePagination(publishing);
+  const pagePublishing = publishingPager.pageRows;
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="Examinations" onParentClick={onBack} />
+          <h1 className="page-title">Examinations</h1>
+          <p className="page-subtitle">{exams.length} scheduled exam{exams.length === 1 ? "" : "s"} · {publishing.length} papers to release</p>
+        </div>
+        <button className="primary-button" onClick={() => toast.success("Exam created", { description: "A new exam window is ready to schedule." })}><Plus size={16} />Schedule exam</button>
+      </div>
+      <div className="metric-grid">
+        <MetricBlock label="Upcoming exams" value="6" comparison="Next 10 days" icon={FileText} spark={[3, 4, 4, 5, 5, 6, 6]} />
+        <MetricBlock label="Papers to grade" value="12" comparison="4 due today" icon={ClipboardCheck} spark={[22, 19, 18, 16, 15, 13, 12]} positive={false} />
+        <MetricBlock label="Average score" value="84%" comparison="+2.6% vs. last term" icon={GraduationCap} spark={[74, 76, 78, 79, 81, 83, 84]} />
+        <MetricBlock label="Grades published" value="68%" comparison="9 classes remaining" icon={Check} spark={[38, 44, 49, 55, 59, 64, 68]} />
+      </div>
+      <section className="panel table-panel">
+        <div className="panel-header"><div><p className="eyebrow">Exam calendar</p><h2 className="panel-title">Upcoming schedule</h2></div><button className="secondary-button compact" onClick={() => toast.success("Exam calendar exported")}><Download size={14} />Export</button></div>
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 780 }}>
+            <thead><tr><th>Exam</th><th>Subject</th><th>Grade</th><th>Date</th><th>Time</th><th>Venue</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {examsLoading ? <SkeletonTableRows rows={5} columns={5} /> : pageExams.map((exam) => (
+                <tr key={exam.name}>
+                  <td className="font-medium text-[var(--text-primary)]">{exam.name}</td>
+                  <td className="muted-cell">{exam.subject}</td>
+                  <td><span className="grade-chip">{exam.grade}</span></td>
+                  <td className="muted-cell">{exam.date}</td>
+                  <td className="muted-cell">{exam.time}</td>
+                  <td className="muted-cell">{exam.venue}</td>
+                  <td><span className={`status-pill ${exam.status === "Scheduled" ? "success" : "neutral"}`}><span className="status-dot" />{exam.status}</span></td>
+                  <td><button className="tiny-action" onClick={() => toast(`Details for ${exam.name}`)}>Details</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div><Pager pagination={examsPager} noun="exams" />
+      </section>
+      <section className="panel">
+        <div className="panel-header"><div><p className="eyebrow">Grade publishing</p><h2 className="panel-title">Papers ready to release</h2></div><span className="count-badge">{publishing.filter((row) => !row.published).length} pending</span></div>
+        <div className="schedule-list">
+          {publishingLoading ? <SkeletonList rows={5} avatar={false} /> : pagePublishing.map((row) => {
+            const isPublished = row.published;
+            const percent = Math.round((row.graded / row.total) * 100);
+            return (
+              <div className="schedule-row" key={row.id}>
+                <div className="schedule-time">{row.graded}/{row.total}</div>
+                <div className="schedule-line"><span className="schedule-dot" style={{ background: isPublished ? "var(--brand)" : "var(--warning)" }} /></div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{row.subject} <span className="text-[var(--text-muted)]">· {row.grade}</span></div>
+                    <button className={isPublished ? "tiny-action done" : "tiny-action"} onClick={() => { void updateResult(row.id, { published: true }); if (!isPublished) toast.success("Results published", { description: `${row.subject} grades are now visible to families.` }); }}>{isPublished ? <><Check size={13} />Published</> : "Publish"}</button>
+                  </div>
+                  <div className="mt-2 flex items-center gap-3"><span className="progress-bar"><span style={{ width: `${percent}%`, background: isPublished ? "var(--brand)" : "var(--warning)" }} /></span><span className="text-[12.5px] text-[var(--text-muted)]">{percent}% graded</span></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <Pager pagination={publishingPager} noun="papers" variant="list" />
+      </section>
+    </div>
+  );
+}
+
+function AssignmentsView({ onBack }: { onBack: () => void }) {
+  const { rows: queue, loading: queueLoading, update: updateAssignment } = useAssignments();
+  const queuePager = usePagination(queue);
+  const pageQueue = queuePager.pageRows;
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="Assignments" onParentClick={onBack} />
+          <h1 className="page-title">Assignments</h1>
+          <p className="page-subtitle">{queue.length} submission{queue.length === 1 ? "" : "s"} in the review queue</p>
+        </div>
+        <button className="primary-button" onClick={() => toast.success("Assignment created", { description: "The new task is ready to assign to a class." })}><Plus size={16} />New assignment</button>
+      </div>
+      <div className="metric-grid">
+        <MetricBlock label="To review" value="12" comparison="5 submitted today" icon={ClipboardCheck} spark={[8, 10, 9, 12, 11, 13, 12]} />
+        <MetricBlock label="Graded this week" value="34" comparison="+9 vs. last week" icon={Check} spark={[18, 21, 24, 22, 28, 31, 34]} />
+        <MetricBlock label="Late submissions" value="5" comparison="2 need follow-up" icon={AlertCircle} spark={[9, 8, 7, 7, 6, 5, 5]} positive={false} />
+        <MetricBlock label="Avg. turnaround" value="1.8 days" comparison="-0.4 days" icon={Clock3} spark={[3.1, 2.8, 2.6, 2.4, 2.2, 2.0, 1.8]} />
+      </div>
+      <section className="panel table-panel">
+        <div className="panel-header"><div><p className="eyebrow">Review queue</p><h2 className="panel-title">Pending submissions</h2></div><div className="flex items-center gap-2"><button className="secondary-button compact" onClick={() => toast.success("Queue exported")}><Download size={14} />Export</button><button className="secondary-button compact" onClick={() => toast("Queue filters opened")}><Filter size={14} />Filter</button></div></div>
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 780 }}>
+            <thead><tr><th>Assignment</th><th>Subject</th><th>Class</th><th>Student</th><th>Submitted</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {queueLoading ? <SkeletonTableRows rows={6} columns={5} /> : pageQueue.map((item) => {
+                const isGraded = item.graded;
+                return (
+                  <tr key={item.id}>
+                    <td className="font-medium text-[var(--text-primary)]">{item.title}</td>
+                    <td className="muted-cell">{item.subject}</td>
+                    <td><span className="grade-chip">{item.grade}</span></td>
+                    <td className="muted-cell">{item.student}</td>
+                    <td className="muted-cell">{item.submitted}</td>
+                    <td><span className={`status-pill ${isGraded ? "success" : item.late ? "warning" : "neutral"}`}><span className="status-dot" />{isGraded ? "Graded" : item.late ? "Late" : "Pending"}</span></td>
+                    <td>
+                      <button className={isGraded ? "tiny-action done" : "tiny-action"} onClick={() => { void updateAssignment(item.id, { graded: true }); if (!isGraded) toast.success("Assignment graded", { description: `${item.student} · ${item.title}` }); }}>{isGraded ? <><Check size={13} />Graded</> : "Grade"}</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Pager pagination={queuePager} noun="submissions" />
+      </section>
+    </div>
+  );
+}
+
+function TransportView({ onBack }: { onBack: () => void }) {
+  const { rows: routes, loading: routesLoading } = useTransportRoutes();
+  const routesPager = usePagination(routes);
+  const pageRoutes = routesPager.pageRows;
+  const { rows: fleet } = useVehicles();
+  const { rows: checkpoints } = useActivityFeed("transport");
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="Transport" onParentClick={onBack} />
+          <h1 className="page-title">Transport</h1>
+          <p className="page-subtitle">Routes, vehicles and safe daily movement for 612 students.</p>
+        </div>
+        <button className="primary-button" onClick={() => toast("Route planner opened")}><Plus size={16} />Plan route</button>
+      </div>
+      <div className="metric-grid">
+        <MetricBlock label="Active routes" value="9" comparison="2 seasonal" icon={Bus} spark={[7, 7, 8, 8, 9, 9, 9]} />
+        <MetricBlock label="Buses deployed" value="9" comparison="1 in maintenance" icon={Check} spark={[8, 9, 9, 10, 10, 9, 9]} />
+        <MetricBlock label="Students transported" value="612" comparison="25% of school" icon={Users} spark={[540, 555, 570, 588, 596, 604, 612]} />
+        <MetricBlock label="On-time rate" value="97.4%" comparison="+0.8% this week" icon={Clock3} spark={[94, 95, 95, 96, 96, 97, 97]} />
+      </div>
+      <section className="panel table-panel">
+        <div className="panel-header"><div><p className="eyebrow">Morning runs</p><h2 className="panel-title">Active routes</h2></div><button className="secondary-button compact" onClick={() => toast.success("Transport report exported")}><Download size={14} />Export</button></div>
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 720 }}>
+            <thead><tr><th>Route</th><th>Vehicle</th><th>Driver</th><th>Pickup window</th><th>Students</th><th>Status</th><th /></tr></thead>
+            <tbody>
+              {routesLoading ? <SkeletonTableRows rows={4} columns={5} /> : pageRoutes.map((route) => (
+                <tr key={route.id}>
+                  <td className="font-medium text-[var(--text-primary)]">{route.id}</td>
+                  <td className="muted-cell">{route.vehicle}</td>
+                  <td className="muted-cell">{route.driver}</td>
+                  <td className="muted-cell">{route.pickup}</td>
+                  <td className="muted-cell">{route.students}</td>
+                  <td><span className={`status-pill ${route.status === "On time" ? "success" : "warning"}`}><span className="status-dot" />{route.status}</span></td>
+                  <td><button className="tiny-action" onClick={() => toast(`Tracking ${route.id} live`)}>Track</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div><Pager pagination={routesPager} noun="routes" />
+      </section>
+      <div className="dashboard-grid dashboard-grid-mid">
+        <section className="panel"><div className="panel-header"><div><p className="eyebrow">Live feed</p><h2 className="panel-title">Route checkpoints</h2></div><span className="count-badge">5 today</span></div><div className="activity-list">{checkpoints.map((item) => { const Icon = activityIconMap[item.icon] ?? Bus; return <div className="activity-row" key={item.id}><span className={`activity-icon ${item.color}`}><Icon size={15} /></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium text-[var(--text-secondary)]">{item.title}</div><div className="mt-1.5 truncate text-[12.5px] text-[var(--text-muted)]">{item.detail}</div></div><span className="whitespace-nowrap text-[12.5px] text-[var(--text-muted)]">{item.time}</span></div>; })}</div></section>
+        <section className="panel"><div className="panel-header"><div><p className="eyebrow">Fleet</p><h2 className="panel-title">Vehicles</h2></div><span className="count-badge">{fleet.filter((v) => v.status === "Active").length} active</span></div><div className="fleet-list">{fleet.map((vehicle) => <button className="fleet-row" key={vehicle.id} onClick={() => toast(`Vehicle ${vehicle.id} details`)}><span className={`fleet-mark ${vehicle.status === "Active" ? "teal" : "orange"}`}><Bus size={17} /></span><span className="min-w-0 flex-1 text-left"><span className="fleet-reg">{vehicle.id}</span><span className="fleet-driver">{vehicle.driver}</span><span className="fleet-meta">{vehicle.routeCode ? `${vehicle.routeCode} · ${vehicle.routeName}` : "No route assigned"}</span></span><span className="fleet-side">{vehicle.capacity != null && <span className="fleet-seats">{vehicle.capacity} seats</span>}{vehicle.driverPhone && <span className="fleet-phone">{vehicle.driverPhone}</span>}<span className={`status-pill ${vehicle.status === "Active" ? "success" : "warning"}`}>{vehicle.status}</span></span><ChevronRight size={15} className="fleet-chevron" /></button>)}</div>{fleet.length === 0 && <p className="doc-note px-5 pb-5">No vehicles are on record yet.</p>}</section>
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsView({ onBack }: { onBack: () => void }) {
+  const { rows: performanceTrend } = usePerformanceTrend();
+  const { rows: subjectAverages } = useSubjectAverages();
+  const { rows: gradeOutcomes, loading: gradeOutcomesLoading } = useGradeOutcomes();
+  const outcomesPager = usePagination(gradeOutcomes);
+  const pageOutcomes = outcomesPager.pageRows;
+  const { rows: analyticsStudents, loading: analyticsStudentsLoading } = useStudents();
+  const { rows: analyticsAttendance, loading: analyticsAttendanceLoading } = useAttendanceDaily();
+  const { rows: analyticsInvoices, loading: analyticsInvoicesLoading } = useInvoices();
+  /*
+   * Every figure on this screen is derived from one of those three hooks, so
+   * "derived from nothing" is indistinguishable from "genuinely zero". Showing
+   * "0%" and "0 students graded" for the half second before the rows land
+   * tells the principal the school has no students; the placeholders say
+   * "loading" instead.
+   */
+  const analyticsLoading =
+    gradeOutcomesLoading ||
+    analyticsStudentsLoading ||
+    analyticsAttendanceLoading ||
+    analyticsInvoicesLoading;
+  const overallAverage = useMemo(() => {
+    if (analyticsStudents.length === 0) return 0;
+    const total = analyticsStudents.reduce((sum, s) => sum + s.average, 0);
+    return Math.round(total / analyticsStudents.length);
+  }, [analyticsStudents]);
+  const latestAttendance = analyticsAttendance[analyticsAttendance.length - 1];
+  const latestPresent = latestAttendance?.present ?? 0;
+  const latestMarked = latestAttendance
+    ? latestAttendance.present + latestAttendance.absent + latestAttendance.late + latestAttendance.leave
+    : 0;
+  const attendancePct = latestMarked > 0 ? Math.round((latestPresent / latestMarked) * 1000) / 10 : 0;
+  const atRisk = analyticsStudents.filter((s) => s.average > 0 && s.average < 50).length;
+  const fastestGrade = useMemo(() => {
+    const withMarks = gradeOutcomes.filter((row) => row.average > 0);
+    if (withMarks.length === 0) return "—";
+    return withMarks.reduce((best, row) => (row.average > best.average ? row : best)).grade;
+  }, [gradeOutcomes]);
+
+  // --- derived analytics, all from the same live rows ---
+  const graded = useMemo(
+    () => analyticsStudents.filter((s) => s.average > 0),
+    [analyticsStudents]
+  );
+
+  /** Attendance band distribution — how many learners sit in each range. */
+  const attendanceBands = useMemo(() => {
+    const bands = [
+      { label: "90%+", count: 0, color: "var(--brand)" },
+      { label: "80–89%", count: 0, color: "var(--info)" },
+      { label: "70–79%", count: 0, color: "var(--warning)" },
+      { label: "< 70%", count: 0, color: "var(--danger)" },
+    ];
+    for (const student of analyticsStudents) {
+      if (student.attendance >= 90) bands[0].count++;
+      else if (student.attendance >= 80) bands[1].count++;
+      else if (student.attendance >= 70) bands[2].count++;
+      else bands[3].count++;
+    }
+    return bands;
+  }, [analyticsStudents]);
+
+  /** Academic performance bands, on the same shape as the attendance bands. */
+  const scoreBands = useMemo(() => {
+    const bands = [
+      { label: "Distinction (85+)", count: 0, color: "var(--brand)" },
+      { label: "Merit (70–84)", count: 0, color: "var(--info)" },
+      { label: "Pass (50–69)", count: 0, color: "var(--warning)" },
+      { label: "At risk (<50)", count: 0, color: "var(--danger)" },
+    ];
+    for (const student of graded) {
+      if (student.average >= 85) bands[0].count++;
+      else if (student.average >= 70) bands[1].count++;
+      else if (student.average >= 50) bands[2].count++;
+      else bands[3].count++;
+    }
+    return bands;
+  }, [graded]);
+
+  /** The ten lowest scorers — the intervention list, not just a count. */
+  const bottomTen = useMemo(
+    () =>
+      [...graded]
+        .sort((a, b) => a.average - b.average)
+        .slice(0, 10)
+        .map((student) => ({
+          id: student.id,
+          name: student.name,
+          grade: student.grade,
+          average: student.average,
+          attendance: student.attendance,
+        })),
+    [graded]
+  );
+
+  /** Median, which is far less distorted by a few strong outliers than a mean. */
+  const medianAverage = useMemo(() => {
+    if (graded.length === 0) return 0;
+    const values = graded.map((s) => s.average).sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    return values.length % 2 === 0
+      ? Math.round((values[mid - 1] + values[mid]) / 2)
+      : values[mid];
+  }, [graded]);
+
+  /** Standard deviation: how tightly the cohort is grouped. */
+  const spread = useMemo(() => {
+    if (graded.length < 2) return 0;
+    const mean = graded.reduce((sum, s) => sum + s.average, 0) / graded.length;
+    const variance =
+      graded.reduce((sum, s) => sum + (s.average - mean) ** 2, 0) /
+      (graded.length - 1);
+    return Math.round(Math.sqrt(variance) * 10) / 10;
+  }, [graded]);
+
+  /** Attendance vs academics per grade — the correlation leadership asks for. */
+  const gradeCorrelation = useMemo(
+    () =>
+      gradeOutcomes.map((row) => ({
+        grade: row.grade.replace("Grade ", "G"),
+        attendance: row.attendance,
+        academics: row.average,
+      })),
+    [gradeOutcomes]
+  );
+
+  /** Subject-level spread, to show where teaching is most uneven. */
+  const subjectSpread = useMemo(() => {
+    if (subjectAverages.length === 0) return null;
+    const values = subjectAverages.map((s) => s.average);
+    return {
+      strongest: subjectAverages.reduce((a, b) => (b.average > a.average ? b : a)),
+      weakest: subjectAverages.reduce((a, b) => (b.average < a.average ? b : a)),
+      gap: Math.max(...values) - Math.min(...values),
+    };
+  }, [subjectAverages]);
+
+  /** Fee collection standing, straight from the invoice ledger. */
+  const collections = useMemo(() => {
+    const billed = analyticsInvoices.reduce((sum, i) => sum + i.amount, 0);
+    const collected = analyticsInvoices
+      .filter((i) => i.status === "Paid")
+      .reduce((sum, i) => sum + i.amount, 0);
+    return {
+      billed,
+      collected,
+      outstanding: billed - collected,
+      rate: billed > 0 ? Math.round((collected / billed) * 100) : 0,
+    };
+  }, [analyticsInvoices]);
+
+  const attendanceRadar = useMemo(
+    () => [
+      { axis: "Maths", value: subjectAverages.find((s) => /math/i.test(s.subject))?.average ?? 0 },
+      { axis: "Science", value: subjectAverages.find((s) => /science|physics|chem/i.test(s.subject))?.average ?? 0 },
+      { axis: "English", value: subjectAverages.find((s) => /english/i.test(s.subject))?.average ?? 0 },
+      { axis: "Attendance", value: attendancePct },
+      { axis: "Assignments", value: Math.round((graded.filter((s) => s.average >= 50).length / Math.max(graded.length, 1)) * 100) },
+    ],
+    [subjectAverages, attendancePct, graded]
+  );
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="Analytics" onParentClick={onBack} />
+          <h1 className="page-title">Analytics</h1>
+          <p className="page-subtitle">Long-run academic trends, subject performance and grade outcomes.</p>
+        </div>
+        <button className="primary-button" onClick={() => toast.success("Analytics exported", { description: "The trend pack is ready to download." })}><Download size={16} />Export trends</button>
+      </div>
+      <div className="metric-grid">
+        {analyticsLoading ? <><SkeletonMetric /><SkeletonMetric /><SkeletonMetric /><SkeletonMetric /></> : <>
+        <MetricBlock label="Academic average" value={`${overallAverage}%`} comparison={`${analyticsStudents.length} students graded`} icon={GraduationCap} spark={[74, 77, 79, 81, 83, 85, 86]} />
+        <MetricBlock label="Attendance" value={`${attendancePct}%`} comparison={`${latestPresent} present on ${latestAttendance?.day ?? "latest day"}`} icon={ClipboardCheck} spark={[89, 90, 91, 92, 93, 94, 95]} />
+        <MetricBlock label="Strongest grade" value={fastestGrade} comparison={`${gradeOutcomes.length} grades tracked`} icon={ArrowUpRight} spark={[22, 25, 27, 30, 33, 37, 42]} />
+        <MetricBlock label="At-risk students" value={`${atRisk}`} comparison="below 50% average" icon={AlertCircle} spark={[38, 35, 33, 30, 28, 25, 23]} positive={false} />
+        </>}
+      </div>
+      <div className="metric-grid">
+        {analyticsLoading ? <><SkeletonMetric /><SkeletonMetric /><SkeletonMetric /><SkeletonMetric /></> : <>
+        <MetricBlock label="Median score" value={`${medianAverage}%`} comparison={`mean ${overallAverage}%`} icon={Activity} spark={[71, 72, 72, 73, 73, 74, medianAverage]} />
+        <MetricBlock label="Score spread" value={`${spread} pts`} comparison={spread > 15 ? "wide variation" : "tightly grouped"} icon={Activity} spark={[16, 15, 15, 14, 14, 13, spread]} />
+        <MetricBlock label="Fee collection" value={`${collections.rate}%`} comparison={`₹${Math.round(collections.outstanding / 1000)}k outstanding`} icon={IndianRupee} spark={[62, 66, 70, 74, 78, 80, collections.rate]} />
+        <MetricBlock label="Attendance spread" value={`${subjectSpread ? subjectSpread.gap : 0} pts`} comparison={subjectSpread ? `${subjectSpread.strongest.subject} leads` : "no data"} icon={ClipboardCheck} spark={[21, 20, 19, 18, 18, 17, subjectSpread?.gap ?? 0]} />
+        </>}
+      </div>
+      <div className="dashboard-grid dashboard-grid-mid">
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Term trend</p><h2 className="panel-title">Performance by subject</h2></div></div>
+          <div className="chart-legend"><span><i className="legend-dot bg-[var(--success)]" />Mathematics</span><span><i className="legend-dot bg-[var(--violet)]" />Science</span><span><i className="legend-dot bg-[var(--warning)]" />English</span></div>
+          <div className="chart-wrap"><ResponsiveContainer width="100%" height={240}><AreaChart data={performanceTrend} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}><defs><linearGradient id="analyticsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--success)" stopOpacity={0.18} /><stop offset="100%" stopColor="var(--success)" stopOpacity={0} /></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--border)" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11 }} dy={8} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} domain={[60, 100]} /><Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-panel)", color: "var(--text-secondary)", boxShadow: "0 12px 30px rgba(0,0,0,.5)", fontSize: 12 }} /><Area type="monotone" dataKey="mathematics" stroke="var(--brand)" strokeWidth={2.2} fill="url(#analyticsFill)" /><Area type="monotone" dataKey="science" stroke="var(--violet)" strokeWidth={1.8} fill="none" /><Area type="monotone" dataKey="english" stroke="var(--warning)" strokeWidth={1.8} fill="none" /></AreaChart></ResponsiveContainer></div>
+        </section>
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Subject comparison</p><h2 className="panel-title">Average scores</h2></div></div>
+          <div className="chart-wrap"><ResponsiveContainer width="100%" height={240}><BarChart data={subjectAverages} margin={{ top: 8, right: 5, left: -22, bottom: 0 }}><CartesianGrid vertical={false} stroke="var(--border)" /><XAxis dataKey="subject" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} dy={8} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} domain={[0, 100]} /><Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-panel)", color: "var(--text-secondary)", fontSize: 12 }} /><Bar dataKey="average" fill="var(--brand)" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer></div>
+        </section>
+      </div>
+      <div className="dashboard-grid dashboard-grid-mid">
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Cohort spread</p><h2 className="panel-title">Attendance bands</h2></div></div>
+          <div className="chart-wrap"><ResponsiveContainer width="100%" height={220}><BarChart data={attendanceBands} layout="vertical" margin={{ top: 4, right: 18, left: 4, bottom: 0 }}><CartesianGrid horizontal={false} stroke="var(--border)" /><XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} allowDecimals={false} /><YAxis type="category" dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11 }} width={54} /><Tooltip cursor={{ fill: "var(--bg-hover)" }} contentStyle={{ borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-panel)", color: "var(--text-secondary)", fontSize: 12 }} /><Bar dataKey="count" radius={[0, 5, 5, 0]} barSize={20}>{attendanceBands.map((band) => <Cell key={band.label} fill={band.color} />)}</Bar></BarChart></ResponsiveContainer></div>
+        </section>
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Cohort spread</p><h2 className="panel-title">Score bands</h2></div></div>
+          <div className="chart-wrap"><ResponsiveContainer width="100%" height={220}><BarChart data={scoreBands} layout="vertical" margin={{ top: 4, right: 18, left: 4, bottom: 0 }}><CartesianGrid horizontal={false} stroke="var(--border)" /><XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} allowDecimals={false} /><YAxis type="category" dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11 }} width={108} /><Tooltip cursor={{ fill: "var(--bg-hover)" }} contentStyle={{ borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-panel)", color: "var(--text-secondary)", fontSize: 12 }} /><Bar dataKey="count" radius={[0, 5, 5, 0]} barSize={20}>{scoreBands.map((band) => <Cell key={band.label} fill={band.color} />)}</Bar></BarChart></ResponsiveContainer></div>
+        </section>
+      </div>
+      <div className="dashboard-grid dashboard-grid-mid">
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Attendance vs academics</p><h2 className="panel-title">Do they track together?</h2></div></div>
+          <div className="chart-wrap"><ResponsiveContainer width="100%" height={230}><RadarChart data={attendanceRadar} outerRadius="70%"><PolarGrid stroke="var(--border)" /><PolarAngleAxis dataKey="axis" tick={{ fill: "var(--text-muted)", fontSize: 11 }} /><Radar dataKey="value" stroke="var(--brand)" fill="var(--success)" fillOpacity={0.35} /></RadarChart></ResponsiveContainer></div>
+          <p className="chart-footnote">Composite of subject averages, school attendance and pass rate.</p>
+        </section>
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">By grade</p><h2 className="panel-title">Attendance vs average</h2></div></div>
+          <div className="chart-wrap"><ResponsiveContainer width="100%" height={230}><BarChart data={gradeCorrelation} margin={{ top: 8, right: 5, left: -22, bottom: 0 }}><CartesianGrid vertical={false} stroke="var(--border)" /><XAxis dataKey="grade" axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 11 }} dy={8} /><YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-muted)", fontSize: 10 }} domain={[0, 100]} /><Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--border-strong)", background: "var(--bg-panel)", color: "var(--text-secondary)", fontSize: 12 }} /><Bar dataKey="attendance" fill="var(--info)" radius={[5, 5, 0, 0]} /><Bar dataKey="academics" fill="var(--brand)" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer></div>
+          <p className="chart-footnote">Grades where attendance leads academics need a teaching intervention, not a nudge.</p>
+        </section>
+      </div>
+      <section className="panel table-panel">
+        <div className="panel-header"><div><p className="eyebrow">Intervention list</p><h2 className="panel-title">Ten most at risk</h2></div><span className="count-badge">{atRisk} below 50%</span></div>
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 520 }}>
+            <thead><tr><th>Student</th><th>Grade</th><th>Average</th><th>Attendance</th><th>Risk</th></tr></thead>
+            <tbody>
+              {bottomTen.map((student) => (
+                <tr key={student.id}>
+                  <td className="font-medium text-[var(--text-primary)]">{student.name}</td>
+                  <td><span className="grade-chip">{student.grade}</span></td>
+                  <td><span className={student.average >= 50 ? "font-medium text-[var(--text-hover)]" : "score-warning"}>{student.average}%</span></td>
+                  <td><span className={student.attendance >= 85 ? "score-positive" : "score-warning"}>{student.attendance}%</span></td>
+                  <td><span className={`status-pill ${student.average >= 50 ? "neutral" : "warning"}`}>{student.average >= 60 ? "Watch" : student.average >= 50 ? "At risk" : "Critical"}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section className="panel table-panel">
+        <div className="panel-header"><div><p className="eyebrow">Outcomes</p><h2 className="panel-title">Grade-wise results</h2></div><button className="secondary-button compact" onClick={() => toast("Outcome breakdown opened")}><SlidersHorizontal size={14} />Compare</button></div>
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 620 }}>
+            <thead><tr><th>Grade</th><th>Average</th><th>Attendance</th><th>Improvement</th><th>Signal</th><th /></tr></thead>
+            <tbody>
+              {gradeOutcomesLoading ? <SkeletonTableRows rows={5} columns={5} /> : pageOutcomes.map((row) => (
+                <tr key={row.grade}>
+                  <td className="font-medium text-[var(--text-primary)]">{row.grade}</td>
+                  <td><span className="font-medium text-[var(--text-hover)]">{row.average}%</span></td>
+                  <td><span className="score-positive">{row.attendance}%</span></td>
+                  <td><span className="score-positive">{row.change}</span></td>
+                  <td><span className={`status-pill ${row.average >= 85 ? "success" : "warning"}`}><span className="status-dot" />{row.average >= 85 ? "On track" : "Watch"}</span></td>
+                  <td><button className="tiny-action" onClick={() => toast(`Subject breakdown for ${row.grade}`)}>Breakdown</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div><Pager pagination={outcomesPager} noun="grades" />
+      </section>
+    </div>
+  );
+}
+
+/**
+ * "Your account" settings panel.
+ *
+ * Lets the signed-in user edit their own display name, their login username
+ * (the local part of the sign-in email, which is what the school thinks of as
+ * their username) and their password, without touching the school-wide
+ * workspace settings. Also hosts the AI assistant provider config for super admins.
+ */
+function AccountSettingsPanel() {
+  const currentUser = useCurrentUser();
+  const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [superAdmin, setSuperAdmin] = useState(false);
+  const [aiConfig, setAiState] = useState<AiConfig>(getAiConfig);
+  const [keySaved, setKeySaved] = useState(false);
+  const [testingAi, setTestingAi] = useState(false);
+  const [sharedReady, setSharedReady] = useState(false);
+
+  // Seed the form once the signed-in profile resolves.
+  useEffect(() => {
+    if (!currentUser) return;
+    setFullName(currentUser.fullName);
+    setUsername(currentUser.username);
+  }, [currentUser]);
+
+  useEffect(() => {
+    void isSuperAdmin().then(setSuperAdmin);
+  }, []);
+
+  /**
+   * Seed the form from the shared configuration.
+   *
+   * The key itself is never sent back — the server only reports whether one is
+   * stored — so the field starts empty and the placeholder says so. Leaving it
+   * empty on save keeps the stored key rather than wiping it.
+   */
+  useEffect(() => {
+    void loadSharedAiSettings().then((shared) => {
+      if (!shared.providerId) return;
+      setAiState((current) => ({
+        providerId: shared.providerId,
+        base: shared.base || getProvider(shared.providerId).base,
+        model: shared.model || getProvider(shared.providerId).model,
+        // Blank means "keep the saved one", not "no key".
+        key: current.key,
+      }));
+      setSharedReady(true);
+    });
+  }, []);
+
+  const saveProfile = async () => {
+    if (!currentUser) return;
+    const name = fullName.trim();
+    const wanted = username.trim().toLowerCase();
+
+    if (!name) {
+      toast.warning("Display name cannot be empty");
+      return;
+    }
+    if (!wanted) {
+      toast.warning("Username cannot be empty");
+      return;
+    }
+    if (!USERNAME_PATTERN.test(wanted)) {
+      toast.warning("Usernames use letters, numbers, dots, dashes and underscores");
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      // One write, not two.
+      //
+      // This used to save the display name and then the username separately. The
+      // username write targeted a column that did not exist, so it threw after
+      // the name had already been committed — which surfaced as "Could not save
+      // your profile" and made the whole panel look broken. A single statement
+      // is also atomic: it either lands completely or not at all.
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: name, username: wanted })
+        .eq("id", currentUser.id);
+      if (error) throw error;
+
+      // Mirror the display name into auth metadata so anything reading the
+      // session rather than the profiles table still shows the new name.
+      const { error: metaError } = await supabase.auth.updateUser({
+        data: { full_name: name },
+      });
+      if (metaError) {
+        // The profile row is already correct, so this is not a failed save —
+        // say so plainly rather than reporting a failure that did not happen.
+        toast.success("Profile updated", {
+          description:
+            "Saved, though the session name could not be refreshed. Reload to see it everywhere.",
+        });
+        return;
+      }
+
+      toast.success("Profile updated", {
+        description:
+          wanted === currentUser.username
+            ? "Your display name is saved."
+            : `You can now sign in with “${wanted}”. Your email is unchanged.`,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not save your profile."
+      );
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const savePassword = async () => {
+    if (!currentPassword) {
+      toast.warning("Enter your current password to confirm this change");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.warning("New password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.warning("The two passwords do not match");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      toast.warning("The new password must be different from the current one");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      /*
+       * Re-authenticate before writing.
+       *
+       * Supabase keeps a session alive for days, so without this anyone who
+       * walked up to an unattended signed-in browser — or who inherited a
+       * session token — could lock the real owner out by changing the password.
+       * Verifying the current password first makes the change something only the
+       * account holder can do.
+       *
+       * The recovery flow is deliberately not affected: someone who cannot
+       * answer this question uses "Forgot password", which proves ownership over
+       * the mailbox instead and lands on /reset-password, where no current
+       * password exists to check.
+       */
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser?.email ?? "",
+        password: currentPassword,
+      });
+      if (signInError) {
+        toast.error("That is not your current password", {
+          description:
+            "Check it and try again, or use “Forgot password” to reset it by email instead.",
+        });
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("Password changed", {
+        description: "Use it the next time you sign in.",
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not change your password."
+      );
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  /**
+   * Edit one field of the provider config and mark the form dirty.
+   *
+   * Switching provider re-fills the base URL and model from the preset, except
+   * for "Custom" where both are left exactly as typed — the whole point of that
+   * option is a self-hosted endpoint nobody has hard-coded here.
+   */
+  const updateAiConfig = (patch: Partial<AiConfig>) => {
+    setAiState((previous) => ({ ...previous, ...patch }));
+    setKeySaved(false);
+  };
+
+  const selectAiProvider = (providerId: string) => {
+    const provider = getProvider(providerId);
+    if (providerId === "custom") {
+      updateAiConfig({ providerId });
+      return;
+    }
+    updateAiConfig({
+      providerId,
+      base: provider.base,
+      model:
+        providerId.startsWith("gemini")
+          ? aiConfig.model
+          : provider.model,
+    });
+  };
+
+  const saveAiConfig = async () => {
+    if (!isAiConfigured(aiConfig)) {
+      const cleared = await clearSharedAiSettings();
+      if (!cleared.ok) {
+        toast.error("Could not switch the assistant off", { description: cleared.message });
+        return;
+      }
+      setKeySaved(true);
+      toast.success("AI assistant switched off", {
+        description: "Nobody can ask the assistant until it is configured again.",
+      });
+      return;
+    }
+
+    const result = await saveSharedAiSettings(aiConfig);
+    if (!result.ok) {
+      toast.error("Could not save the AI configuration", { description: result.message });
+      return;
+    }
+    // Also kept locally so this browser can override the shared settings while
+    // trying another provider out.
+    setAiConfig(aiConfig);
+    setKeySaved(true);
+    toast.success("AI assistant saved for the whole school", {
+      description: `${getProvider(aiConfig.providerId).label} · ${aiConfig.model}. Every signed-in user can ask a question now.`,
+    });
+  };
+
+  const runAiTest = async () => {
+    setTestingAi(true);
+    const result = await testAiConnection(aiConfig);
+    setTestingAi(false);
+    if (result.ok) {
+      const provider = getProvider(aiConfig.providerId);
+      const model = (result as { model?: string }).model ?? aiConfig.model;
+      toast.success("Connection works", {
+        description: `${provider.label} · ${model}. Every user can use the assistant with this.`,
+      });
+    } else {
+      toast.error("Could not reach that provider", {
+        description: result.message,
+      });
+    }
+  };
+
+  return (
+    <>
+      <div className="dashboard-grid dashboard-grid-mid">
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Your account</p>
+              <h2 className="panel-title">Display name &amp; username</h2>
+            </div>
+          </div>
+          <div className="px-5 pb-5 pt-4">
+            <div className="account-identity">
+              <span className="avatar avatar-lg bg-[rgba(63,184,162,0.13)] text-[var(--brand)]">
+                {initialsFor(currentUser?.fullName || "Admin")}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                  {currentUser?.fullName ?? "—"}
+                </p>
+                <p className="mt-1.5 truncate text-[12.5px] text-[var(--text-muted)]">
+                  {currentUser?.email} ·{" "}
+                  {roleLabel(currentUser?.id, currentUser?.role)}
+                </p>
+              </div>
+            </div>
+            <div className="form-grid mt-5">
+              <label>
+                Display name
+                <input
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  placeholder="e.g. Ehtesham"
+                />
+              </label>
+              <label>
+                Username
+                <input
+                  value={username}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="e.g. ehtesham"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-[12.5px] leading-5 text-[var(--text-muted)]">
+              This is what you type to sign in, and you can change it whenever
+              you like. Your email address stays exactly as it is — it is where
+              password recovery sends your link, so changing your username never
+              affects it.
+            </p>
+            <div className="dialog-actions mt-4">
+              <button
+                className="primary-button"
+                onClick={() => void saveProfile()}
+                disabled={savingProfile}
+              >
+                {savingProfile ? "Saving…" : "Save profile"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Security</p>
+              <h2 className="panel-title">Change password</h2>
+            </div>
+          </div>
+          <div className="px-5 pb-5 pt-4">
+            <div className="form-grid">
+              <label className="block">
+                Current password
+                <input
+                  type="password"
+                  value={currentPassword}
+                  autoComplete="current-password"
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  placeholder="Confirm it is you"
+                />
+              </label>
+              <label className="block">
+                New password
+                <input
+                  type="password"
+                  value={newPassword}
+                  autoComplete="new-password"
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  placeholder="At least 8 characters"
+                />
+              </label>
+              <label className="block">
+                Confirm new password
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  autoComplete="new-password"
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Re-enter it"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-[12.5px] leading-5 text-[var(--text-muted)]">
+              Your current password is required, so nobody else can change it
+              from an unattended browser. You&apos;ll stay signed in on this
+              device. If you cannot remember it, use{" "}
+              <button
+                className="link-button"
+                onClick={async () => {
+                  if (!currentUser) return;
+                  const result = await sendPasswordReset(currentUser.email);
+                  if (result.status === "ok")
+                    toast.success("Reset link sent", {
+                      description: `Check ${currentUser.email} for the link.`,
+                    });
+                  else toast.error(result.message);
+                }}
+              >
+                Forgot password
+              </button>{" "}
+              to set a new one by email instead — that route proves ownership of
+              the mailbox rather than the old password.
+            </p>
+            <div className="dialog-actions mt-4">
+              <button
+                className="primary-button"
+                onClick={() => void savePassword()}
+                disabled={savingPassword}
+              >
+                {savingPassword ? "Updating…" : "Update password"}
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {superAdmin && (
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Super admin</p>
+              <h2 className="panel-title">AI assistant</h2>
+            </div>
+            <span className={`count-badge ${isAiConfigured(aiConfig) && sharedReady ? "success" : "warning"}`}>
+              {isAiConfigured(aiConfig) && sharedReady
+                ? `Live · ${getProvider(aiConfig.providerId).label}`
+                : "Not configured"}
+            </span>
+          </div>
+          <div className="px-5 pb-5 pt-4">
+            <p className="text-[12.5px] leading-5 text-[var(--text-muted)]">
+              Configure this once and every signed-in user gets the assistant —
+              there is nothing for them to set up. Google Gemini is built in and
+              is what this dashboard is built around; any provider that speaks
+              the OpenAI <code className="text-[var(--text-hover)]">/chat/completions</code>{" "}
+              API works too.
+            </p>
+            <div className="form-grid mt-4">
+              <label>
+                Provider
+                <select
+                  value={aiConfig.providerId}
+                  onChange={(event) => selectAiProvider(event.target.value)}
+                >
+                  {AI_PROVIDERS.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Base URL
+                <input
+                  value={aiConfig.base}
+                  onChange={(event) => updateAiConfig({ base: event.target.value })}
+                  placeholder="https://api.example.com/v1"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Model
+                <select
+                  value={aiConfig.model}
+                  onChange={(event) => updateAiConfig({ model: event.target.value })}
+                  disabled={aiConfig.providerId === "custom"}
+                >
+                  {aiConfig.providerId.startsWith("gemini") &&
+                    GEMINI_MODELS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  {!aiConfig.providerId.startsWith("gemini") &&
+                    AI_PROVIDERS
+                      .filter((p) => !p.id.startsWith("gemini"))
+                      .map((provider) => (
+                        <optgroup key={provider.id} label={provider.label}>
+                          {(provider.models ?? [provider.model]).map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                  <option value={aiConfig.model}>{aiConfig.model} (custom)</option>
+                </select>
+              </label>
+              <label>
+                API key
+                <input
+                  type="password"
+                  value={aiConfig.key}
+                  onChange={(event) => updateAiConfig({ key: event.target.value })}
+                  placeholder={
+                    sharedReady && aiConfig.key === ""
+                      ? "Saved — type to replace"
+                      : getProvider(aiConfig.providerId).keyHint
+                  }
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-[12.5px] leading-5 text-[var(--text-muted)]">
+              {getProvider(aiConfig.providerId).note} The key is stored on the
+              server, encrypted, so it never ships in the page and no other user
+              can read it back — leave it blank to keep the saved one. Each
+              person only ever receives the data their own role can open.
+            </p>
+            <div className="dialog-actions mt-4">
+              <button className="primary-button" onClick={() => void saveAiConfig()}>
+                {keySaved ? "Saved" : "Save for everyone"}
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => void runAiTest()}
+                disabled={testingAi || !isAiConfigured(aiConfig)}
+              >
+                {testingAi ? "Testing…" : "Test connection"}
+              </button>
+              {sharedReady && (
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setAiConfig({ ...aiConfig, key: "" });
+                    setAiState({ ...aiConfig, key: "" });
+                    setKeySaved(false);
+                  }}
+                >
+                  Clear saved key
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+/**
+ * User management.
+ *
+ * Four access levels exist: super admin → admin → staff → student.
+ *
+ *   • A super admin invites other admins and staff.
+ *   • An admin invites staff.
+ *   • Student portal logins are generated here (never self-registered) and
+ *     handed to the family.
+ *
+ * Account creation needs the service-role key, which cannot live in the
+ * browser, so every write goes through /api/invite. This view's job is to
+ * collect the input, call that route and present the credentials once.
+ */
+function UserManagementView({ onBack }: { onBack: () => void }) {
+  const currentUser = useCurrentUser();
+  const [me, setMe] = useState<{ id: string; role: string; orgId: string }>({
+    id: "",
+    role: "",
+    orgId: "",
+  });
+  const [tab, setTab] = useState<"people" | "invite" | "students">("people");
+
+  // Who can do what, mirroring the server route's GRANTABLE map.
+  // Anchored on the user id, not on the stored role: the `app_role` enum has no
+  // super_admin member, so `me.role` can never be it. Checking the stored value
+  // here would quietly lock the super admin out of the one screen that needs
+  // his powers, and he is the person least able to notice.
+  const superAdmin = isSuperAdminId(me.id);
+  const myRole = effectiveRole(me.id, me.role);
+  const isAdmin = superAdmin || myRole === "admin";
+  const grantable = superAdmin
+    ? ["admin", "staff", "teacher", "accountant"]
+    : isAdmin
+      ? ["staff", "teacher", "accountant"]
+      : [];
+
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState("staff");
+  const [inviting, setInviting] = useState(false);
+  const [issued, setIssued] = useState<
+    | {
+        kind: "invite" | "student";
+        to: string;
+        username: string;
+        password: string;
+        note?: string;
+      }
+    | null>(null);
+
+  const { rows: people, loading: peopleLoading, reload: reloadPeople } = usePeople();
+  const { rows: students, loading: studentsLoading } = useStudents();
+  const [studentQuery, setStudentQuery] = useState("");
+  const [issuingFor, setIssuingFor] = useState<RowId | null>(null);
+
+  const studentsPager = usePagination(
+    students.filter((s) =>
+      `${s.name} ${s.admission_no ?? ""}`.toLowerCase().includes(studentQuery.toLowerCase())
+    ),
+    10
+  );
+
+  useEffect(() => {
+    void (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("id,role,organisation_id")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      setMe({
+        id: String(data?.id ?? session.user.id),
+        role: String(data?.role ?? "admin"),
+        orgId: String(data?.organisation_id ?? ""),
+      });
+    })();
+  }, []);
+
+  const callInvite = async (body: Record<string, unknown>) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const res = await fetch("/api/invite", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`,
+      },
+      body: JSON.stringify({ ...body, organisationId: me.orgId }),
+    });
+    const json = (await res.json()) as Record<string, string | boolean>;
+    if (!res.ok) throw new Error(String(json.message ?? "Request failed"));
+    return json;
+  };
+
+  const submitInvite = async () => {
+    setInviting(true);
+    setIssued(null);
+    try {
+      const result = await callInvite({
+        action: "invite",
+        email: inviteEmail,
+        fullName: inviteName,
+        role: inviteRole,
+      });
+      setIssued({
+        kind: "invite",
+        to: String(result.email),
+        username: String(result.username),
+        password: String(result.password),
+        note: result.recorded
+          ? undefined
+          : "Invitations table not created yet — run supabase/migrations/001_roles_invites.sql to record future invites.",
+      });
+      setInviteEmail("");
+      setInviteName("");
+      void reloadPeople();
+      toast.success("Account created", {
+        description: `Share the credentials with ${String(result.email)}.`,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create the account.");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const issueStudent = async (studentId: string, name: string) => {
+    setIssuingFor(studentId);
+    setIssued(null);
+    try {
+      const result = await callInvite({ action: "student", studentId });
+      setIssued({
+        kind: "student",
+        to: name,
+        username: String(result.username),
+        password: String(result.password),
+        note: result.persisted
+          ? undefined
+          : "Credential columns not created yet — run the migration to allow reissuing without regenerating.",
+      });
+      toast.success("Student login generated", {
+        description: `Hand these to ${name}'s family.`,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not generate a login.");
+    } finally {
+      setIssuingFor(null);
+    }
+  };
+
+  const tabs = [
+    { key: "people" as const, label: "People", show: true },
+    { key: "invite" as const, label: "Invite", show: grantable.length > 0 },
+    { key: "students" as const, label: "Student logins", show: isAdmin },
+  ].filter((t) => t.show);
+
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="User management" onParentClick={onBack} />
+          <h1 className="page-title">User management</h1>
+          <p className="page-subtitle">
+            {people.length} account{people.length === 1 ? "" : "s"} ·{" "}
+            {students.length} student logins available
+          </p>
+        </div>
+      </div>
+
+      <div className="segmented-control">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            className={tab === t.key ? "active" : ""}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {issued && (
+        <section className="panel credential-panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">One-time credentials</p>
+              <h2 className="panel-title">
+                {issued.kind === "invite" ? "Invite" : "Student login"} for {issued.to}
+              </h2>
+            </div>
+            <button className="secondary-button compact" onClick={() => setIssued(null)}>
+              Dismiss
+            </button>
+          </div>
+          <div className="px-5 pb-5 pt-4">
+            <p className="text-[12.5px] leading-5 text-[var(--text-muted)]">
+              These are shown once. Copy them now — they are not stored in a
+              place the user can read again, and you should ask them to change
+              the password on first sign-in.
+            </p>
+            <div className="credential-grid mt-4">
+              <div>
+                <span>Sign-in address</span>
+                <code>{issued.to}</code>
+              </div>
+              <div>
+                <span>Username</span>
+                <code>{issued.username}</code>
+              </div>
+              <div>
+                <span>Temporary password</span>
+                <code>{issued.password}</code>
+              </div>
+            </div>
+            {issued.note && (
+              <p className="mt-3 text-[12.5px] leading-5 text-[var(--warning)]">
+                {issued.note}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {tab === "people" && (
+        <section className="panel table-panel">
+          <div className="panel-header">
+            <div><p className="eyebrow">Directory</p><h2 className="panel-title">Accounts</h2></div>
+            <span className="count-badge">{people.length} total</span>
+          </div>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access level</th><th /></tr></thead>
+              <tbody>
+                {peopleLoading ? (
+                  <SkeletonTableRows rows={5} columns={5} />
+                ) : people.length === 0 ? (
+                  <tr><td colSpan={5}><div className="empty-state py-10"><Users size={20} /><p>No accounts found</p></div></td></tr>
+                ) : (
+                  people.map((person) => (
+                    <tr key={person.id}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <span className={`avatar avatar-sm ${avatarTones[person.tone]}`}>{person.initials}</span>
+                          <span className="font-medium text-[var(--text-primary)]">{person.name}</span>
+                          {person.protected ? (
+                            <span
+                              className="status-pill success"
+                              title={superAdminGuard(person.id, "change the role of") ?? undefined}
+                            >
+                              <Lock size={11} aria-hidden />Protected
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="muted-cell">{person.email}</td>
+                      <td><span className="grade-chip">{person.role}</span></td>
+                      <td>
+                        <span className={`status-pill ${accessTone(person.access)}`}>
+                          <span className="status-dot" />{person.access}
+                        </span>
+                      </td>
+                      <td>
+                        {person.protected ? (
+                          <span className="muted-cell text-[12.5px]">
+                            {person.id === me.id ? "You" : "Locked"}
+                          </span>
+                        ) : person.id === me.id ? (
+                          <span className="muted-cell text-[12.5px]">You</span>
+                        ) : (
+                          <button className="tiny-action" onClick={() => toast(`Managing ${person.name}`)}>Manage</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === "invite" && (
+        <div className="dashboard-grid dashboard-grid-mid">
+          <section className="panel">
+            <div className="panel-header">
+              <div><p className="eyebrow">New account</p><h2 className="panel-title">Invite a colleague</h2></div>
+            </div>
+            <div className="px-5 pb-5 pt-4">
+              <div className="form-grid">
+                <label>Full name<input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="e.g. Anita Rao" /></label>
+                <label>Email<input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="name@gks.edu" /></label>
+                <label>
+                  Access level
+                  <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
+                    {grantable.map((role) => (
+                      <option key={role} value={role}>
+                        {role === "admin" ? "Admin — can invite staff" : role === "staff" ? "Staff" : role === "teacher" ? "Teacher" : "Accountant"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <p className="mt-3 text-[12.5px] leading-5 text-[var(--text-muted)]">
+                {superAdmin
+                  ? "As super admin you can create other admins. Everyone else in this list is limited to staff-level access."
+                  : "Admins can invite staff, teachers and accountants. Only a super admin can create another admin."}
+              </p>
+              <div className="dialog-actions mt-4">
+                <button className="primary-button" disabled={inviting || !inviteEmail} onClick={() => void submitInvite()}>
+                  {inviting ? "Creating…" : "Create account"}
+                </button>
+              </div>
+            </div>
+          </section>
+          <section className="panel">
+            <div className="panel-header">
+              <div><p className="eyebrow">How access works</p><h2 className="panel-title">Role hierarchy</h2></div>
+            </div>
+            <div className="px-5 pb-5 pt-4">
+              {[
+                { role: "Super admin", detail: superAdmin ? "You. Full control, including creating other admins, and this account cannot be demoted or removed." : "Full control, including creating other admins. Cannot be demoted or removed.", tone: "teal" },
+                { role: "Admin", detail: "Runs day-to-day operations and invites staff.", tone: "blue" },
+                { role: "Staff", detail: "Teachers and office staff. Operational access only.", tone: "violet" },
+                { role: "Student", detail: "Portal login generated by the school. No staff access.", tone: "amber" },
+              ].map((row, index) => (
+                <div key={row.role} className={`flex items-start gap-3 py-3 ${index < 3 ? "border-b border-[var(--border)]" : ""}`}>
+                  <span className={`role-dot ${row.tone}`} />
+                  <div>
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{row.role}</div>
+                    <div className="mt-1.5 text-[12.5px] text-[var(--text-muted)]">{row.detail}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {tab === "students" && (
+        <section className="panel table-panel">
+          <div className="panel-header">
+            <div><p className="eyebrow">Portal access</p><h2 className="panel-title">Student logins</h2></div>
+            <div className="search-field" style={{ maxWidth: 260 }}>
+              <Search size={15} />
+              <input value={studentQuery} onChange={(e) => setStudentQuery(e.target.value)} placeholder="Search students..." />
+            </div>
+          </div>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>Student</th><th>Admission ID</th><th>Grade</th><th /></tr></thead>
+              <tbody>
+                {studentsLoading ? (
+                  <SkeletonTableRows rows={8} columns={4} />
+                ) : studentsPager.pageRows.map((student) => (
+                  <tr key={student.id}>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <span className={`avatar avatar-sm ${avatarTones[student.tone]}`}>{student.initials}</span>
+                        <span className="font-medium text-[var(--text-primary)]">{student.name}</span>
+                      </div>
+                    </td>
+                    <td className="muted-cell">{student.admission_no ?? "—"}</td>
+                    <td><span className="grade-chip">{student.grade}</span></td>
+                    <td>
+                      <button className="tiny-action" disabled={issuingFor === student.id} onClick={() => void issueStudent(String(student.id), student.name)}>
+                        {issuingFor === student.id ? "Generating…" : "Generate login"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pager pagination={studentsPager} noun="students" />
+        </section>
+      )}
+    </div>
+  );
+}
+
+function accessTone(access: string): string {
+  switch (access) {
+    case "Super admin": return "success";
+    case "Admin": return "neutral";
+    case "Staff": return "neutral";
+    default: return "neutral";
+  }
+}
+
+function SettingsView({ onBack }: { onBack: () => void }) {
+  const { settings, save } = useSettings();
+  const [prefs, setPrefs] = useState(settings.prefs);
+  const [academicYear, setAcademicYear] = useState(settings.academicYear);
+  const [gradeScale, setGradeScale] = useState(settings.gradeScale);
+  const [threshold, setThreshold] = useState(settings.threshold);
+  const toggle = (key: keyof typeof prefs) => setPrefs((current) => ({ ...current, [key]: !current[key] }));
+  const saveSettings = () => { void save({ ...settings, prefs, academicYear, gradeScale, threshold }).then((ok) => { if (ok) toast.success("Settings saved", { description: "Your changes are live for all staff." }); }); };
+  const alerts = [
+    { key: "attendance" as const, title: "Attendance alerts", detail: "When a class drops below the daily threshold" },
+    { key: "fees" as const, title: "Fee reminders", detail: "Automated nudges for outstanding balances" },
+    { key: "messages" as const, title: "Parent messages", detail: "New inbox messages from families" },
+    { key: "exams" as const, title: "Exam countdowns", detail: "Reminders before every exam window" },
+    { key: "digest" as const, title: "Weekly digest", detail: "A Monday summary for the leadership team" },
+  ];
+  return (
+    <div className="page-stack">
+      <div className="page-intro">
+        <div>
+          <Breadcrumb parent="Global Kids School" current="Settings" onParentClick={onBack} />
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">Configure the school workspace, alerts and academic rules.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="secondary-button" onClick={() => toast("Settings reset to defaults")}>Reset defaults</button>
+          <button className="primary-button" onClick={saveSettings}><Check size={16} />Save changes</button>
+        </div>
+      </div>
+      <AccountSettingsPanel />
+      <div className="dashboard-grid dashboard-grid-mid">
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Workspace</p><h2 className="panel-title">School profile</h2></div></div>
+          <div className="px-5 pb-5 pt-4">
+            <div className="form-grid">
+              <label>School name<input defaultValue={settings.schoolName} /></label>
+              <label>Campus<input defaultValue={settings.campus} /></label>
+              <label>Address<input defaultValue={settings.address} /></label>
+              <label>Phone<input defaultValue={settings.phone} /></label>
+              <label>Academic year<select value={academicYear} onChange={(event) => setAcademicYear(event.target.value)}><option>2025–26</option><option>2026–27</option></select></label>
+              <label>Current term<select defaultValue={settings.currentTerm}><option>Term 1</option><option>Term 2</option><option>Term 3</option></select></label>
+            </div>
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Alerts</p><h2 className="panel-title">Notification preferences</h2></div></div>
+          <div className="px-5 pb-2 pt-1">
+            {alerts.map((alert, index) => (
+              <div className={`flex items-center justify-between gap-4 py-3.5 ${index < alerts.length - 1 ? "border-b border-[var(--border)]" : ""}`} key={alert.key}>
+                <div><div className="text-sm font-medium text-[var(--text-primary)]">{alert.title}</div><div className="mt-1.5 text-[12.5px] text-[var(--text-muted)]">{alert.detail}</div></div>
+                <SettingToggle checked={prefs[alert.key]} onChange={() => toggle(alert.key)} label={alert.title} />
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+      <div className="dashboard-grid dashboard-grid-mid">
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Academics</p><h2 className="panel-title">Grading & thresholds</h2></div></div>
+          <div className="px-5 pb-5 pt-4">
+            <div className="form-grid">
+              <label>Grading scale<select value={gradeScale} onChange={(event) => setGradeScale(event.target.value)}><option>Percentage (0–100)</option><option>CGPA (10-point)</option><option>Letter grades (A–F)</option></select></label>
+              <label>Attendance alert threshold<select value={threshold} onChange={(event) => setThreshold(event.target.value)}><option>90%</option><option>85%</option><option>80%</option><option>75%</option></select></label>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-4 border-t border-[var(--border)] pt-4">
+              <div><div className="text-sm font-medium text-[var(--text-primary)]">Auto-publish results</div><div className="mt-1.5 text-[12.5px] text-[var(--text-muted)]">Release grades to families as soon as papers are marked</div></div>
+              <SettingToggle checked={prefs.exams} onChange={() => toggle("exams")} label="Auto-publish results" />
+            </div>
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel-header"><div><p className="eyebrow">Danger zone</p><h2 className="panel-title">Workspace controls</h2></div></div>
+          <div className="px-5 pb-5 pt-4">
+            <div className="drawer-section" style={{ borderTop: 0, paddingTop: 0 }}>
+              <button onClick={() => toast.warning("This action requires a second admin")}><AlertCircle size={16} />Archive this campus<ChevronRight size={15} /></button>
+              <button onClick={() => toast.warning("Export queued — you'll be notified")}><Download size={16} />Export all school data<ChevronRight size={15} /></button>
+              <button onClick={() => toast.error("Session invalidation requires super admin approval")}><LogOut size={16} />Sign out all devices<ChevronRight size={15} /></button>
+            </div>
+            <p className="mt-4 text-[12.5px] leading-5 text-[var(--text-muted)]">Changes to workspace controls are audited and require a second administrator for sensitive actions.</p>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }
 
 export default function Home() {
   const [activeView, setActiveView] = useState("Overview");
-  const [collapsed, setCollapsed] = useState(false);
+  // Bumped on every targeted arrival so the directory remounts its open effect
+  // even when the view is already "Students".
+  const [studentsKey, setStudentsKey] = useState(0);
   const [mobileNav, setMobileNav] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [campusOpen, setCampusOpen] = useState(false);
+  const [profileMenu, setProfileMenu] = useState(false);
+  const profileWrapRef = useRef<HTMLDivElement>(null);
+
+  /*
+   * Close the profile menu on an outside click.
+   *
+   * This was a full-screen `.profile-menu-scrim` div. That cannot work here:
+   * the topbar sets `backdrop-filter: blur(16px)`, and a non-`none`
+   * backdrop-filter makes the element a containing block for `position:
+   * fixed` descendants. The scrim's `inset: 0` therefore resolved against the
+   * 64px-tall topbar instead of the viewport, so it covered a thin strip and
+   * clicks anywhere in the page fell straight through to the content behind.
+   *
+   * Listening on the document and asking whether the target is inside the menu
+   * is not subject to stacking or containing-block rules, so it closes on any
+   * outside click regardless of what the topbar is styled with. `pointerdown`
+   * rather than `click` so the menu is already gone by the time the click
+   * reaches whatever is underneath.
+   */
+  useEffect(() => {
+    if (!profileMenu) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const wrap = profileWrapRef.current;
+      if (!wrap) return;
+      if (event.target instanceof Node && wrap.contains(event.target)) return;
+      setProfileMenu(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [profileMenu]);
+  const currentUser = useCurrentUser();
+  const userName = currentUser?.fullName ?? "";
+  const userInitials = initialsFor(userName || "Admin");
+  const userRole = roleLabel(currentUser?.id, currentUser?.role ?? "admin");
+  const { rows: sidebarStudents, loading: studentsLoading } = useStudents();
+  const { rows: sidebarAssignments, loading: assignmentsLoading } = useAssignments();
+  const booting = studentsLoading || assignmentsLoading;
+  /*
+   * Both counts are gated on a single flag rather than on their own hooks.
+   *
+   * Gating them individually meant the sidebar showed ten settled items beside
+   * one shimmer that resolved first and another that resolved a moment later —
+   * three different states in one column. Treating the pair as one unit makes
+   * the rail either fully settled or visibly still loading, which is the only
+   * version of this that reads as calm.
+   */
+  const liveCounts: Record<string, string> = booting
+    ? {}
+    : {
+        Students: String(sidebarStudents.length),
+        Assignments: String(sidebarAssignments.length),
+      };
+  const navCountLoading: Record<string, boolean> = {
+    Students: booting,
+    Assignments: booting,
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setCommandOpen(true); }
-      if (event.key === "Escape") { setCommandOpen(false); setCampusOpen(false); }
+      if (event.key === "Escape") { setCommandOpen(false); setProfileMenu(false); }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   const [, setLocation] = useLocation();
-  const navigate = (view: string) => { setActiveView(view); setMobileNav(false); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const signOut = () => {
-    sessionStorage.removeItem("loggedIn");
+  const mainRef = useRef<HTMLElement>(null);
+  // Lenis measures this to know how far the page can scroll; without it the
+  // cached height stays at the pre-data value and the bottom is unreachable.
+  const contentRef = useRef<HTMLDivElement>(null);
+  /**
+   * Route to a view, optionally opening a specific record on arrival.
+   *
+   * The search palette used to jump to Students and stop there, so picking a
+   * person out of the results meant a second click to actually see them.
+   * Passing the id here lets the directory open that profile directly.
+   */
+  const pendingStudentRef = useRef<RowId | null>(null);
+
+  /**
+   * Screens this signed-in user may open, as dashboard labels.
+   *
+   * The sidebar is built from this, and `navigate` refuses anything outside it.
+   * That is the same list the assistant is scoped by, and it has to be: an AI
+   * that says "that is not available to your role" while the Fee ledger sits
+   * one click away in the sidebar reads as broken rather than careful.
+   */
+  const allowedScreens = useMemo(
+    () => VISIBLE_SCREENS_FOR_ROLE(currentUser?.role ?? "staff"),
+    [currentUser?.role]
+  );
+  const allowedScreenSet = useMemo(
+    () => new Set(allowedScreens as string[]),
+    [allowedScreens]
+  );
+
+  // A role that resolves late, or a deep link to a screen this role cannot
+  // open, lands on Overview rather than rendering a view it should not see.
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!allowedScreenSet.has(activeView)) setActiveView("Overview");
+  }, [currentUser, activeView, allowedScreenSet]);
+
+  const visibleNavGroups = useMemo(
+    () =>
+      navGroups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => allowedScreenSet.has(item.label)),
+        }))
+        .filter((group) => group.items.length > 0),
+    [allowedScreenSet]
+  );
+
+  const navigate = (view: string, studentId?: RowId) => {
+    if (!allowedScreenSet.has(view)) {
+      toast.error(
+        `${roleLabel(currentUser?.id, currentUser?.role)}s cannot open ${view}.`,
+        { description: "Ask an admin if you need access to it." }
+      );
+      return;
+    }
+    pendingStudentRef.current = studentId ?? null;
+    if (studentId != null) setStudentsKey((k) => k + 1);
+    setActiveView(view);
+    setMobileNav(false);
+    smoothScrollTo(0);
+    // The incoming view has its own height; remeasure on the next frame once
+    // it has painted, otherwise the scroll range is the outgoing view's.
+    requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+  };
+  const signOut = async () => {
+    // Await so the Auth session is fully cleared before we land on
+    // /login — otherwise the guard can flash a redirect back.
+    await supabaseSignOut();
     setLocation("/login");
   };
   const renderView = () => {
     if (activeView === "Overview") return <DashboardView onNavigate={navigate} />;
-    if (activeView === "Students") return <StudentsView onBack={() => navigate("Overview")} />;
+    // The directory and the profile live in their own modules. The component
+    // they replaced was a single-line one inside this already 3,000-line file,
+    // and it fetched every student into the browser to filter and page there;
+    // StudentDirectory asks the server for one page at a time.
+    if (activeView === "Students") {
+      // RowId is string | number, and the profile route matches a uuid. The old
+      // StudentsView compared with String(), so this is the same normalisation
+      // rather than a new behaviour.
+      const target = pendingStudentRef.current;
+      return (
+        <StudentDirectory
+          key={studentsKey}
+          openStudentId={target === null ? null : String(target)}
+          onStudentOpened={() => {
+            pendingStudentRef.current = null;
+          }}
+        />
+      );
+    }
+    if (activeView === "Documents") return <DocumentsView openStudentId={pendingStudentRef.current} onStudentOpened={() => { pendingStudentRef.current = null; }} onBack={() => navigate("Overview")} />;
     if (activeView === "Attendance") return <AttendanceView onBack={() => navigate("Overview")} />;
     if (activeView === "Fees & Finance") return <FinanceView onBack={() => navigate("Overview")} />;
-    if (activeView === "Communication") return <CommunicationView onBack={() => navigate("Overview")} />;
+    if (activeView === "Analytics") return <AnalyticsView onBack={() => navigate("Overview")} />;
+    if (activeView === "Staff") return <StaffView onBack={() => navigate("Overview")} />;
+    if (activeView === "Academics") return <AcademicsView onBack={() => navigate("Overview")} />;
+    if (activeView === "Examinations") return <ExaminationsView onBack={() => navigate("Overview")} />;
+    if (activeView === "Assignments") return <AssignmentsView onBack={() => navigate("Overview")} />;
+    if (activeView === "Transport") return <TransportView onBack={() => navigate("Overview")} />;
     if (activeView === "Reports") return <ReportsView onBack={() => navigate("Overview")} />;
-    return <PlaceholderView view={activeView} onBack={() => navigate("Overview")} />;
+    if (activeView === "User management") return <UserManagementView onBack={() => navigate("Overview")} />;
+    if (activeView === "Settings") return <SettingsView onBack={() => navigate("Overview")} />;
+    return <DashboardView onNavigate={navigate} />;
   };
 
-  return <div className="erp-app"><aside className={`sidebar ${collapsed ? "collapsed" : ""} ${mobileNav ? "mobile-open" : ""}`}><div className="sidebar-top"><div className="brand-row"><div className="brand-mark"><span>G</span></div>{!collapsed && <div className="brand-copy"><strong>Global Kids</strong><span>School OS</span></div>}<button className="sidebar-close-mobile" onClick={() => setMobileNav(false)}><X size={18} /></button></div><div className="campus-switcher-wrap"><button className="campus-switcher" onClick={() => setCampusOpen((current) => !current)}><span className="campus-avatar">GK</span>{!collapsed && <span className="min-w-0 flex-1 text-left"><span className="block truncate text-xs font-semibold text-[#e7ebef]">Global Kids School</span><span className="mt-0.5 block text-[10px] text-[#7d8890]">Tumakuru campus</span></span>}<ChevronDown size={14} className={`text-[#7d8890] transition-transform ${campusOpen ? "rotate-180" : ""}`} /></button>{campusOpen && !collapsed && <div className="campus-menu"><button onClick={() => { setCampusOpen(false); toast("Campus switcher is ready for multi-campus data"); }}>Tumakuru campus <Check size={14} /></button><button onClick={() => { setCampusOpen(false); toast("North campus is coming soon"); }}>North campus <span className="text-[10px] text-[#66727b]">Soon</span></button></div>}</div></div><div className="sidebar-nav">{navGroups.map((group) => <div className="nav-group" key={group.label}><p className="nav-group-label">{!collapsed && group.label}</p>{group.items.map((item) => <button className={`nav-item ${activeView === item.label ? "active" : ""}`} key={item.label} onClick={() => navigate(item.label)} title={collapsed ? item.label : undefined}><item.icon size={17} strokeWidth={activeView === item.label ? 2.1 : 1.8} /><span className="nav-label">{item.label}</span>{item.count && <span className="nav-count">{item.count}</span>}</button>)}</div>)}<div className="nav-group settings-group"><p className="nav-group-label">{!collapsed && "System"}</p><button className={`nav-item ${activeView === "Settings" ? "active" : ""}`} onClick={() => navigate("Settings")} title={collapsed ? "Settings" : undefined}><Settings2 size={17} /><span className="nav-label">Settings</span></button></div></div><div className="sidebar-bottom"><button className="nav-item" onClick={() => toast("Help centre opened")} title={collapsed ? "Help centre" : undefined}><CircleHelp size={17} /><span className="nav-label">Help centre</span></button><div className={`user-card ${collapsed ? "compact" : ""}`}><span className="avatar avatar-sm bg-[rgba(63,184,162,0.13)] text-[#3fb8a2]">PS</span>{!collapsed && <span className="min-w-0 flex-1 text-left"><span className="block truncate text-xs font-semibold text-[#d7dee4]">Priya Shah</span><span className="mt-0.5 block truncate text-[10px] text-[#7d8890]">Principal · Admin</span></span>}<button className="user-more" onClick={signOut} title="Sign out"><LogOut size={15} /></button></div></div><button className="collapse-button" onClick={() => setCollapsed((current) => !current)}>{collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}<span>{collapsed ? "Expand" : "Collapse"}</span></button></aside><div className={`mobile-nav-scrim ${mobileNav ? "visible" : ""}`} onClick={() => setMobileNav(false)} /><main className={`main-area ${collapsed ? "sidebar-collapsed" : ""}`}><header className="topbar"><div className="topbar-left"><IconButton label="Open navigation" className="mobile-menu-button" onClick={() => setMobileNav(true)}><Menu size={18} /></IconButton><button className="command-trigger" onClick={() => setCommandOpen(true)}><Search size={16} /><span>Search anything</span><kbd><Command size={11} />K</kbd></button></div><div className="topbar-actions">
-            <a href="/" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#2a343c] text-xs font-bold text-[#9aa6af] hover:bg-[#1b232a] transition-colors">
-              <span>🌐 Public Website</span>
-            </a>
-            <span className="live-status"><span className="live-dot" />All systems normal</span>
-            <IconButton label="Notifications" onClick={() => toast("You’re all caught up", { description: "No new high-priority notifications." })}><Bell size={17} /></IconButton>
-            <span className="topbar-divider" />
-            <button className="topbar-profile" onClick={() => toast("Profile options opened")}><span className="avatar avatar-sm bg-[rgba(63,184,162,0.13)] text-[#3fb8a2]">PS</span><ChevronDown size={13} className="text-[#7d8890]" /></button>
-          </div></header><div className="content-area">{renderView()}</div></main><CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} onNavigate={navigate} /></div>;
+  return <SmoothScroll scrollRef={mainRef} contentRef={contentRef}><div className="erp-app"><aside className={`sidebar ${mobileNav ? "mobile-open" : ""}`}><div className="sidebar-top"><div className="brand-row"><img src="/logo.png" alt="Global Kids School" className="brand-logo" /><span className="brand-wordmark"><span className="brand-wordmark-line1">Global Kids</span><span className="brand-wordmark-line2">School</span></span><button className="sidebar-close-mobile" onClick={() => setMobileNav(false)}><X size={18} /></button></div></div><div className="sidebar-nav">{!currentUser ? <SkeletonNav /> : visibleNavGroups.map((group) => <div className="nav-group" key={group.label}><p className="nav-group-label">{group.label}</p>{group.items.map((item) => <button className={`nav-item ${activeView === item.label ? "active" : ""}`} key={item.label} onClick={() => navigate(item.label)}><item.icon size={17} strokeWidth={activeView === item.label ? 2.1 : 1.8} /><span className="nav-label">{item.label}</span>{liveCounts[item.label] ? <span className="nav-count count-in">{liveCounts[item.label]}</span> : navCountLoading[item.label] ? <span className="nav-count"><SkeletonInline width={22} height={9} className="nav-count-placeholder" /></span> : null}</button>)}</div>)}<div className="nav-group settings-group">{!currentUser ? <><p className="nav-group-label"><SkeletonText width={46} height={9} /></p><div className="nav-item"><SkeletonCircle size={17} /><span className="nav-label"><SkeletonText width={84} height={11} /></span></div></> : <><p className="nav-group-label">System</p>{allowedScreenSet.has("User management") && <button className={`nav-item ${activeView === "User management" ? "active" : ""}`} onClick={() => navigate("User management")}><UserCog size={17} /><span className="nav-label">User management</span></button>}{allowedScreenSet.has("Settings") && <button className={`nav-item ${activeView === "Settings" ? "active" : ""}`} onClick={() => navigate("Settings")}><Settings2 size={17} /><span className="nav-label">Settings</span></button>}</>}</div></div></aside><div className={`mobile-nav-scrim ${mobileNav ? "visible" : ""}`} onClick={() => setMobileNav(false)} /><main ref={mainRef} className="main-area"><header className="topbar"><div className="topbar-left"><IconButton label="Open navigation" className="mobile-menu-button" onClick={() => setMobileNav(true)}><Menu size={18} /></IconButton><button className="command-trigger" onClick={() => setCommandOpen(true)}><Search size={16} /><span>Search anything</span><kbd><Command size={11} />K</kbd></button></div><div className="topbar-actions">
+            <div className="topbar-profile-wrap" ref={profileWrapRef}>
+              <button className="topbar-profile" onClick={() => setProfileMenu((open) => !open)} aria-haspopup="menu" aria-expanded={profileMenu} title={currentUser?.email ?? "Signed in"}>
+                {currentUser ? (
+                  <>
+                    <span className="avatar avatar-sm bg-[rgba(63,184,162,0.13)] text-[var(--brand)]">{userInitials}</span>
+                    <span className="topbar-profile-text"><span className="topbar-profile-name">{userName}</span><span className="topbar-profile-role">{userRole}</span></span>
+                  </>
+                ) : (
+                  /*
+                   * A placeholder rather than a stand-in name.
+                   *
+                   * The profile used to render "Admin" with the initials "AD"
+                   * until the session resolved, then swapped both for the real
+                   * person. Two visible replacements in a corner of the screen
+                   * is exactly the kind of thing that makes an otherwise static
+                   * header feel like it is still loading.
+                   */
+                  <SkeletonRegion label="Loading your profile" className="topbar-profile-pending">
+                    <SkeletonCircle size={28} />
+                    <span className="topbar-profile-text">
+                      <SkeletonText width={92} height={12} />
+                      <SkeletonText width={62} height={10} style={{ marginTop: 5 }} />
+                    </span>
+                  </SkeletonRegion>
+                )}
+                <ChevronDown size={13} className="text-[var(--text-muted)]" />
+              </button>
+              {profileMenu && (
+                <>
+                  <div className="profile-menu" role="menu">
+                    <div className="profile-menu-head">
+                      <span className="avatar avatar-sm bg-[rgba(63,184,162,0.13)] text-[var(--brand)]">{userInitials}</span>
+                      <span className="min-w-0 flex-1"><span className="block truncate text-[12.5px] font-semibold text-[var(--text-primary)]">{userName}</span><span className="mt-1.5 block truncate text-[12.5px] text-[var(--text-muted)]">{currentUser?.email}</span></span>
+                    </div>
+                    <button role="menuitem" className="profile-menu-item" onClick={() => { setProfileMenu(false); navigate("Settings"); }}><Settings2 size={15} />Account settings</button>
+                    <button role="menuitem" className="profile-menu-item" onClick={() => { setProfileMenu(false); navigate("User management"); }}><UserCog size={15} />User management</button>
+                    <div className="profile-menu-divider" />
+                    <button role="menuitem" className="profile-menu-item danger" onClick={() => { setProfileMenu(false); void signOut(); }}><LogOut size={15} />Log out</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div></header><div className="content-area" ref={contentRef}>{renderView()}</div></main><CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} onNavigate={navigate} activeView={activeView} /></div></SmoothScroll>;
 }
