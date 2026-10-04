@@ -40,10 +40,6 @@
   ],
   "rewrites": [
     {
-      "source": "/",
-      "destination": "/webflow/index.html"
-    },
-    {
       "source": "/login",
       "destination": "/app.html"
     },
@@ -58,6 +54,13 @@
     {
       "source": "/((?!api/|assets/|app\\.html).*)",
       "destination": "/app.html"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/webflow/",
+      "permanent": false
     }
   ]
 }

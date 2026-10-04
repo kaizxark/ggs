@@ -12,18 +12,24 @@
  * ## Why the page lives under /webflow/ rather than /
  *
  * The export references its assets relatively - "assets/cdn.prod.website-files.com/..."
- * - so an index.html at the root would resolve those to /assets/, which is the
- * directory Vite writes the React app's hashed bundles into. Serving the export
- * from /webflow/ resolves them to /webflow/assets/, where its own mirrored
- * copies live, and leaves Vite's output untouched.
+ * - and a browser resolves those against the document's base URL. At the root
+ * that is /assets/, which is the directory Vite writes the React app's hashed
+ * bundles into; those requests miss, every script is aborted, and Webflow's
+ * interaction library never runs, which leaves the hero heading stuck at
+ * visibility:hidden.
+ *
+ * So vercel.json redirects / to /webflow/ rather than rewriting it. A rewrite
+ * would serve the right bytes but leave the base URL at /, and the relative
+ * refs would still miss - which is exactly what happened first. Only a
+ * redirect moves the base URL, so only a redirect makes the relative paths
+ * resolve to /webflow/assets/, where the export's own mirrored copies live.
  *
  * ## Why the filenames are swapped
  *
  * Vercel resolves the filesystem before it applies rewrites, and Vite always
  * writes a root index.html. Leaving that file in place would mean `/` served
- * the React shell and the rewrite was never reached, so it is moved to
- * app.html and the catch-all rewrite in vercel.json picks the app up from
- * there.
+ * the React shell, so it is moved to app.html and the catch-all rewrite in
+ * vercel.json picks the app up from there.
  */
 
 import { cpSync, existsSync, readFileSync, renameSync, rmSync } from "node:fs";
@@ -84,5 +90,5 @@ if (!source.equals(served)) {
 }
 
 console.log("Root document resolved:");
-console.log("  /            /webflow/index.html   webflow-site export, unmodified");
+console.log("  /            -> /webflow/          webflow-site export, unmodified");
 console.log("  /login       app.html              React app shell");
