@@ -44,6 +44,21 @@
     </script>
     <link href="/logo-192.png" rel="shortcut icon" type="image/x-icon" />
     <link href="/apple-touch-icon.png" rel="apple-touch-icon" />
+<script id="gks-reveal-gate">(function () {
+  "use strict";
+
+  var root = document.documentElement;
+  if (root.classList.contains("w-mod-ix3")) return;
+
+  // Nothing to race against if the interactions are not coming.
+  var immediate =
+    window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var delay = immediate ? 0 : 1200;
+
+  setTimeout(function () {
+    if (!root.classList.contains("w-mod-ix3")) root.classList.add("w-mod-ix3");
+  }, delay);
+})();</script>
 <script id="gks-video-loader">(function () {
   "use strict";
 
