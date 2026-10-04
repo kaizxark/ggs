@@ -154,23 +154,6 @@ const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(
 
 export default defineConfig({
   plugins,
-  /*
-    Declared so the analytics tag in index.html resolves to an empty string
-    rather than to the literal "%VITE_ANALYTICS_ENDPOINT%" placeholder.
-
-    Vite substitutes a percent-delimited token in HTML only when the variable is
-    actually defined; when it is not, it leaves the token in place and warns on
-    every build. Defining them as empty here is what makes the guard in the tag
-    fire and skip the request, and it silences the warning at the source. Set
-    either in the environment to switch analytics on - the values below are only
-    defaults, so a real environment variable still wins.
-  */
-  define: {
-    "import.meta.env.VITE_ANALYTICS_ENDPOINT":
-      JSON.stringify(process.env.VITE_ANALYTICS_ENDPOINT ?? ""),
-    "import.meta.env.VITE_ANALYTICS_WEBSITE_ID":
-      JSON.stringify(process.env.VITE_ANALYTICS_WEBSITE_ID ?? ""),
-  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

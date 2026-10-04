@@ -16,10 +16,6 @@
     {
       "source": "/(logo|favicon|apple-touch-icon)(-[0-9]+)?\\.png",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
-    },
-    {
-      "source": "/favicon.ico",
-      "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
     }
   ],
   "rewrites": [

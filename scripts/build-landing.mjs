@@ -545,321 +545,6 @@ function replaceLogos(html) {
   });
 }
 
-/*
- * Stop the background videos downloading until they are nearly on screen.
- *
- * ## Why this is the single biggest performance fix on the page
- *
- * The template autoplays three full-bleed background videos. Together they are
- * 8.38 MB of a 9.55 MB page — 88% of everything a visitor downloads before they
- * can read a single word. All three are decorative: the poster frame each one
- * shows is a still of the same footage, so nothing is lost by not fetching the
- * video until the section that uses it is close to the viewport.
- *
- * Webflow's own markup asks for all three at once. The `<video>` elements are
- * marked `data-wf-ignore`, and the wrappers carry the classes Webflow uses to
- * manage background videos, so this build takes ownership of the element: the
- * source list is emptied, autoplay is removed, and a loader script attaches the
- * real source when the section approaches the viewport.
- *
- * Two things this deliberately respects:
- *
- * - `prefers-reduced-motion`. Motion-sensitive visitors get the poster frame
- *   and never download the video at all.
- * - Save-Data. Where the browser reports a metered or data-saver connection,
- *   the poster is all that loads.
- *
- * The videos are the last thing on the page to arrive and the first thing to be
- * dropped, so nothing above the fold waits on them.
- */
-function lazyLoadVideos(html) {
-  const wrappers = html.match(/<div[^>]*w-background-video[^>]*>/gi) || [];
-  if (wrappers.length !== 3) {
-    throw new Error(
-      `Expected 3 background videos in the export, found ${wrappers.length}. ` +
-        "The video markup has probably changed — update lazyLoadVideos()."
-    );
-  }
-
-  /*
-    Empty the source list, drop autoplay, and ask the browser not to speculate.
-
-    The `=` between the attribute name and its empty value is matched optionally
-    because Webflow writes the attribute both ways, and autoplay is matched on
-    its own rather than as part of the whole tag so its position among the other
-    attributes does not matter.
-  */
-  let rewritten = 0;
-
-  let out = html.replace(
-    /<video\b([^>]*?)\s+autoplay(?:\s*=\s*"")?([^>]*)>([\s\S]*?)<\/video>/gi,
-    (match, before, after, inner) => {
-      rewritten += 1;
-      return (
-        `<video${before}${after} preload="none">` +
-        inner.replace(/\s*<source\b[^>]*>/gi, "") +
-        `</video>`
-      );
-    }
-  );
-
-  if (rewritten !== 3) {
-    throw new Error(
-      `Rewrote ${rewritten} of the 3 background videos; the rest would still fetch eagerly.`
-    );
-  }
-
-  const emptied = (out.match(/<source\b[^>]*>/gi) || []).length;
-  if (emptied > 0) {
-    throw new Error(
-      `${emptied} <source> elements survived the video rewrite; they would still fetch.`
-    );
-  }
-
-  /*
-    Take the wrapper off Webflow's background-video module.
-
-    Three things on the wrapper would otherwise make Webflow fetch the video
-    eagerly no matter what the <video> element says: the w-background-video
-    classes, and the data-autoplay and data-loop switches. All of them go. The
-    loop is preserved by setting it on the element at load time instead, so the
-    videos still loop — just only once they have been fetched.
-
-    The layout classes on the same element (hero-background-video,
-    cta-background-video, care-in-action-background) are the template's own
-    sizing and positioning rules and are left alone.
-  */
-  out = out.replace(/(<div[^>]*?)(\s+data-autoplay="true")/g, "$1");
-  out = out.replace(/(<div[^>]*?)(\s+data-loop="true")/g, "$1");
-  out = out.replace(/(<div[^>]*?)class="([^"]*)"/g, (match, head, classes) => {
-    const kept = classes
-      .split(/\s+/)
-      .filter((name) => name && name !== "w-background-video" && name !== "w-background-video-atom");
-
-    if (kept.length === classes.split(/\s+/).filter(Boolean).length) return match;
-    return `${head}class="${kept.join(" ")}"`;
-  });
-
-  const stillManaged = out.match(/w-background-video/g) || [];
-  if (stillManaged.length) {
-    throw new Error(
-      `${stillManaged.length} w-background-video classes survived; Webflow would still fetch eagerly.`
-    );
-  }
-
-  /*
-    The loader itself, in the one place an inline script is guaranteed to run.
-
-    It goes in <head>, next to Webflow's own inline scripts, rather than at the
-    end of the body. Webflow indents its script tags with a U+2028 between
-    "<script" and the attributes, and the HTML parser reads everything after the
-    first footer <script> as that element's children. Script elements nested
-    that way still load when they have a src, but an inline one never executes
-    at all - which is exactly what happened to this loader when it sat before
-    </body>: present in the DOM, registered nowhere, videos that never arrived.
-
-    Webflow's inline scripts in <head> are at the top level of the body, so they
-    run normally, and so does this one. It then waits for DOMContentLoaded
-    because the sections it needs have not been parsed yet at this point.
-  */
-  /*
-    Take the template's own scripts off the parse path.
-
-    jQuery, four Webflow bundles and three GSAP bundles together cost about ten
-    seconds of script evaluation once the interactions actually run - which, now
-    that the document head parses correctly, they do. They all sit at the end of
-    the body already, so they are the last thing in the document and cannot
-    paint anything before it; marking them defer moves their execution to after
-    the HTML has been parsed, which is what they were waiting for anyway.
-
-    Order is preserved: deferred classic scripts execute in document order, so
-    jQuery still lands before Webflow and GSAP still lands before the
-    interactions that use it.
-  */
-  out = out.replace(
-    /<script(?![^>]*\bdefer\b)([^>]*\bsrc="[^"]*(?:jquery|webflow|gsap|ScrollTrigger|SplitText)[^"]*"[^>]*)>/g,
-    "<script defer$1>"
-  );
-
-  const deferred = (out.match(/<script defer[^>]*\bsrc=/g) || []).length;
-  if (deferred !== 8) {
-    throw new Error(
-      `Expected to defer 8 template scripts (jQuery, 4 Webflow, 3 GSAP), deferred ${deferred}. ` +
-        "The script tags have probably changed - check the defer pass in lazyLoadVideos()."
-    );
-  }
-
-  const loader = `<script id="gks-video-loader">${VIDEO_LOADER}</script>`;
-
-  return swap(out, "</head>", `${loader}\n</head>`);
-}
-
-/**
- * Attaches each background video's source only once its section is close to the
- * viewport, then starts it playing.
- *
- * Written to run on its own rather than through Webflow, because Webflow's
- * background-video module loads everything at once — which is the behaviour
- * being removed here.
- */
-const VIDEO_LOADER = `(function () {
-  "use strict";
-
-  // Runs from <head>, so the sections it needs do not exist yet. Everything
-  // below is deferred to the point the document is parsed.
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start, { once: true });
-  } else {
-    start();
-  }
-
-  function start() {
-  // How far ahead of the viewport to start fetching, in pixels. Generous enough
-  // that the video is usually ready by the time it is seen, tight enough that a
-  // visitor who never scrolls never pays for it.
-  //
-  // A number, not "800px": this is added to innerHeight, and adding a string
-  // concatenates - innerHeight + "800px" is "757800px", which compares false
-  // against every possible position, so no wrapper was ever in range and no
-  // video ever loaded.
-  var MARGIN = 800;
-
-  var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  var saveData = navigator.connection &&
-    (navigator.connection.saveData === true ||
-      /(^|-)2g$/.test(navigator.connection.effectiveType || ""));
-
-  /*
-    The URLs live on the wrapper, not on the <video> inside it — that is where
-    Webflow puts them, and where this build leaves them so the template's own
-    markup is not reshaped any further. So each wrapper is watched, and the
-    source is attached to the video it contains.
-  */
-  var wrappers = Array.prototype.slice.call(
-    document.querySelectorAll("[data-video-urls]")
-  ).filter(function (el) {
-    return el.querySelector("video");
-  });
-
-  if (!wrappers.length) return;
-
-  function videoOf(wrapper) {
-    return wrapper.querySelector("video");
-  }
-
-  // The reduced-motion and Save-Data paths are a permanent decision, not a
-  // deferred one: there is nothing to wait for.
-  var blocked = motion.matches || saveData;
-  if (blocked) {
-    wrappers.forEach(function (wrapper) {
-      wrapper.removeAttribute("data-video-urls");
-      wrapper.setAttribute("data-gks-skipped", "motion-or-save-data");
-    });
-    return;
-  }
-
-  function load(wrapper) {
-    var urls = wrapper.getAttribute("data-video-urls");
-    if (!urls) return;
-    wrapper.removeAttribute("data-video-urls");
-
-    var video = videoOf(wrapper);
-    if (!video) return;
-
-    // The template's data-loop attribute sat on the wrapper, which Webflow
-    // owned; the loop moves here so it is still set when the video is attached.
-    video.loop = true;
-
-    // Same source list Webflow would have used: WebM first, MP4 as the
-    // fallback, chosen by the browser's own codec support.
-    urls.split(",").forEach(function (url) {
-      var source = document.createElement("source");
-      source.src = url;
-      source.type = url.indexOf(".webm") > -1 ? "video/webm" : "video/mp4";
-      video.appendChild(source);
-    });
-
-    var promise = video.play();
-    if (promise && typeof promise.catch === "function") {
-      // Autoplay can be refused — by policy, by the browser, or because the
-      // tab was in the background. The poster frame stays, which is the same
-      // image the video's first frame shows.
-      promise.catch(function () {});
-    }
-  }
-
-  /*
-    Load on approach to the viewport.
-
-    The check is an explicit rectangle test rather than an IntersectionObserver.
-    Both are defensible; this one is used because it can be verified under the
-    headless renderer used for these checks, where scroll-time observer
-    callbacks are not reliably delivered. It is throttled to one test per frame,
-    so a fast scroll still costs nothing, and it stops entirely once every
-    wrapper has been dealt with.
-  */
-  var pending = wrappers.slice();
-
-  function inRange(el) {
-    var box = el.getBoundingClientRect();
-    var limit = innerHeight + MARGIN;
-    return box.top < limit && box.bottom > -MARGIN;
-  }
-
-  function check() {
-    if (!pending.length) return;
-
-    var stillWaiting = [];
-    for (var i = 0; i < pending.length; i += 1) {
-      if (inRange(pending[i])) load(pending[i]);
-      else stillWaiting.push(pending[i]);
-    }
-    pending = stillWaiting;
-  }
-
-  /*
-    The check runs directly in the scroll handler, throttled by elapsed time
-    rather than by a frame callback.
-
-    Three getBoundingClientRect calls are cheap enough to do synchronously, and
-    doing so avoids depending on requestAnimationFrame, which does not run in a
-    backgrounded tab or a headless renderer — where a frame-scheduled check would
-    simply never fire and the videos would never load.
-  */
-  var THROTTLE = 100;
-  var lastRun = 0;
-
-  function schedule() {
-    var now = Date.now();
-    if (now - lastRun < THROTTLE) return;
-    lastRun = now;
-    check();
-  }
-
-  addEventListener("scroll", schedule, { passive: true });
-  addEventListener("resize", schedule, { passive: true });
-
-  /*
-    Hold the first check until the page has finished loading.
-
-    The hero video is the largest single download on the site - 2.2 MB - and it
-    is in range the moment the page opens. Fetching it during the load competes
-    with the stylesheet, the fonts and the first paint for the same connection,
-    and it was measurably costing first paint for a decoration that sits behind
-    the headline. Waiting for the load event gives those the connection first; the
-    poster frame is already showing by then, so the section never looks empty.
-
-    A visitor who scrolls before this point still gets the video: the scroll
-    handler is already attached, and it calls the same check.
-  */
-  if (document.readyState === "complete") {
-    check();
-  } else {
-    addEventListener("load", check, { once: true });
-  }
-  }
-})();`;
-
 /**
  * Replace the joyloo marks in the footer's scrolling strip.
  *
@@ -1239,31 +924,11 @@ function replaceBlogWithAdmissions(html) {
  * ================================================================== */
 
 function transform(html) {
-  /*
-    Normalise the export's indentation first.
-
-    Webflow indents with U+2028 LINE SEPARATOR, which HTML does not treat as
-    whitespace. The parser therefore never closes the tag it is sitting in:
-    "<head>" is read as an unknown element named "head<U+2028>", and the whole
-    of the document head - charset, title, description, Open Graph - is parsed
-    as body content instead.
-
-    That costs real things rather than tidiness: the encoding is guessed instead
-    of declared, the meta description stops being metadata, and the social cards
-    stop being read. Lighthouse reports all three as missing on a page that has
-    them, which is what sent this looking.
-
-    The character only ever appears as indentation here, and a newline separates
-    tags exactly as Webflow meant, so the substitution is invisible.
-  */
-  const out0 = html.replace(/\u2028|\u2029/g, "\n");
-
-  let out = replaceLogos(out0);
+  let out = replaceLogos(html);
 
   /* ---------------- Branding ---------------- */
 
   out = replaceTickerLogos(out);
-  out = lazyLoadVideos(out);
   out = addSectionAnchors(out);
   out = rewriteNavigation(out);
 
@@ -1536,8 +1201,8 @@ function transform(html) {
   // new line lands directly beneath the heading and inherits its layout.
   out = swap(
     out,
-    "</h2>\n                        </div>\n                        <div data-w-id=\"ff577e1d-a51a-3a83-4432-274e56c63a91\"",
-    `</h2><p class="cta-subtitle">Call the school office on ${CONTACT.phone}, or write to us and we will arrange a visit.</p>\n                        </div>\n                        <div data-w-id="ff577e1d-a51a-3a83-4432-274e56c63a91"`
+    "</h2>\u2028                        </div>\u2028                        <div data-w-id=\"ff577e1d-a51a-3a83-4432-274e56c63a91\"",
+    `</h2><p class="cta-subtitle">Call the school office on ${CONTACT.phone}, or write to us and we will arrange a visit.</p>\u2028                        </div>\u2028                        <div data-w-id="ff577e1d-a51a-3a83-4432-274e56c63a91"`
   );
 
   /* ---------------- Footer ---------------- */
@@ -1671,15 +1336,6 @@ const result = transform(readFileSync(SOURCE, "utf8"));
 const problems = [];
 
 if (result.includes("main-logo.svg")) problems.push("the joyloo logo is still referenced");
-
-/*
- * The U+2028 indentation is invisible in an editor and survives every other
- * check, so it gets its own assertion: if it ever comes back, the document head
- * silently stops being a head and every one of these tags stops being metadata.
- */
-if (/[\u2028\u2029]/.test(result)) {
-  problems.push("U+2028/U+2029 indentation survived; the document head will not parse as a head");
-}
 if (result.includes("699a704f228b19546a29c7d9_logo.svg")) {
   problems.push("the joyloo footer ticker marks are still referenced");
 }
@@ -1717,9 +1373,6 @@ if (/joyloo/i.test(withoutMarkup)) {
 for (const attr of withoutStylesheet.match(/[a-z-]+="[^"]*joyloo[^"]*"/gi) || []) {
   if (attr.startsWith("data-wf-")) continue;
   problems.push(`an attribute still carries the template's name: ${attr}`);
-}
-if (/data-autoplay="true"/.test(result)) {
-  problems.push("a background video is still set to autoplay eagerly");
 }
 if (/template-button/.test(result)) {
   problems.push("the Webflow template button is still on the page");
