@@ -114,3 +114,11 @@ client/public/__manus__/version.json
 .project-config.json
 .vercel
 .env*
+
+# The Webflow export the landing page is built from. Only its index.html is a
+# build input - scripts/build-landing.mjs reads that one file - so the other 30
+# pages and the 38 MB of locally mirrored assets stay out of the repo. Without
+# index.html committed, a build from git fails: the deploy only works when the
+# working directory is uploaded.
+webflow-site/*
+!webflow-site/index.html
