@@ -23,7 +23,7 @@
  * to the other pages: their links to "about-us.html" and "programs/play-based-learning.html"
  * resolve against /webflow/, which is where they are published.
  *
- * ## The two changes made to each page
+ * ## The changes made to each page
  *
  * 1. The template vendor's own corner button. Webflow pins a "GET THIS
  *    TEMPLATE" link to the bottom-right, pointing at webflow.com's template
@@ -32,10 +32,18 @@
  * 2. The "Parents" and "pages" dropdowns in the header. Both are lists of
  *    template pages - a changelog, a licence, a styleguide, "about us
  *    templates" - that belong to the template shop rather than to a school.
- *    The real sections (Home, About Us, Programs, Gallery, Blogs) are plain
- *    links and are left alone.
+ *    The real sections (Home, About Us, Programs, Gallery, Blogs) and the
+ *    Contact Us button are plain links and are left alone.
  *
- * Both are applied while serving, so webflow-site/ stays exactly as it is.
+ * 3. The "Made in Webflow" badge. Webflow's runtime script injects
+ *    <a class="w-webflow-badge"> into the body after load, so it is hidden
+ *    with a display:none rule (see suppressBadge).
+ *
+ * 4. The rebrand. "Joyloo" becomes "Global Kids School" throughout the
+ *    visible copy, and the footer's "Powered by Webflow" credit is dropped.
+ *
+ * All of this is applied while serving, so webflow-site/ stays exactly as it
+ * is.
  */
 
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -188,19 +196,66 @@ function stripHeaderDropdowns(html) {
   let mobile = 0;
   const navButton = /<div class="navigation-button">/.exec(working);
   if (navButton) {
-    const span = elementSpan(working, navButton.index, "div");
-    if (span) {
-      const inner = removeElementsContaining(
-        working.slice(span.start, span.end),
-        "div",
-        "nav-dropdown-toggle"
-      );
-      mobile = inner.removed;
-      working = working.slice(0, span.start) + inner.html + working.slice(span.end);
+    const outer = elementSpan(working, navButton.index, "div");
+    if (outer) {
+      /*
+        The mobile dropdown is a <div class="nav-dropdown ..."> sitting INSIDE
+        .navigation-button, as a sibling of the Contact Us button. Scanning the
+        wrapper for any <div> holding the marker matches the wrapper's OWN
+        opening tag first - that element trivially contains the marker - so
+        removing it took the whole wrapper, and the Contact button with it.
+        Instead, target the dropdown element directly and cut only that.
+      */
+      const inner = working.slice(outer.start, outer.end);
+      const dropdown = /<div\b[^>]*\bclass="nav-dropdown(?:\s[^"]*)?"[^>]*>/.exec(inner);
+      if (dropdown) {
+        const dspan = elementSpan(inner, dropdown.index, "div");
+        if (dspan) {
+          mobile = 1;
+          working =
+            working.slice(0, outer.start) +
+            inner.slice(0, dspan.start) +
+            inner.slice(dspan.end) +
+            working.slice(outer.end);
+        }
+      }
     }
   }
 
   return { html: working + tail, removed: items.removed + mobile };
+}
+
+/**
+ * Re-brand the served copy.
+ *
+ * - Swaps the template's name for the school's. Only the capitalised "Joyloo"
+ *   is rewritten: every lower-case "joyloo" in the export sits inside an
+ *   attribute (the real stylesheet filename "joyloo.webflow.shared.css" and
+ *   data-wf-domain), and rewriting those would break the stylesheet.
+ * - Drops the vendor credit from the footer copyright ("Powered by Webflow").
+ */
+function rebrand(html) {
+  const credits = html.match(/ Powered by\s*<a\b[^>]*>\s*Webflow\s*<\/a>/g) || [];
+  return {
+    html: html
+      .replace(/ Powered by\s*<a\b[^>]*>\s*Webflow\s*<\/a>/g, "")
+      .replace(/Joyloo/g, "Global Kids School"),
+    credits: credits.length,
+  };
+}
+
+/**
+ * Hide the "Made in Webflow" badge.
+ *
+ * Webflow's runtime (webflow.schunk.*.js) appends <a class="w-webflow-badge">
+ * to <body> after load, so it never exists in the served HTML - it only appears
+ * in the live DOM, which is why a grep of the source never finds it. A
+ * display:none rule is the only reliable way to suppress an element the page
+ * creates for itself at runtime.
+ */
+function suppressBadge(html) {
+  const style = "<style>a.w-webflow-badge{display:none!important}</style>";
+  return html.includes("</head>") ? html.replace("</head>", style + "</head>") : style + html;
 }
 
 /* ------------------------------------------------------------------ */
@@ -235,6 +290,7 @@ if (pages.length < 10) {
 
 let totalDropdowns = 0;
 let totalButtons = 0;
+let totalCredits = 0;
 
 for (const page of pages) {
   const source = readFileSync(join(EXPORT, page), "utf8");
@@ -249,10 +305,34 @@ for (const page of pages) {
   const stripped = removeElementsContaining(source, "a", "template-button", "template button");
   const nav = stripHeaderDropdowns(stripped.html);
   totalDropdowns += nav.removed;
+  const rebranded = rebrand(nav.html);
+  totalCredits += rebranded.credits;
+  const served = suppressBadge(rebranded.html);
 
   const target = join(MOUNT, page);
   mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, nav.html, "utf8");
+  writeFileSync(target, served, "utf8");
+
+  // The rebrand must have landed, and the vendor credit must be gone.
+  if (!served.includes("a.w-webflow-badge{display:none!important}")) {
+    console.error(`${page}: the Webflow badge is not suppressed.`);
+    process.exit(1);
+  }
+  if (served.includes("Joyloo")) {
+    console.error(`${page}: "Joyloo" survived the rebrand.`);
+    process.exit(1);
+  }
+  if (/Powered by/i.test(served)) {
+    console.error(`${page}: a "Powered by Webflow" credit survived.`);
+    process.exit(1);
+  }
+  // The Contact Us button lives beside the mobile dropdown; the dropdown must
+  // go without taking the button with it.
+  const contactBtn = 'class="button-text">Contact Us</div>';
+  if (source.includes(contactBtn) && !nav.html.includes(contactBtn)) {
+    console.error(`${page}: the header Contact Us button was removed.`);
+    process.exit(1);
+  }
 
   // Neither removal may survive, and the real sections must still be there.
   if (nav.html.includes("template-button") || nav.html.includes("GET THIS TEMPLATE")) {
@@ -289,6 +369,7 @@ for (const page of pages) {
 }
 
 console.log(`Published ${pages.length} pages to /webflow/`);
-console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns`);
+console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns, ${totalCredits} vendor credits`);
+console.log("  rebranded Joyloo -> Global Kids School")
 console.log("  /            -> /webflow/          webflow-site export");
 console.log("  /login       app.html              React app shell");
