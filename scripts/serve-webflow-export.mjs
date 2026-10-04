@@ -39,8 +39,15 @@
  *    <a class="w-webflow-badge"> into the body after load, so it is hidden
  *    with a display:none rule (see suppressBadge).
  *
- * 4. The rebrand. "Joyloo" becomes "Global Kids School" throughout the
- *    visible copy, and the footer's "Powered by Webflow" credit is dropped.
+ * 4. The rebrand. "Joyloo" becomes "Global Kids" throughout the visible
+ *    copy, and the footer's "Powered by Webflow" credit is dropped.
+ *
+ * 5. The logo. The export's wordmark draws "Joyloo" as outlined vector paths -
+ *    the letters are <path> data, never text - so it survives every text
+ *    replacement and is invisible to grep. The two logo images are swapped for
+ *    a "Global Kids" wordmark in the same two sizes and the same brand orange.
+ *
+ * 6. The "Programs" item is dropped from the header menu.
  *
  * All of this is applied while serving, so webflow-site/ stays exactly as it
  * is.
@@ -239,7 +246,7 @@ function rebrand(html) {
   return {
     html: html
       .replace(/ Powered by\s*<a\b[^>]*>\s*Webflow\s*<\/a>/g, "")
-      .replace(/Joyloo/g, "Global Kids School"),
+      .replace(/Joyloo/g, "Global Kids"),
     credits: credits.length,
   };
 }
@@ -256,6 +263,67 @@ function rebrand(html) {
 function suppressBadge(html) {
   const style = "<style>a.w-webflow-badge{display:none!important}</style>";
   return html.includes("</head>") ? html.replace("</head>", style + "</head>") : style + html;
+}
+
+/**
+ * Drop a named link from the header.
+ *
+ * A plain nav item is a <li> holding one <a class="nav-link">. It is matched on
+ * the anchor's own text so only the real menu entry is removed - the same
+ * word elsewhere (a heading, a body link, the footer) is left alone.
+ */
+function stripNavLink(html, label) {
+  // Find the menu anchor by its own text, then take out the <li> that wraps it.
+  // A regex over "<li> ... </li>" would be wrong here: the gap is lazy, so it
+  // happily spans from an earlier sibling's <li> across to this anchor's </li>,
+  // taking the neighbouring nav items with it.
+  const anchor = new RegExp(
+    `<a\\b[^>]*class="[^"]*nav-link[^"]*"[^>]*>${label}<\\/a>`,
+    "i"
+  ).exec(html);
+  if (!anchor) return { html, removed: false };
+
+  const open = html.lastIndexOf("<li", anchor.index);
+  if (open < 0) return { html, removed: false };
+  const span = elementSpan(html, open, "li");
+  if (!span) return { html, removed: false };
+
+  return { html: html.slice(0, span.start) + html.slice(span.end), removed: true };
+}
+
+/**
+ * Replace the template's logo with the school's own.
+ *
+ * The export's logo is <a class="w-webflow-badge">-free but its wordmark is
+ * drawn as outlined vector paths - the letters "Joyloo" exist as <path> data,
+ * never as text - so no amount of find-and-replace in the HTML touches it. The
+ * images are swapped for an equivalent <img> pointing at a wordmark generated
+ * in the same two sizes and the same brand orange.
+ */
+function swapLogo(html) {
+  const main = logoAsset(132, 36);
+  const footer = logoAsset(552, 143);
+  // The whole src, not just the filename. The export's hrefs are
+  // "assets/<host>/<id>_main-logo.svg", so replacing only the trailing
+  // filename would leave "assets/<host>/" glued in front of the data URI and
+  // break the image.
+  return html
+    .replace(/(?:https?:\/\/[^"'\s]*\/)?(?:assets\/[^"'\s]*\/)?699a5a61a516cf380bf13bc4_main-logo\.svg/g, main)
+    .replace(/(?:https?:\/\/[^"'\s]*\/)?(?:assets\/[^"'\s]*\/)?699a704f228b19546a29c7d9_logo\.svg/g, footer);
+}
+
+/** A "Global Kids" wordmark, sized to stand in for the export's logo. */
+function logoAsset(width, height) {
+  const fontSize = Math.round(height * 0.42);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
+    `viewBox="0 0 ${width} ${height}" fill="none" role="img" aria-label="Global Kids">` +
+    `<circle cx="${height / 2}" cy="${height / 2}" r="${height * 0.34}" fill="#F8642B"/>` +
+    `<text x="${height * 0.82}" y="${height / 2}" dominant-baseline="central" ` +
+    `font-family="Avenir Next,Segoe UI,Helvetica,Arial,sans-serif" font-size="${fontSize}" ` +
+    `font-weight="700" fill="#1A1A1A" letter-spacing="-0.5">Global Kids</text>` +
+    `</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -305,13 +373,43 @@ for (const page of pages) {
   const stripped = removeElementsContaining(source, "a", "template-button", "template button");
   const nav = stripHeaderDropdowns(stripped.html);
   totalDropdowns += nav.removed;
-  const rebranded = rebrand(nav.html);
+  const noPrograms = stripNavLink(nav.html, "Programs");
+  const rebranded = rebrand(noPrograms.html);
   totalCredits += rebranded.credits;
-  const served = suppressBadge(rebranded.html);
+  const served = suppressBadge(swapLogo(rebranded.html));
 
   const target = join(MOUNT, page);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, served, "utf8");
+
+  // The nav must keep its real links but lose Programs, and the Joyloo logo
+  // must be gone from the markup.
+  for (const label of ["Home", "About Us", "Gallery", "Blogs"]) {
+    if (!served.includes(`>${label}</a>`)) {
+      console.error(`${page}: the "${label}" nav link is missing.`);
+      process.exit(1);
+    }
+  }
+  // Scoped to the nav-link class: "Programs" also appears in the footer column
+  // and (before removal) the mega-menu, and a whole-document check would fail
+  // on those instead of on the nav item that is actually being removed.
+  const programsNavLink = /<a\b[^>]*class="[^"]*nav-link[^"]*"[^>]*>Programs<\/a>/i;
+  if (programsNavLink.test(source) && programsNavLink.test(served)) {
+    console.error(`${page}: the "Programs" nav link survived.`);
+    process.exit(1);
+  }
+  if (served.includes("main-logo.svg") || served.includes("699a704f228b19546a29c7d9_logo.svg")) {
+    console.error(`${page}: the Joyloo logo survived.`);
+    process.exit(1);
+  }
+  if (!served.includes("Global%20Kids")) {
+    console.error(`${page}: the Global Kids wordmark was not applied.`);
+    process.exit(1);
+  }
+  if (/assets\/[^"'\s]*data:image/.test(served)) {
+    console.error(`${page}: the logo data URI is prefixed by an asset path.`);
+    process.exit(1);
+  }
 
   // The rebrand must have landed, and the vendor credit must be gone.
   if (!served.includes("a.w-webflow-badge{display:none!important}")) {
@@ -370,6 +468,6 @@ for (const page of pages) {
 
 console.log(`Published ${pages.length} pages to /webflow/`);
 console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns, ${totalCredits} vendor credits`);
-console.log("  rebranded Joyloo -> Global Kids School")
+console.log("  rebranded Joyloo -> Global Kids, swapped the logo, removed the Programs nav item")
 console.log("  /            -> /webflow/          webflow-site export");
 console.log("  /login       app.html              React app shell");
