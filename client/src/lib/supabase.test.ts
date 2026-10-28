@@ -77,6 +77,28 @@ describe("signInWithUsername", () => {
     });
   });
 
+  it("returns the OTP step instead of a session for a student or member of staff", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        otpRequired: true,
+        emailHint: "k***@gmail.com",
+        message: "Enter the six-digit code sent to k***@gmail.com.",
+      })
+    );
+
+    const result = await signInWithUsername("adm26270001", "250213");
+
+    expect(result).toEqual({
+      status: "otp",
+      message: "Enter the six-digit code sent to k***@gmail.com.",
+      emailHint: "k***@gmail.com",
+    });
+    // The password step proves the first factor only; no session may be
+    // installed until the code comes back.
+    expect(setSessionMock).not.toHaveBeenCalled();
+  });
+
   it("trims the username and posts to /api/login", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, session: SESSION }));
     setSessionMock.mockResolvedValueOnce({ error: null });

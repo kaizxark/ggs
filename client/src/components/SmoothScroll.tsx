@@ -7,9 +7,49 @@ import Lenis from "lenis";
  */
 let instance: Lenis | null = null;
 
+/**
+ * Count of overlays asking for the page to hold still.
+ *
+ * A count rather than a boolean because two overlays can be open at once, and
+ * whichever closes second must not unlock the page out from under the one still
+ * on screen.
+ */
+let scrollLocks = 0;
+
+/**
+ * Freeze the scrolling page while an overlay is open.
+ *
+ * Lenis keeps its own animated position and drives the wheel itself, so telling
+ * it to stop is the only thing that actually holds the page: setting
+ * `overflow: hidden` on its wrapper is ignored while it is running. The wrapper
+ * is locked too, for the branch where Lenis is never constructed at all —
+ * reduced motion, or a touch device, both of which return early below.
+ *
+ * The scroll position is left exactly where it was. Resetting it is what makes
+ * an overlay feel like it threw you to the top of the page.
+ */
+export function setPageScrollLocked(locked: boolean): void {
+  /*
+   * The count alone decides the state, so there is nothing to bail out of here.
+   * An earlier version returned early while any lock was held — meant to stop a
+   * second overlay unlocking the page on its way out — but it bailed out of the
+   * *first* lock too, before the class was ever applied. The page stayed
+   * scrollable behind the panel for the whole time this existed.
+   */
+  scrollLocks = Math.max(0, scrollLocks + (locked ? 1 : -1));
+  const held = scrollLocks > 0;
+
+  if (instance) {
+    if (held) instance.stop();
+    else instance.start();
+  }
+  document.documentElement.classList.toggle("page-scroll-locked", held);
+}
+
 export function smoothScrollTo(target: number): void {
   if (instance) instance.scrollTo(target, { immediate: true });
 }
+
 
 export default function SmoothScroll({
   scrollRef,
@@ -42,7 +82,7 @@ export default function SmoothScroll({
       // changes, while the wrapper's own box is a fixed 100dvh — so neither of
       // the ResizeObservers Lenis sets up would ever fire.
       content: content ?? wrapper,
-      duration: 1.05,
+      duration: 0.65,
       easing: (t: number) => Math.min(1, 1.001 - 2 ** (-10 * t)),
       smoothWheel: true,
       wheelMultiplier: 1,
@@ -53,6 +93,9 @@ export default function SmoothScroll({
       syncTouch: false,
     });
     instance = lenis;
+    // An overlay may already be open — the dashboard can swap views underneath
+    // one. A fresh instance starts stopped or the page slides again.
+    if (scrollLocks > 0) lenis.stop();
 
     let lastHeight = 0;
 

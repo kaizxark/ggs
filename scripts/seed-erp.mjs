@@ -631,7 +631,7 @@ async function main() {
       const s = {
         id: uuid(),
         organisation_id: ORG_ID,
-        admission_no: null,
+        usn: null,
         first_name: first,
         last_name: fam.surname,
         date_of_birth: dateOfBirth,
@@ -666,11 +666,12 @@ async function main() {
     });
   }
 
-  // Admission numbers follow the date of joining, the way a real register does.
+  // USNs follow the date of joining, the way a real register does.
   const byJoin = [...students].sort(
     (a, b) => a.joined_on.localeCompare(b.joined_on) || a.last_name.localeCompare(b.last_name)
   );
-  byJoin.forEach((s, i) => (s.admission_no = `ADM/26-27/${pad(i + 1, 4)}`));
+  // The school's own shape: initials and four digits, starting at 1001.
+  byJoin.forEach((s, i) => (s.usn = `GGS${pad(i + 1001, 4)}`));
 
   // Guardian auth accounts: one login per household.
   const guardianJobs = families.map((fam) => ({
@@ -703,7 +704,7 @@ async function main() {
     students.map((s) => ({
       id: s.id,
       organisation_id: ORG_ID,
-      admission_no: s.admission_no,
+      usn: s.usn,
       first_name: s.first_name,
       last_name: s.last_name,
       date_of_birth: s.date_of_birth,
@@ -751,10 +752,10 @@ async function main() {
   const enrollments = [];
   for (const s of students) {
     const classroom = classroomOfGrade.get(s.grade);
-    // Roll numbers follow admission order within the class.
+    // Roll numbers follow USN order within the class.
     const peers = students
       .filter((x) => x.grade === s.grade)
-      .sort((a, b) => a.admission_no.localeCompare(b.admission_no));
+      .sort((a, b) => a.usn.localeCompare(b.usn));
     enrollments.push({
       id: uuid(),
       organisation_id: ORG_ID,
@@ -1284,7 +1285,7 @@ async function main() {
       s.family.guardianId,
       teacher.id,
       parentQueries[messages.length % parentQueries.length](s),
-      `Respected sir/madam, this is regarding ${s.first_name} (Grade ${s.grade}, admission no. ${s.admission_no}). ${inv.status === "overdue" ? `We are still arranging the ${inv.term} fee of Rs.${inv.total.toLocaleString("en-IN")} and would like to clear it by the end of the month.` : `We have paid Rs.${inv.paid_amount.toLocaleString("en-IN")} against the ${inv.term} invoice and will pay the balance shortly.`} Kindly advise.`,
+      `Respected sir/madam, this is regarding ${s.first_name} (Grade ${s.grade}, USN ${s.usn}). ${inv.status === "overdue" ? `We are still arranging the ${inv.term} fee of Rs.${inv.total.toLocaleString("en-IN")} and would like to clear it by the end of the month.` : `We have paid Rs.${inv.paid_amount.toLocaleString("en-IN")} against the ${inv.term} invoice and will pay the balance shortly.`} Kindly advise.`,
       chance(0.5) ? "read" : "unread",
       ts(addDays("2026-09-24", int(0, 8)), int(8, 19), int(0, 59))
     );

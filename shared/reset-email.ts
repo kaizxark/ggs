@@ -68,16 +68,28 @@ export function safeResetUrl(value: unknown): string {
 export interface ResetEmailInput {
   resetUrl: string;
   recipientName?: string;
+  /**
+   * Whose account the link opens, when the message went to somebody other than
+   * the account holder — a pupil's family, whose address is the one on the
+   * pupil's record. A family with more than one child needs to know which
+   * account this is for.
+   */
+  onBehalfOf?: string;
 }
 
 /** The HTML body. Mail clients that block images still show the button. */
 export function resetEmailHtml({
   resetUrl,
   recipientName,
+  onBehalfOf,
 }: ResetEmailInput): string {
   const url = safeResetUrl(resetUrl);
   const name = escapeHtml(recipientName).trim();
+  const behalf = escapeHtml(onBehalfOf).trim();
   const greeting = name ? `Hello ${name},` : "Hello,";
+  const whose = behalf
+    ? `We received a request to reset the password for <strong style="color:#d7dee4;font-weight:600;">${behalf}</strong>. Choose a new one using the button below.`
+    : "We received a request to reset the password for this account. Choose a new one using the button below.";
   // The URL is escaped for attribute and text use separately: the href needs
   // quotes escaped, the visible fallback needs the same treatment.
   const href = escapeHtml(url);
@@ -108,7 +120,7 @@ export function resetEmailHtml({
         <tr>
           <td style="padding:30px 34px 22px;text-align:center;border-bottom:1px solid #1e232b;">
             <img src="{{ logo }}" width="56" height="56" alt="Global Kids School"
-              style="display:block;margin:0 auto 14px;border:0;outline:none;text-decoration:none;" />
+              style="display:block;box-sizing:border-box;margin:0 auto 14px;border:0;border-radius:50%;outline:none;text-decoration:none;" />
             <div style="color:#e7ebef;font-size:17px;font-weight:700;line-height:1.3;">Global Kids School</div>
             <div style="color:#6b7480;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;margin-top:6px;">
               School OS · Admin Portal
@@ -122,7 +134,7 @@ export function resetEmailHtml({
             </h1>
             <p style="margin:0 0 16px;color:#9aa6af;font-size:14px;line-height:1.6;">
               ${greeting}<br />
-              We received a request to reset the password for this account. Choose a new one using the button below.
+              ${whose}
             </p>
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0;">
               <tr>
@@ -176,11 +188,18 @@ export function resetEmailHtml({
  * the spam folder, and it is the only version that survives a client which
  * strips HTML entirely.
  */
-export function resetEmailText({ resetUrl }: ResetEmailInput): string {
+export function resetEmailText({
+  resetUrl,
+  onBehalfOf,
+}: ResetEmailInput): string {
   const url = safeResetUrl(resetUrl);
+  const behalf = String(onBehalfOf ?? "").trim();
+  const whose = behalf
+    ? `We received a request to reset the password for ${behalf}.`
+    : "We received a request to reset the password for this account.";
   return `Reset your password — Global Kids School
 
-We received a request to reset the password for this account.
+${whose}
 Choose a new one using the link below:
 
 ${url || "(this link could not be generated — please ask an administrator)"}

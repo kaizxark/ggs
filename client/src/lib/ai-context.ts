@@ -366,7 +366,7 @@ export function buildAssistantBrief(input: BriefInput): Record<string, unknown> 
       // null, not 0, when the pupil has no marked days. See `attendanceText`.
       attendance_pct: marked(s) ? Number(s.attendance) : null,
       risk_band: band(s),
-      admission_no: s.admission_no,
+      usn: s.usn,
     })),
     lowest_scoring_students_note:
       atRisk.length < graded.length
@@ -759,14 +759,14 @@ function buildAccessNotes(
       {
         name: "Students",
         what_is_here: [
-          "every enrolled student: name, grade, section, admission number, attendance average, academics average, status",
+          "every enrolled student: name, grade, section, USN, attendance average, academics average, status",
           "per-student attendance records and scored papers counts",
           "search and filter by name, grade, section",
         ],
         typical_questions: [
           "Which students are in Grade 5?",
           "Who has the lowest attendance?",
-          "Find a student by admission number",
+          "Find a student by USN",
         ],
         role_note: "Every role that can see this screen sees the full student list the school is allowed to show them.",
       },

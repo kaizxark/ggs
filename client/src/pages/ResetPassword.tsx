@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import {
   getRecoverySession,
-  isRecoverySession,
+  isRecoveryFlow,
   updatePassword,
 } from "../lib/supabase";
 
@@ -67,9 +67,22 @@ export default function ResetPassword() {
 
   // A link can arrive without any recovery marker at all (someone typed the
   // address in, or pasted the wrong half of a URL). That is not "expired".
-  const [hadRecoveryParams] = useState(isRecoverySession);
+  const [hadRecoveryParams] = useState(isRecoveryFlow);
 
   useEffect(() => {
+    /*
+     * Only a recovery link may set a password here.
+     *
+     * getRecoverySession returns whatever session the browser holds, including
+     * an ordinary one from an earlier sign-in. Without this check anybody who
+     * walked up to an unlocked dashboard could open /reset-password and take
+     * the account over without knowing the current password — which is exactly
+     * what the account-settings screen refuses to allow.
+     */
+    if (!hadRecoveryParams) {
+      setPhase("expired");
+      return;
+    }
     let cancelled = false;
     void getRecoverySession().then((session) => {
       if (cancelled) return;
@@ -78,7 +91,7 @@ export default function ResetPassword() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hadRecoveryParams]);
 
   const failed = useMemo(
     () => RULES.filter((rule) => !rule.test(password)),
@@ -130,7 +143,7 @@ export default function ResetPassword() {
 
       <div className="relative w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <img src="/logo.png" alt="Global Kids School" className="h-20 w-auto rounded-full" />
+          <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-20 w-20 rounded-full" />
           <p className="mt-4 text-[12.5px] font-semibold text-[var(--text-muted)] tracking-[0.14em] uppercase">
             School OS · Admin Portal
           </p>

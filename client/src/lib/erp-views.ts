@@ -23,7 +23,6 @@ import {
 import {
   mockActivityLog,
   mockAnnouncements,
-  mockAssignments,
   mockAttendanceData,
   mockClassAttendance,
   mockExamResults,
@@ -44,12 +43,9 @@ import {
   mockSubjectAverages,
   mockSubjects,
   mockTimetable,
-  mockTransportRoutes,
-  mockVehicles,
   type ActivityCategory,
   type ActivityItem,
   type Announcement,
-  type Assignment,
   type AttendanceDaily,
   type ClassAttendanceRow,
   type Exam,
@@ -70,8 +66,6 @@ import {
   type SubjectAverage,
   type SubjectRow,
   type TimetableEntry,
-  type TransportRoute,
-  type Vehicle,
 } from "./school-data";
 
 /* ------------------------------------------------------------------ */
@@ -95,9 +89,10 @@ const rowCache = new Map<string, Promise<Record<string, unknown>[]>>();
 function fetchAll(
   table: string,
   columns: string,
-  orderBy?: string
+  orderBy?: string,
+  limit?: number
 ): Promise<Record<string, unknown>[]> {
-  const key = `${table}|${columns}|${orderBy ?? ""}`;
+  const key = `${table}|${columns}|${orderBy ?? ""}|${limit ?? ""}`;
   const hit = rowCache.get(key);
   if (hit) return hit;
 
@@ -105,6 +100,14 @@ function fetchAll(
     const applyOrder = <T extends { order: (c: string, o: { ascending: boolean }) => T }>(
       q: T,
     ): T => (orderBy ? q.order(orderBy, { ascending: true }) : q);
+
+    if (limit && limit <= PAGE) {
+      const { data, error } = await applyOrder(
+        supabase.from(table).select(columns).range(0, limit - 1),
+      );
+      if (error) throw new Error(`${table}: ${error.message}`);
+      return (data ?? []) as unknown as Record<string, unknown>[];
+    }
 
     // Ask for the exact row count up front. Paging serially cost one round trip
     // per 1000 rows (~13 for attendance alone, each ~0.6s, all sequential);
@@ -115,25 +118,27 @@ function fetchAll(
     );
     if (countError) throw new Error(`${table}: ${countError.message}`);
 
-    const total = count ?? 0;
-    if (total <= PAGE) {
+    const effectiveTotal = limit ? Math.min(limit, count ?? 0) : (count ?? 0);
+    if (effectiveTotal <= PAGE) {
       const { data, error } = await applyOrder(
-        supabase.from(table).select(columns).range(0, PAGE - 1),
+        supabase.from(table).select(columns).range(0, Math.max(0, effectiveTotal - 1)),
       );
       if (error) throw new Error(`${table}: ${error.message}`);
       return (data ?? []) as unknown as Record<string, unknown>[];
     }
 
-    const pageCount = Math.ceil(total / PAGE);
+    const pageCount = Math.ceil(effectiveTotal / PAGE);
     const pages = await Promise.all(
-      Array.from({ length: pageCount }, (_, i) =>
-        applyOrder(
-          supabase.from(table).select(columns).range(i * PAGE, i * PAGE + PAGE - 1),
+      Array.from({ length: pageCount }, (_, i) => {
+        const pageStart = i * PAGE;
+        const pageEnd = Math.min(pageStart + PAGE - 1, effectiveTotal - 1);
+        return applyOrder(
+          supabase.from(table).select(columns).range(pageStart, pageEnd),
         ).then(({ data, error }) => {
           if (error) throw new Error(`${table}: ${error.message}`);
           return (data ?? []) as unknown as Record<string, unknown>[];
-        })
-      )
+        });
+      })
     );
     const out: Record<string, unknown>[] = [];
     for (const page of pages) out.push(...page);
@@ -246,14 +251,15 @@ function useErpView<T extends { id: string | number }>(
   key: string,
   load: () => Promise<T[]>,
   mockRows: T[],
-  deps: unknown[] = []
+  deps: unknown[] = [],
+  enabled = true
 ): ErpView<T> {
   // Start empty rather than seeded with the mock rows. Seeding them made the
   // dashboard paint placeholder students (and their counts) for a frame before
   // the real query resolved, which read as a glitch. The mocks are now only a
   // genuine fallback for when Supabase is actually unreachable.
   const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<"mock" | "db">("db");
   const [nonce, setNonce] = useState(0);
@@ -263,6 +269,13 @@ function useErpView<T extends { id: string | number }>(
   loadRef.current = load;
 
   useEffect(() => {
+    if (!enabled) {
+      setRows([]);
+      setSource("db");
+      setError(null);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -285,7 +298,7 @@ function useErpView<T extends { id: string | number }>(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, nonce, ...deps]);
+  }, [key, nonce, enabled, ...deps]);
 
   const reload = useCallback(() => {
     cache.delete(`${key}:${nonce}`);
@@ -308,24 +321,21 @@ function useErpView<T extends { id: string | number }>(
 
 /* ------------------------------------------------------------------ */
 /* Students — needs students + enrollments + classrooms + attendance    */
-/*           + exam_results + invoices + transport_allocations          */
+/*           + exam_results + invoices                                  */
 /* ------------------------------------------------------------------ */
 
 async function loadStudents(): Promise<Student[]> {
-  const [students, enrollments, classrooms, attendance, results, invoices, allocations, routes] =
+  const [students, enrollments, classrooms, attendance, results, invoices] =
     await Promise.all([
-      fetchAll("students", "id,first_name,last_name,status,admission_no"),
+      fetchAll("students", "id,first_name,last_name,status,usn"),
       fetchAll("enrollments", "student_id,classroom_id,active"),
       fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
-      fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
+      fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status", "attendance_date", 1000),
       fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
       fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
-      fetchAll("transport_allocations", "id,student_id,route_id,active"),
-      fetchAll("transport_routes", "id,code,name,vehicle_no,driver_name,active"),
     ]);
 
   const classroomById = new Map(classrooms.map((c) => [String(c.id), c]));
-  const routeById = new Map(routes.map((r) => [String(r.id), r]));
 
   // grade / section from the active enrollment
   const classOf = new Map<string, Record<string, unknown>>();
@@ -372,13 +382,6 @@ async function loadStudents(): Promise<Student[]> {
     feeByStudent.set(key, cur);
   }
 
-  const transportByStudent = new Map<string, string>();
-  for (const a of allocations) {
-    if (a.active === false) continue;
-    const route = routeById.get(String(a.route_id));
-    if (route) transportByStudent.set(String(a.student_id), String(route.code));
-  }
-
   return students.map((s) => {
     const first = String(s.first_name ?? "");
     const last = String(s.last_name ?? "");
@@ -408,26 +411,26 @@ async function loadStudents(): Promise<Student[]> {
       average,
       scored_papers,
       fees: outstanding <= 0 ? "Paid" : fee?.status === "draft" ? "Draft" : "Due",
-      transport: transportByStudent.get(id) ?? "Self",
       status: s.status === "active" ? "Active" : "Review",
       tone: toneFor(id),
-      // the human-facing admission number, e.g. ADM/26-27/0041
-      admission_no: String(s.admission_no ?? id),
+      // the human-facing USN, e.g. adm26270041
+      usn: String(s.usn ?? id),
     } as unknown as Student;
   });
 }
 
-export function useStudentsView() {
-  // the offline mock rows predate the admission_no, attendance_records and
+export function useStudentsView(enabled = true) {
+  // the offline mock rows predate the usn, attendance_records and
   // scored_papers fields; give them one each so the table column is never
   // empty and the assistant does not read the mock percentages as unmarked
   const fallback = mockStudents.map((s) => ({
     ...s,
+    usn: String(s.id),
     admission_no: String(s.id),
     attendance_records: 60,
     scored_papers: 5,
   })) as Student[];
-  return useErpView<Student>("students", loadStudents, fallback);
+  return useErpView<Student>("students", loadStudents, fallback, [], enabled);
 }
 
 /* ------------------------------------------------------------------ */
@@ -435,7 +438,16 @@ export function useStudentsView() {
 /* ------------------------------------------------------------------ */
 
 async function loadStaff(): Promise<StaffMember[]> {
-  const staff = await fetchAll("staff", "id,name,designation,department,email,active");
+  const [staff, profiles] = await Promise.all([
+    fetchAll("staff", "id,usn,name,designation,department,email,active,profile_id"),
+    fetchAll("profiles", "id,avatar_url"),
+  ]);
+  const photoByProfile = new Map(
+    profiles.map((profile) => [
+      String(profile.id),
+      String(profile.avatar_url ?? "").trim() || null,
+    ])
+  );
   return staff.map((s) => {
     const name = String(s.name ?? "");
     const parts = name.replace(/^(Dr|Mr|Mrs|Ms|Smt)\.?\s+/i, "").trim().split(/\s+/);
@@ -443,6 +455,7 @@ async function loadStaff(): Promise<StaffMember[]> {
     const last = parts[parts.length - 1] ?? "";
     return {
       id: String(s.id),
+      usn: String(s.usn ?? "—"),
       name,
       initials: initialsOf(first, last),
       role: String(s.designation ?? "Staff"),
@@ -452,6 +465,7 @@ async function loadStaff(): Promise<StaffMember[]> {
       attendance: 100,
       status: s.active === false ? "On leave" : "On campus",
       tone: toneFor(String(s.id)),
+      photo_url: photoByProfile.get(String(s.profile_id ?? "").trim()) ?? null,
     };
   });
 }
@@ -466,31 +480,81 @@ export function useStaffView() {
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+export interface DashboardAttendanceData {
+  daily: AttendanceDaily[];
+  classes: ClassAttendanceRow[];
+  belowThreshold: number;
+}
+
+type DashboardAttendanceRow = DashboardAttendanceData & { id: string };
+
+async function loadDashboardAttendance(): Promise<DashboardAttendanceRow[]> {
+  const { data, error } = await supabase.rpc("dashboard_attendance");
+  if (error) throw new Error(`dashboard_attendance: ${error.message}`);
+
+  const payload = (data ?? {}) as {
+    daily?: Array<{
+      date: string;
+      present?: number;
+      absent?: number;
+      late?: number;
+      leave?: number;
+    }>;
+    classes?: Array<{
+      id: string;
+      grade?: string;
+      section?: string;
+      teacher?: string;
+      present?: number;
+      total?: number;
+    }>;
+    belowThreshold?: number;
+  };
+
+  const daily = (payload.daily ?? []).map((row) => ({
+    id: String(row.date),
+    day:
+      DAY_LABELS[new Date(`${row.date}T00:00:00Z`).getUTCDay()] ??
+      String(row.date),
+    present: num(row.present),
+    absent: num(row.absent),
+    late: num(row.late),
+    leave: num(row.leave),
+  }));
+
+  const classes = (payload.classes ?? []).map((row) => {
+    const total = num(row.total);
+    const present = num(row.present);
+    return {
+      id: String(row.id),
+      label: `Grade ${row.grade ?? "—"} — ${row.section ?? "—"}`,
+      value: total > 0 ? Math.round((present / total) * 100) : 0,
+      present,
+      total,
+      teacher: String(row.teacher ?? "Unassigned"),
+    };
+  });
+
+  return [
+    {
+      id: "dashboard_attendance",
+      daily,
+      classes,
+      belowThreshold: num(payload.belowThreshold),
+    },
+  ];
+}
+
 async function loadAttendanceDaily(): Promise<AttendanceDaily[]> {
-  const rows = await fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status");
-  const byDate = new Map<string, { present: number; absent: number; late: number; leave: number; n: number }>();
-  for (const r of rows) {
-    const d = String(r.attendance_date);
-    const cur = byDate.get(d) ?? { present: 0, absent: 0, late: 0, leave: 0, n: 0 };
-    const st = String(r.status);
-    if (st === "present") cur.present++;
-    else if (st === "absent") cur.absent++;
-    else if (st === "late") cur.late++;
-    else if (st === "leave") cur.leave++;
-    cur.n++;
-    byDate.set(d, cur);
+  try {
+    const rows = await loadDashboardAttendance();
+    if (rows[0]?.daily && rows[0].daily.length > 0) {
+      return rows[0].daily;
+    }
+  } catch {
+    // offline or RPC unavailable fallback
   }
-  return Array.from(byDate.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-7)
-    .map(([d, v]) => ({
-      id: d,
-      day: DAY_LABELS[new Date(`${d}T00:00:00Z`).getUTCDay()] ?? d,
-      present: v.present,
-      absent: v.absent,
-      late: v.late,
-      leave: v.leave,
-    }));
+  return mockAttendanceData;
 }
 
 export function useAttendanceDailyView() {
@@ -498,38 +562,79 @@ export function useAttendanceDailyView() {
 }
 
 async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
-  const [attendance, classrooms, staff] = await Promise.all([
-    fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
-    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
-    fetchAll("staff", "id,name,designation,department,email,active"),
-  ]);
-  const staffById = new Map(staff.map((s) => [String(s.id), String(s.name ?? "")]));
-  const stat = new Map<string, { ok: number; total: number }>();
-  for (const a of attendance) {
-    if (!a.classroom_id) continue;
-    const key = String(a.classroom_id);
-    const cur = stat.get(key) ?? { ok: 0, total: 0 };
-    cur.total++;
-    if (a.status === "present" || a.status === "late") cur.ok++;
-    stat.set(key, cur);
+  try {
+    const rows = await loadDashboardAttendance();
+    if (rows[0]?.classes && rows[0].classes.length > 0) {
+      return rows[0].classes;
+    }
+  } catch {
+    // offline or RPC unavailable fallback
   }
-  return classrooms
-    .map((c) => {
-      const s = stat.get(String(c.id)) ?? { ok: 0, total: 0 };
-      return {
-        id: String(c.id),
-        label: `Grade ${c.grade} — ${c.section}`,
-        value: s.total > 0 ? Math.round((s.ok / s.total) * 100) : 0,
-        present: s.ok,
-        total: s.total,
-        teacher: staffById.get(String(c.class_teacher_id)) ?? "Unassigned",
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
+  return mockClassAttendance;
 }
 
 export function useClassAttendanceView() {
   return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, mockClassAttendance);
+}
+
+/**
+ * One small RPC instead of paging every attendance row into the browser.
+ * The overview needs three aggregates; computing them in Postgres keeps the
+ * first paint off the 12k-row attendance table.
+ */
+export function useDashboardAttendance(enabled = true) {
+  const view = useErpView<DashboardAttendanceRow>(
+    "dashboard_attendance",
+    loadDashboardAttendance,
+    [],
+    [],
+    enabled
+  );
+  const row = view.rows[0];
+  return {
+    daily: row?.daily ?? [],
+    classes: row?.classes ?? [],
+    belowThreshold: row?.belowThreshold ?? 0,
+    loading: view.loading,
+    error: view.error,
+    source: view.source,
+    reload: view.reload,
+  };
+}
+
+type StudentCountRow = { id: string; total: number; active: number };
+
+async function loadStudentCounts(): Promise<StudentCountRow[]> {
+  const rows = await fetchAll("students", "id,status");
+  return [
+    {
+      id: "student_counts",
+      total: rows.length,
+      active: rows.filter(
+        (row) => String(row.status ?? "").toLowerCase() === "active"
+      ).length,
+    },
+  ];
+}
+
+/** The sidebar and overview need headcounts, not the full student roll-up. */
+export function useStudentCountsView(enabled = true) {
+  const view = useErpView<StudentCountRow>(
+    "student_counts",
+    loadStudentCounts,
+    [{ id: "student_counts", total: 0, active: 0 }],
+    [],
+    enabled
+  );
+  const row = view.rows[0];
+  return {
+    total: row?.total ?? 0,
+    active: row?.active ?? 0,
+    loading: view.loading,
+    error: view.error,
+    source: view.source,
+    reload: view.reload,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -539,7 +644,7 @@ export function useClassAttendanceView() {
 async function loadInvoices(): Promise<Invoice[]> {
   const [invoices, students] = await Promise.all([
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
-    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+    fetchAll("students", "id,first_name,last_name,status,usn"),
   ]);
   const byId = new Map(students.map((s) => [String(s.id), s]));
   return invoices
@@ -547,29 +652,34 @@ async function loadInvoices(): Promise<Invoice[]> {
       const s = byId.get(String(i.student_id));
       const name = s ? `${s.first_name} ${s.last_name}`.trim() : "Unknown student";
       const surname = s ? String(s.last_name) : "—";
-      const outstanding = num(i.total) - num(i.paid_amount);
+      const total = num(i.total);
+      const paid = num(i.paid_amount);
+      const outstanding = Math.max(0, total - paid);
       const status = String(i.status);
       return {
         id: String(i.invoice_no ?? i.id),
         family: `${surname} family`,
         student: name,
         due_date: i.due_on ? fmtDate(String(i.due_on)) : "—",
-        amount: outstanding > 0 ? outstanding : num(i.total),
+        amount: outstanding > 0 ? outstanding : total,
+        total,
+        paid,
+        outstanding,
         status: status === "overdue" ? "Overdue" : outstanding > 0 ? "Partial" : "Paid",
       };
     })
     .sort((a, b) => b.amount - a.amount);
 }
 
-export function useInvoicesView() {
-  return useErpView<Invoice>("invoices", loadInvoices, mockInvoices);
+export function useInvoicesView(enabled = true) {
+  return useErpView<Invoice>("invoices", loadInvoices, mockInvoices, [], enabled);
 }
 
 async function loadPayments(): Promise<Payment[]> {
   const [payments, invoices, students] = await Promise.all([
     fetchAll("payments", "id,invoice_id,amount,method,paid_at"),
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
-    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+    fetchAll("students", "id,first_name,last_name,status,usn"),
   ]);
   const invById = new Map(invoices.map((i) => [String(i.id), i]));
   const stuById = new Map(students.map((s) => [String(s.id), s]));
@@ -685,7 +795,7 @@ async function loadExamResults(): Promise<ExamResult[]> {
   const [results, exams, students, classrooms, enrollments] = await Promise.all([
     fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
     fetchAll("examinations", "id,name,starts_on,ends_on,published"),
-    fetchAll("students", "id,first_name,last_name,status,admission_no"),
+    fetchAll("students", "id,first_name,last_name,status,usn"),
     fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
     fetchAll("enrollments", "student_id,classroom_id,active"),
   ]);
@@ -740,50 +850,10 @@ export function useExamResultsView() {
   return useErpView<ExamResult>("exam_results", loadExamResults, mockExamResults);
 }
 
-async function loadAssignments(): Promise<Assignment[]> {
-  const [assignments, classrooms, students, enrollments] = await Promise.all([
-    fetchAll("assignments", "id,classroom_id,subject,title,due_at"),
-    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
-    fetchAll("students", "id,first_name,last_name,status,admission_no"),
-    fetchAll("enrollments", "student_id,classroom_id,active"),
-  ]);
-  const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
-  const stuById = new Map(students.map((s) => [String(s.id), s]));
-  const members = new Map<string, string[]>();
-  for (const e of enrollments) {
-    if (e.active === false) continue;
-    const key = String(e.classroom_id);
-    members.set(key, [...(members.get(key) ?? []), String(e.student_id)]);
-  }
-
-  const out: Assignment[] = [];
-  for (const a of assignments) {
-    const room = roomById.get(String(a.classroom_id));
-    const roster = members.get(String(a.classroom_id)) ?? [];
-    // the assignment belongs to a class, so list it against its first student
-    const s = roster.length ? stuById.get(roster[0]) : undefined;
-    out.push({
-      id: String(a.id),
-      title: String(a.title),
-      subject: String(a.subject ?? ""),
-      grade: room ? `Grade ${room.grade} — ${room.section}` : "—",
-      student: s ? `${s.first_name} ${s.last_name}`.trim() : `${roster.length} students`,
-      submitted: a.due_at ? `Due ${fmtDate(String(a.due_at))}` : "No due date",
-      late: a.due_at ? new Date(String(a.due_at)).getTime() < Date.now() : false,
-      graded: false, // submissions are not tracked in the schema
-    });
-  }
-  return out;
-}
-
-export function useAssignmentsView() {
-  return useErpView<Assignment>("assignments", loadAssignments, mockAssignments);
-}
-
 async function loadSubjects(): Promise<SubjectRow[]> {
   const [results, staff, classrooms] = await Promise.all([
     fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
-    fetchAll("staff", "id,name,designation,department,email,active"),
+    fetchAll("staff", "id,usn,name,designation,department,email,active"),
     fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
   ]);
   const bySubject = new Map<string, { sum: number; n: number }>();
@@ -831,12 +901,11 @@ export function useSubjectAveragesView() {
 }
 
 async function loadGradeOutcomes(): Promise<{ id: string; grade: string; average: number; attendance: number; change: string }[]> {
-  const [results, students, classrooms, enrollments, attendance] = await Promise.all([
+  const [results, classrooms, enrollments, dashAttendance] = await Promise.all([
     fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
-    fetchAll("students", "id,first_name,last_name,status,admission_no"),
     fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
     fetchAll("enrollments", "student_id,classroom_id,active"),
-    fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
+    loadDashboardAttendance().catch(() => []),
   ]);
   const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
   const classOf = new Map<string, string>();
@@ -858,12 +927,13 @@ async function loadGradeOutcomes(): Promise<{ id: string; grade: string; average
     marks.set(key, cur);
   }
   const att = new Map<string, { ok: number; total: number }>();
-  for (const a of attendance) {
-    const key = classOf.get(String(a.student_id));
+  for (const c of dashAttendance[0]?.classes ?? []) {
+    const match = /Grade\s+(\d+)/i.exec(c.label);
+    const key = match ? match[1] : "";
     if (!key) continue;
     const cur = att.get(key) ?? { ok: 0, total: 0 };
-    cur.total++;
-    if (a.status === "present" || a.status === "late") cur.ok++;
+    cur.total += c.total;
+    cur.ok += c.present;
     att.set(key, cur);
   }
   return Array.from(new Set(classOf.values()))
@@ -924,24 +994,17 @@ export function usePerformanceTrendView() {
 }
 
 async function loadHealthMetrics(): Promise<HealthMetric[]> {
-  const [attendance, results, invoices] = await Promise.all([
-    fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status"),
-    fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
-    fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
-  ]);
-  const ok = attendance.filter((a) => a.status === "present" || a.status === "late").length;
-  const attPct = attendance.length ? Math.round((ok / attendance.length) * 100) : 0;
+  const { data, error } = await supabase.rpc("dashboard_health");
+  if (error) throw new Error(`dashboard_health: ${error.message}`);
 
-  const scored = results.filter((r) => r.grade !== "Ab" && num(r.max_marks) > 0);
-  const avgPct = scored.length
-    ? Math.round(
-        (scored.reduce((a, r) => a + (num(r.marks) / num(r.max_marks)) * 100, 0) / scored.length)
-      )
-    : 0;
-
-  const billed = invoices.reduce((a, i) => a + num(i.total), 0);
-  const collected = invoices.reduce((a, i) => a + num(i.paid_amount), 0);
-  const feePct = billed > 0 ? Math.round((collected / billed) * 100) : 0;
+  const payload = (data ?? {}) as {
+    attendancePct?: number;
+    academicPct?: number;
+    feePct?: number;
+  };
+  const attPct = num(payload.attendancePct);
+  const avgPct = num(payload.academicPct);
+  const feePct = num(payload.feePct);
 
   return [
     { id: "hm-1", label: "Attendance", value: `${attPct}%`, change: "term to date", progress: attPct, color: "#2f6f68" },
@@ -973,9 +1036,14 @@ async function loadAnnouncements(): Promise<Announcement[]> {
         color: palette[Math.abs(hashCode(String(r.id))) % palette.length],
         image_url: null,
         body: r.body ? String(r.body) : null,
+        published_at: r.published_at ? String(r.published_at) : null,
       };
     })
-    .sort((a, b) => a.title.localeCompare(b.title));
+    .sort((a, b) => {
+      const at = a.published_at ? new Date(a.published_at).getTime() : 0;
+      const bt = b.published_at ? new Date(b.published_at).getTime() : 0;
+      return bt - at;
+    });
 }
 
 function hashCode(s: string): number {
@@ -1091,6 +1159,7 @@ export interface CurrentUser {
    * sends the link, so it has to keep working whatever the username becomes.
    */
   username: string;
+  avatarUrl: string;
 }
 
 export function useCurrentUser(): CurrentUser | null {
@@ -1127,19 +1196,29 @@ export function useCurrentUser(): CurrentUser | null {
         id: userId,
         fullName: titleCase(fallbackName) || email,
         email,
-        role: "admin",
+        /*
+         * Fail narrow, not wide. If the profile row cannot be read, the safe
+         * assumption is the least-privileged role — defaulting to "admin"
+         * handed every screen to anyone whose profile query happened to error.
+         */
+        role: "parent",
         username: local,
+        avatarUrl: "",
       });
     };
 
     void (async () => {
       try {
-        const { data: row } = await supabase
+        const { data: row, error } = await supabase
           .from("profiles")
-          .select("id,full_name,email,role,username")
+          .select("id,full_name,email,role,username,avatar_url")
           .eq("id", userId)
           .maybeSingle();
         if (cancelled) return;
+        if (error) {
+          resolveFallback();
+          return;
+        }
         const email = session?.user?.email ?? "";
         const local = email.split("@")[0] ?? "";
         const fallbackName = local.replace(/[._-]+/g, " ");
@@ -1147,9 +1226,10 @@ export function useCurrentUser(): CurrentUser | null {
           id: userId,
           fullName: String(row?.full_name ?? "").trim() || titleCase(fallbackName) || email,
           email: String(row?.email ?? email),
-          role: String(row?.role ?? "admin"),
+          role: String(row?.role ?? "").trim() || "parent",
           username:
             String(row?.username ?? "").trim() || local,
+          avatarUrl: String(row?.avatar_url ?? "").trim(),
         });
       } catch {
         // never leave the UI nameless: fall back to the email local-part
@@ -1234,61 +1314,6 @@ async function loadPeople(): Promise<PeopleRow[]> {
 
 export function usePeopleView() {
   return useErpView<PeopleRow>("people", loadPeople, []);
-}
-
-/* ------------------------------------------------------------------ */
-/* Transport                                                           */
-/* ------------------------------------------------------------------ */
-
-async function loadTransportRoutes(): Promise<TransportRoute[]> {
-  const [routes, allocations] = await Promise.all([
-    fetchAll("transport_routes", "id,code,name,vehicle_no,driver_name,active"),
-    fetchAll("transport_allocations", "id,student_id,route_id,active"),
-  ]);
-  const counts = new Map<string, number>();
-  for (const a of allocations) {
-    if (a.active === false) continue;
-    const key = String(a.route_id);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return routes.map((r) => ({
-    id: String(r.code ?? r.id),
-    vehicle: String(r.vehicle_no ?? "—"),
-    driver: String(r.driver_name ?? "—"),
-    pickup: "07:10 – 07:40",
-    students: counts.get(String(r.id)) ?? 0,
-    status: r.active === false ? "Off route" : "On time",
-  }));
-}
-
-export function useTransportRoutesView() {
-  return useErpView<TransportRoute>("transport_routes", loadTransportRoutes, mockTransportRoutes);
-}
-
-async function loadVehicles(): Promise<Vehicle[]> {
-  const routes = await fetchAll(
-    "transport_routes",
-    "id,code,name,vehicle_no,driver_name,driver_phone,active"
-  );
-  return routes.map((r) => ({
-    id: String(r.vehicle_no ?? r.id),
-    driver: String(r.driver_name ?? "—"),
-    driverPhone: String(r.driver_phone ?? ""),
-    routeCode: String(r.code ?? ""),
-    routeName: String(r.name ?? ""),
-    /*
-     * `transport_routes` records no seat count, and there is no vehicles table
-     * to read one from. This used to hardcode 40, which printed "Capacity 40
-     * seats" under every single bus — four identical facts presented as data.
-     * null renders as nothing instead.
-     */
-    capacity: null,
-    status: r.active === false ? "Maintenance" : "Active",
-  }));
-}
-
-export function useVehiclesView() {
-  return useErpView<Vehicle>("vehicles", loadVehicles, mockVehicles);
 }
 
 /* ------------------------------------------------------------------ */

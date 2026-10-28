@@ -1,13 +1,15 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "./pages/NotFound";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Dashboard from "./pages/Dashboard";
-import Login from "./pages/Login";
-import ResetPassword from "./pages/ResetPassword";
 import { useSession } from "./lib/supabase";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Login = lazy(() => import("./pages/Login"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 
 function AuthSplash() {
   return (
@@ -24,14 +26,30 @@ function GuardedDashboard() {
   const { isAuthenticated, loading } = useSession();
   if (loading) return <AuthSplash />;
   if (!isAuthenticated) return <Redirect to="/login" />;
-  return <Dashboard />;
+  return (
+    <Suspense fallback={<AuthSplash />}>
+      <Dashboard />
+    </Suspense>
+  );
 }
 
 function LoginGate() {
   const { isAuthenticated, loading } = useSession();
   if (loading) return <AuthSplash />;
   if (isAuthenticated) return <Redirect to="/dashboard" />;
-  return <Login />;
+  return (
+    <Suspense fallback={<AuthSplash />}>
+      <Login />
+    </Suspense>
+  );
+}
+
+function ResetPasswordRoute() {
+  return (
+    <Suspense fallback={<AuthSplash />}>
+      <ResetPassword />
+    </Suspense>
+  );
 }
 
 function Router() {
@@ -43,7 +61,7 @@ function Router() {
         dashboard would send them there before they could choose a password —
         leaving them signed in and with the old password still in force.
       */}
-      <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/reset-password" component={ResetPasswordRoute} />
       <Route path="/login" component={LoginGate} />
       <Route path="/" component={GuardedDashboard} />
       <Route path="/dashboard" component={GuardedDashboard} />

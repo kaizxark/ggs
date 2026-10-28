@@ -7,7 +7,12 @@ import handler, {
   scopeDatasets,
   searchDataset,
 } from "./ai";
-import { scopeBrief, sanitiseSuggestion, screensForRole } from "../shared/ai-access";
+import {
+  ALL_SCREEN_KEYS,
+  scopeBrief,
+  sanitiseSuggestion,
+  screensForRole,
+} from "../shared/ai-access";
 import { sealSecret } from "../shared/ai-config";
 import { SUPER_ADMIN_ID } from "../shared/super-admin";
 
@@ -23,9 +28,9 @@ describe("normaliseBaseUrl", () => {
   });
 
   it("drops a pasted full chat/completions endpoint", () => {
-    expect(normaliseBaseUrl("https://api.example.com/v1/chat/completions")).toBe(
-      "https://api.example.com/v1"
-    );
+    expect(
+      normaliseBaseUrl("https://api.example.com/v1/chat/completions")
+    ).toBe("https://api.example.com/v1");
   });
 
   it("rejects unusable values rather than fetching them", () => {
@@ -59,9 +64,9 @@ describe("extractJsonObject", () => {
   });
 
   it("is not confused by a brace inside a string value", () => {
-    expect(
-      extractJsonObject('{"answer":"class 3B { and more"}')?.answer
-    ).toBe("class 3B { and more");
+    expect(extractJsonObject('{"answer":"class 3B { and more"}')?.answer).toBe(
+      "class 3B { and more"
+    );
   });
 
   it("returns null when there is no object at all", () => {
@@ -98,20 +103,31 @@ describe("scopeDatasets", () => {
     // A teacher cannot open the Staff screen either, so the staff directory is
     // scoped out with everything else — the assistant is deliberately no more
     // generous than the dashboard it lives in.
-    expect(Object.keys(scoped).sort()).toEqual(["students", "transport_routes"]);
+    expect(Object.keys(scoped).sort()).toEqual([
+      "students",
+      "transport_routes",
+    ]);
     // The ledger must not be anywhere in what reaches the provider.
     expect(JSON.stringify(scoped)).not.toContain("Menon");
   });
 
   it("gives an accountant the money but not other people's accounts", () => {
     const scoped = scopeDatasets(ALL, "accountant");
-    expect(Object.keys(scoped).sort()).toEqual(["invoices", "students", "transport_routes"]);
+    expect(Object.keys(scoped).sort()).toEqual([
+      "invoices",
+      "students",
+      "transport_routes",
+    ]);
     expect(JSON.stringify(scoped)).not.toContain("kaizxark@gmail.com");
   });
 
   it("gives a principal results and staffing but no ledger and no accounts", () => {
     const scoped = scopeDatasets(ALL, "principal");
-    expect(Object.keys(scoped).sort()).toEqual(["staff", "students", "transport_routes"]);
+    expect(Object.keys(scoped).sort()).toEqual([
+      "staff",
+      "students",
+      "transport_routes",
+    ]);
   });
 
   it("gives the super admin everything", () => {
@@ -186,7 +202,11 @@ describe("scopeBrief", () => {
     // Settings is also where they change their own password, so the screen
     // stays open — but the school-wide configuration on it does not.
     const { brief, withheld } = scopeBrief(
-      { ...BRIEF, settings_snapshot: { phone: "+91 98765 43210" }, settings_note: "config" },
+      {
+        ...BRIEF,
+        settings_snapshot: { phone: "+91 98765 43210" },
+        settings_note: "config",
+      },
       "teacher"
     );
     expect(screensForRole("teacher")).toContain("settings");
@@ -196,7 +216,10 @@ describe("scopeBrief", () => {
 
   it("keeps the structural fields whatever the role", () => {
     // These describe the school and the rules, not the school's records.
-    const { brief } = scopeBrief({ ...BRIEF, assistant_role: "teacher" }, "teacher");
+    const { brief } = scopeBrief(
+      { ...BRIEF, assistant_role: "teacher" },
+      "teacher"
+    );
     expect(brief.school).toBeDefined();
     expect(brief.how_to_read_this).toBeDefined();
     expect(brief.assistant_role).toBe("teacher");
@@ -205,12 +228,40 @@ describe("scopeBrief", () => {
 
 describe("screensForRole", () => {
   it("gives the super admin every screen", () => {
-    expect(screensForRole("super_admin")).toHaveLength(14);
+    // Compared against the declared set rather than a literal count. The count
+    // used to be written down here, so adding a screen broke a test that had
+    // nothing to say about screens — and the obvious "fix" would have been to
+    // change 14 to 15, which checks the number and not the rule.
+    expect(screensForRole("super_admin").slice().sort()).toEqual(
+      ALL_SCREEN_KEYS.slice().sort()
+    );
+  });
+
+  it("keeps the credential screen away from every role but the owner's", () => {
+    // `credentials` is the only screen that reads the password column. It must
+    // not reach an ordinary admin, who otherwise gets everything, nor any of
+    // the teaching, office or family roles.
+    expect(screensForRole("super_admin")).toContain("credentials");
+    for (const role of [
+      "admin",
+      "principal",
+      "teacher",
+      "staff",
+      "accountant",
+      "student",
+      "parent",
+    ]) {
+      expect(screensForRole(role)).not.toContain("credentials");
+    }
   });
 
   it("accepts the display spelling as well as the stored one", () => {
-    expect(screensForRole("Super admin")).toEqual(screensForRole("super_admin"));
-    expect(screensForRole("Super Admin")).toEqual(screensForRole("super_admin"));
+    expect(screensForRole("Super admin")).toEqual(
+      screensForRole("super_admin")
+    );
+    expect(screensForRole("Super Admin")).toEqual(
+      screensForRole("super_admin")
+    );
   });
 
   it("gives an unknown role the narrowest safe view", () => {
@@ -232,7 +283,7 @@ describe("sanitiseSuggestion", () => {
       },
       "teacher"
     );
-    expect(result.actions.map((a) => a.screen)).toEqual(["attendance"]);
+    expect(result.actions.map(a => a.screen)).toEqual(["attendance"]);
   });
 
   it("caps a runaway list rather than rendering hundreds of chips", () => {
@@ -266,15 +317,15 @@ describe("sanitiseSuggestion", () => {
 
 describe("searchDataset", () => {
   const rows = [
-    { name: "Aarav Sharma", grade: "Grade 5", admission_no: "ADM/26-27/0041" },
-    { name: "Diya Nair", grade: "Grade 8", admission_no: "ADM/26-27/0102" },
-    { name: "Rohan Iyer", grade: "Grade 3", admission_no: "ADM/26-27/0007" },
+    { name: "Aarav Sharma", grade: "Grade 5", usn: "adm26270041" },
+    { name: "Diya Nair", grade: "Grade 8", usn: "adm26270102" },
+    { name: "Rohan Iyer", grade: "Grade 3", usn: "adm26270007" },
   ];
 
   it("matches on any field, not just the name", () => {
-    // Someone typing a class or an admission number expects to find the row.
+    // Someone typing a class or a USN expects to find the row.
     const byGrade = searchDataset(rows, "Grade 8", 8)[0] as { name: string };
-    const byAdmission = searchDataset(rows, "ADM/26-27/0041", 8)[0] as {
+    const byAdmission = searchDataset(rows, "adm26270041", 8)[0] as {
       name: string;
     };
     expect(byGrade.name).toBe("Diya Nair");
@@ -351,12 +402,15 @@ const SAMPLE_BRIEF = {
   how_to_read_this: ["All money is Indian rupees (₹)."],
   headline: { active_students: 1284, fee_collection_pct: 78.1 },
   fees: { outstanding_total: "₹4.82 lakh" },
-  ready_made_answers: { attendance: "Attendance is 92.4%.", fees: "₹4.82 lakh is due." },
+  ready_made_answers: {
+    attendance: "Attendance is 92.4%.",
+    fees: "₹4.82 lakh is due.",
+  },
 };
 
 const SAMPLE_DATASETS = {
   students: [
-    { name: "Aarav Sharma", grade: "Grade 5", admission_no: "ADM/26-27/0041" },
+    { name: "Aarav Sharma", grade: "Grade 5", usn: "adm26270041" },
     { name: "Diya Nair", grade: "Grade 8" },
   ],
   invoices: [{ family: "Menon family", amount_due: "₹62,000" }],
@@ -392,37 +446,42 @@ describe("POST /api/ai", () => {
     provider: (url: string, init?: RequestInit) => Response | Promise<Response>
   ) {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
-    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      const href = String(url);
-      calls.push({ url: href, init });
+    globalThis.fetch = vi.fn(
+      async (url: string | URL | Request, init?: RequestInit) => {
+        const href = String(url);
+        calls.push({ url: href, init });
 
-      if (href.includes("/auth/v1/user")) {
-        return Response.json({ id: callerId, email: "someone@gks.edu" });
-      }
-      if (href.includes("/rest/v1/profiles")) {
-        return Response.json([{ id: callerId, role: callerRole }]);
-      }
-      if (href.includes("/rest/v1/settings")) {
-        if (!hasStoredConfig) return Response.json([]);
-        return Response.json([
-          {
-            id: "set-ai",
-            key: "ai_assistant",
-            value: {
-              provider_id: "gemini",
-              base: "https://generativelanguage.googleapis.com/v1beta",
-              model: "gemini-3.8-flash",
-              api_key_sealed: storedKey,
+        if (href.includes("/auth/v1/user")) {
+          return Response.json({ id: callerId, email: "someone@gks.edu" });
+        }
+        if (href.includes("/rest/v1/profiles")) {
+          return Response.json([{ id: callerId, role: callerRole }]);
+        }
+        if (href.includes("/rest/v1/settings")) {
+          if (!hasStoredConfig) return Response.json([]);
+          return Response.json([
+            {
+              id: "set-ai",
+              key: "ai_assistant",
+              value: {
+                provider_id: "gemini",
+                base: "https://generativelanguage.googleapis.com/v1beta",
+                model: "gemini-3.8-flash",
+                api_key_sealed: storedKey,
+              },
             },
-          },
-        ]);
+          ]);
+        }
+        return provider(href, init);
       }
-      return provider(href, init);
-    }) as unknown as typeof fetch;
+    ) as unknown as typeof fetch;
     return calls;
   }
 
-  function post(headers: Record<string, string>, body: Record<string, unknown>) {
+  function post(
+    headers: Record<string, string>,
+    body: Record<string, unknown>
+  ) {
     return handler(
       new Request("https://erp.example.com/api/ai", {
         method: "POST",
@@ -435,7 +494,7 @@ describe("POST /api/ai", () => {
         },
         body: JSON.stringify(body),
       })
-    ).then(async (res) => ({ res, json: await res.json() }));
+    ).then(async res => ({ res, json: await res.json() }));
   }
 
   const geminiText = (text: string) =>
@@ -473,7 +532,7 @@ describe("POST /api/ai", () => {
       { question: "hello", context: SAMPLE_BRIEF }
     );
     expect(res.status).toBe(200);
-    const providerCalls = calls.filter((call) => call.url.includes("/models/"));
+    const providerCalls = calls.filter(call => call.url.includes("/models/"));
     expect(providerCalls.length).toBeGreaterThan(0);
     for (const call of providerCalls) {
       expect(call.url).toContain("generativelanguage.googleapis.com");
@@ -490,7 +549,12 @@ describe("POST /api/ai", () => {
     // nothing, so it is honoured.
     callerRole = "teacher";
     const calls = stubNetwork(() =>
-      geminiText(JSON.stringify({ answer: "Grade 5 is lowest at 88.1%.", confidence: "high" }))
+      geminiText(
+        JSON.stringify({
+          answer: "Grade 5 is lowest at 88.1%.",
+          confidence: "high",
+        })
+      )
     );
     const { res, json } = await post(
       { "x-ai-key": "AIzaTeachersOwnKey" },
@@ -498,15 +562,20 @@ describe("POST /api/ai", () => {
     );
     expect(res.status).toBe(200);
     expect(json.answer).toContain("88.1%");
-    const providerCall = calls.find((c) => c.url.includes("/models/"));
+    const providerCall = calls.find(c => c.url.includes("/models/"));
     expect(providerCall?.url).toContain("key=AIzaTeachersOwnKey");
   });
 
   it("says the assistant is not switched on when there is no key at all", async () => {
     callerRole = "teacher";
     hasStoredConfig = false;
-    stubNetwork(() => geminiText(JSON.stringify({ answer: "unused", confidence: "high" })));
-    const { res, json } = await post({}, { question: "hello", context: SAMPLE_BRIEF });
+    stubNetwork(() =>
+      geminiText(JSON.stringify({ answer: "unused", confidence: "high" }))
+    );
+    const { res, json } = await post(
+      {},
+      { question: "hello", context: SAMPLE_BRIEF }
+    );
     expect(res.status).toBe(503);
     // The message has to name who can fix it, or it is just a dead end.
     expect(json.error).toBe("not_configured");
@@ -517,16 +586,29 @@ describe("POST /api/ai", () => {
 
   it("calls Gemini natively with a system instruction, a schema and the lookup tool", async () => {
     const calls = stubNetwork(() =>
-      geminiText(JSON.stringify({ answer: "There are 1,284 students.", confidence: "high" }))
+      geminiText(
+        JSON.stringify({
+          answer: "There are 1,284 students.",
+          confidence: "high",
+        })
+      )
     );
     const { res, json } = await post(
       {},
-      { question: "how many students?", context: SAMPLE_BRIEF, datasets: SAMPLE_DATASETS }
+      {
+        question: "how many students?",
+        context: SAMPLE_BRIEF,
+        datasets: SAMPLE_DATASETS,
+      }
     );
 
     expect(res.status).toBe(200);
-    const body = JSON.parse(String(calls.find((c) => c.url.includes("/models/"))?.init?.body));
-    expect(body.systemInstruction.parts[0].text).toContain("Global Kids School ERP");
+    const body = JSON.parse(
+      String(calls.find(c => c.url.includes("/models/"))?.init?.body)
+    );
+    expect(body.systemInstruction.parts[0].text).toContain(
+      "Global Kids School ERP"
+    );
     // Structured output is what makes the reply renderable without guessing.
     expect(body.generationConfig.responseMimeType).toBe("application/json");
     expect(body.generationConfig.responseSchema.required).toContain("actions");
@@ -537,7 +619,9 @@ describe("POST /api/ai", () => {
   it("serves a specific-record question from the lookup tool, not from the aggregate", async () => {
     const calls = stubNetwork((url, init) => {
       const body = JSON.parse(String(init?.body ?? "{}"));
-      const last = String(body.contents?.[body.contents.length - 1]?.parts?.[0]?.text ?? "");
+      const last = String(
+        body.contents?.[body.contents.length - 1]?.parts?.[0]?.text ?? ""
+      );
       if (last.includes("DATA BRIEF")) {
         // First turn: the model reaches for the specific invoice.
         return Response.json({
@@ -569,14 +653,18 @@ describe("POST /api/ai", () => {
 
     const { res, json } = await post(
       {},
-      { question: "what does the Menon family owe?", context: SAMPLE_BRIEF, datasets: SAMPLE_DATASETS }
+      {
+        question: "what does the Menon family owe?",
+        context: SAMPLE_BRIEF,
+        datasets: SAMPLE_DATASETS,
+      }
     );
 
     expect(res.status).toBe(200);
     // The tool ran on the server and its rows went back to the model.
     const sent = calls
-      .filter((c) => c.url.includes("/models/"))
-      .map((c) => String(c.init?.body ?? ""))
+      .filter(c => c.url.includes("/models/"))
+      .map(c => String(c.init?.body ?? ""))
       .join("\n");
     expect(sent).toContain("Menon");
     expect(json.answer).toContain("62,000");
@@ -595,8 +683,8 @@ describe("POST /api/ai", () => {
     expect(res.status).toBe(200);
 
     const sent = calls
-      .filter((c) => c.url.includes("/models/"))
-      .map((c) => String(c.init?.body ?? ""))
+      .filter(c => c.url.includes("/models/"))
+      .map(c => String(c.init?.body ?? ""))
       .join("\n");
     // The pupils are searchable; the ledger is not even offered to the tool, so
     // a teacher cannot reach the invoices by asking nicely either.
@@ -624,7 +712,11 @@ describe("POST /api/ai", () => {
     );
     const { json } = await post(
       {},
-      { question: "what is outstanding?", context: SAMPLE_BRIEF, datasets: SAMPLE_DATASETS }
+      {
+        question: "what is outstanding?",
+        context: SAMPLE_BRIEF,
+        datasets: SAMPLE_DATASETS,
+      }
     );
     expect(json.actions).toEqual([
       { label: "Open Attendance", screen: "attendance", studentId: null },
@@ -670,7 +762,11 @@ describe("POST /api/ai", () => {
 
     const { res, json } = await post(
       {},
-      { question: "what is outstanding?", context: SAMPLE_BRIEF, datasets: SAMPLE_DATASETS }
+      {
+        question: "what is outstanding?",
+        context: SAMPLE_BRIEF,
+        datasets: SAMPLE_DATASETS,
+      }
     );
 
     expect(res.status).toBe(200);
@@ -685,7 +781,12 @@ describe("POST /api/ai", () => {
       // First reply parses cleanly and says nothing.
       return round === 1
         ? geminiText(JSON.stringify({ answer: "", confidence: "high" }))
-        : geminiText(JSON.stringify({ answer: "Attendance is 92.4%.", confidence: "high" }));
+        : geminiText(
+            JSON.stringify({
+              answer: "Attendance is 92.4%.",
+              confidence: "high",
+            })
+          );
     });
 
     const { res, json } = await post(
@@ -697,12 +798,14 @@ describe("POST /api/ai", () => {
     expect(json.answer).toContain("92.4%");
     // It had to actually ask again rather than render the blank.
     expect(round).toBe(2);
-    const retry = calls.filter((c) => c.url.includes("/models/"))[1];
+    const retry = calls.filter(c => c.url.includes("/models/"))[1];
     expect(retry).toBeTruthy();
   });
 
   it("says something useful rather than nothing when even the retry is empty", async () => {
-    stubNetwork(() => geminiText(JSON.stringify({ answer: "", confidence: "high" })));
+    stubNetwork(() =>
+      geminiText(JSON.stringify({ answer: "", confidence: "high" }))
+    );
 
     const { res, json } = await post(
       {},
@@ -735,10 +838,14 @@ describe("POST /api/ai", () => {
 
     await post(
       {},
-      { question: "what is outstanding?", context: SAMPLE_BRIEF, datasets: SAMPLE_DATASETS }
+      {
+        question: "what is outstanding?",
+        context: SAMPLE_BRIEF,
+        datasets: SAMPLE_DATASETS,
+      }
     );
 
-    const providerCalls = calls.filter((c) => c.url.includes("/models/"));
+    const providerCalls = calls.filter(c => c.url.includes("/models/"));
     const last = providerCalls[providerCalls.length - 1];
     const body = JSON.parse(String(last?.init?.body ?? "{}"));
     // No function declarations means the model can only answer.
@@ -748,7 +855,9 @@ describe("POST /api/ai", () => {
 
   it("answers a follow-up with the earlier turns in context", async () => {
     const calls = stubNetwork(() =>
-      geminiText(JSON.stringify({ answer: "Grade 5 is at 88.1%.", confidence: "high" }))
+      geminiText(
+        JSON.stringify({ answer: "Grade 5 is at 88.1%.", confidence: "high" })
+      )
     );
     const { res } = await post(
       {},
@@ -763,15 +872,22 @@ describe("POST /api/ai", () => {
       }
     );
     expect(res.status).toBe(200);
-    const body = JSON.parse(String(calls.find((c) => c.url.includes("/models/"))?.init?.body));
+    const body = JSON.parse(
+      String(calls.find(c => c.url.includes("/models/"))?.init?.body)
+    );
     // Without this, "and Grade 5?" has no referent and the model guesses.
-    expect(JSON.stringify(body.contents)).toContain("which class has the lowest attendance?");
+    expect(JSON.stringify(body.contents)).toContain(
+      "which class has the lowest attendance?"
+    );
     expect(JSON.stringify(body.contents)).toContain("and Grade 5?");
   });
 
   it("explains a provider rejection instead of returning a blank panel", async () => {
     stubNetwork(() =>
-      Response.json({ error: { message: "API key not valid" } }, { status: 400 })
+      Response.json(
+        { error: { message: "API key not valid" } },
+        { status: 400 }
+      )
     );
     const { res, json } = await post({}, { question: "hi", context: {} });
     expect(res.status).toBe(502);
@@ -810,11 +926,15 @@ describe("POST /api/ai", () => {
     );
 
     expect(res.status).toBe(200);
-    const providerCall = calls.find((c) => c.url.includes("/chat/completions"));
-    expect(providerCall?.url).toBe("https://api.groq.com/openai/v1/chat/completions");
+    const providerCall = calls.find(c => c.url.includes("/chat/completions"));
+    expect(providerCall?.url).toBe(
+      "https://api.groq.com/openai/v1/chat/completions"
+    );
     const body = JSON.parse(String(providerCall?.init?.body));
     expect(body.model).toBe("llama-3.3-70b-versatile");
-    expect((body.messages[0] as { content: string }).content).toContain("DATA BRIEF");
+    expect((body.messages[0] as { content: string }).content).toContain(
+      "DATA BRIEF"
+    );
     expect(json.answer).toBe("24 absent today.");
     expect(json.actions[0].screen).toBe("attendance");
     expect(json.followUps).toEqual(["Who is absent?"]);
@@ -835,7 +955,7 @@ describe("POST /api/ai", () => {
       { question: "hi", context: SAMPLE_BRIEF }
     );
     expect(res.status).toBe(200);
-    expect(calls.find((c) => c.url.includes("/chat/completions"))?.url).toBe(
+    expect(calls.find(c => c.url.includes("/chat/completions"))?.url).toBe(
       "https://router.huggingface.co/v1/chat/completions"
     );
   });
@@ -864,14 +984,18 @@ describe("POST /api/ai", () => {
 
   it("tests the stored credential server-side", async () => {
     const calls = stubNetwork(() =>
-      Response.json({ candidates: [{ content: { parts: [{ text: "ready" }] } }] })
+      Response.json({
+        candidates: [{ content: { parts: [{ text: "ready" }] } }],
+      })
     );
     const { res, json } = await post({}, { action: "ping" });
     expect(res.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.model).toBe("gemini-3.8-flash");
-    expect(calls.some((c) => c.url.includes("/models/gemini-3.8-flash:generateContent"))).toBe(
-      true
-    );
+    expect(
+      calls.some(c =>
+        c.url.includes("/models/gemini-3.8-flash:generateContent")
+      )
+    ).toBe(true);
   });
 });

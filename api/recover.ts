@@ -48,7 +48,15 @@ import {
   RESET_SUBJECT,
   resetEmailHtml,
   resetEmailText,
-} from "./reset-email.js";
+} from "../shared/reset-email.js";
+import {
+  isPlaceholderEmail,
+  isUsableEmail,
+  normaliseEmail,
+} from "../shared/portal-accounts.js";
+import { isSharedUsername } from "../shared/shared-signin.js";
+
+export const config = { runtime: "nodejs" };
 
 const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL || "https://fmlwzxmjrecbtvgraqqm.supabase.co";
@@ -71,6 +79,22 @@ const SMTP_TIMEOUT_MS = 8_000;
  */
 const GENERIC =
   "If that username has an account, a reset link is on its way. Check your inbox.";
+
+/**
+ * The answer when the school's shared pupil sign-in name is typed.
+ *
+ * A plain shared name is not an account — it stands for "a pupil" — so there
+ * is nobody to reset. Resolving it would find every pupil who signs in with
+ * it and send the link to whichever of them came first, which is worse than
+ * sending nothing at all.
+ *
+ * The answer is not the constant one, and that is deliberate: the shared name
+ * is written on the board at school, so saying "this is the shared name, use
+ * the code instead" tells the reader nothing they do not already know, and
+ * tells a pupil who has forgotten their password exactly what to do next.
+ */
+const SHARED_NAME_RECOVERY =
+  "That is the name every pupil signs in with, so there is no account to reset. Use “Sign in with an email code instead” — your email address or your username — to get back in.";
 
 /** Per-isolate throttle, matching the limit used by /api/login. */
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -108,20 +132,159 @@ function siteOrigin(req: Request): string {
   return `${proto}://${host}`;
 }
 
+/** Where a recovery message has to go, and who it is for. */
+export interface RecoveryTarget {
+  /** The one-time link, pointing at this app's own reset page. */
+  url: string;
+  /** The address the message is actually sent to. */
+  address: string;
+  /** The name to greet them by. */
+  recipientName?: string;
+  /** Whose account the link opens, when it went to somebody else. */
+  onBehalfOf?: string;
+}
+
+/** First matching row, or null. A failure reads as "not found". */
+async function first<T>(path: string): Promise<T | null> {
+  if (!SERVICE_KEY) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as T[];
+    return rows?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where the reset message for an account has to be sent.
+ *
+ * The auth address is the one Supabase knows, but it is not always the one a
+ * person reads. A pupil's auth address is usually a generated identifier and a
+ * member of staff's may be a school mailbox; both now carry a real test
+ * mailbox on the student/staff record, and that is where the link belongs.
+ *
+ * A pupil with no usable record address falls back to the guardian on the
+ * pupil's record, and the message says whose account it opens. Returns null
+ * when there is nowhere to send it, which is the honest answer: a message that
+ * cannot be delivered is not a message that was sent.
+ */
+async function deliveryFor(
+  email: string
+): Promise<Omit<RecoveryTarget, "url"> | null> {
+  const profile = await first<{
+    id?: string;
+    full_name?: string;
+    student_id?: string;
+  }>(
+    `profiles?select=id,full_name,student_id&email=eq.${encodeURIComponent(
+      email
+    )}&limit=1`
+  );
+
+  if (profile?.student_id) {
+    const student = await first<{
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+      guardian_email?: string;
+      guardian_name?: string;
+    }>(
+      `students?select=first_name,last_name,email,guardian_email,guardian_name&id=eq.${encodeURIComponent(
+        String(profile.student_id)
+      )}&limit=1`
+    );
+    if (!student) return null;
+
+    const pupilName = `${String(student.first_name ?? "")} ${String(
+      student.last_name ?? ""
+    )}`.trim();
+    const record = normaliseEmail(student.email);
+
+    /*
+     * The address on the pupil's record is the one the school has told the
+     * family to use. Prefer it over the auth identifier even when the auth
+     * address happens to be a real mailbox.
+     */
+    if (isUsableEmail(record) && !isPlaceholderEmail(record)) {
+      return {
+        address: record,
+        recipientName: pupilName || undefined,
+      };
+    }
+
+    const guardian = normaliseEmail(student.guardian_email);
+    if (!isValidEmail(guardian)) return null;
+    return {
+      address: guardian,
+      recipientName:
+        String(student.guardian_name ?? "") || pupilName || undefined,
+      onBehalfOf: pupilName || undefined,
+    };
+  }
+
+  if (profile?.id) {
+    const person = await first<{ name?: string; email?: string }>(
+      `staff?select=name,email&profile_id=eq.${encodeURIComponent(
+        String(profile.id)
+      )}&limit=1`
+    );
+    if (person) {
+      const record = normaliseEmail(person.email);
+      if (isUsableEmail(record) && !isPlaceholderEmail(record)) {
+        return {
+          address: record,
+          recipientName:
+            String(person.name ?? "") || String(profile.full_name ?? "") || undefined,
+        };
+      }
+    }
+  }
+
+  /*
+   * A school-domain mailbox with no pupil behind it belongs to a member of
+   * staff, and they can read their own mailbox. Only a pupil's address is
+   * redirected to the family.
+   */
+  if (isPlaceholderEmail(email)) return null;
+
+  return {
+    address: email,
+    recipientName: String(profile?.full_name ?? "") || undefined,
+  };
+}
+
 /**
  * Turn a username or address into a one-time recovery link for this app.
  *
  * Returns null when no account matches, which is the normal case for a typo and
  * must be indistinguishable to the caller from a successful send.
+ *
+ * The address the message goes to is part of the answer, and it is not always
+ * the address that was typed. A person who types their username has their
+ * account's real address resolved here, and the message has to go to *that* —
+ * mailing the typed value would send it to a username, which is not an
+ * address, and the message would be dropped by the relay without anybody
+ * noticing.
  */
 export async function buildRecoveryUrl(
   target: string,
   looksLikeEmail: boolean,
   redirectTo: string
-): Promise<string | null> {
+): Promise<RecoveryTarget | null> {
   const candidates = looksLikeEmail ? [target] : await resolveEmails(target);
   for (const email of candidates) {
     if (!isValidEmail(email)) continue;
+
+    const delivery = await deliveryFor(normaliseEmail(email));
+    if (!delivery) continue;
 
     const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
       method: "POST",
@@ -139,7 +302,20 @@ export async function buildRecoveryUrl(
       properties?: { action_link?: string };
     };
     const generated = body.action_link ?? body.properties?.action_link ?? "";
-    const token = new URL(generated).searchParams.get("token");
+    if (!generated) continue;
+
+    /*
+     * A 200 from generate_link can still carry no usable link. Parsing an
+     * empty or malformed one used to throw out of the whole route and answer
+     * 500, which both leaked that something had matched and told the caller
+     * nothing they could act on. A bad link is simply "try the next candidate".
+     */
+    let token = "";
+    try {
+      token = new URL(generated).searchParams.get("token") ?? "";
+    } catch {
+      continue;
+    }
     if (!token) continue;
 
     /*
@@ -150,7 +326,7 @@ export async function buildRecoveryUrl(
     verify.searchParams.set("token", token);
     verify.searchParams.set("type", "recovery");
     verify.searchParams.set("redirect_to", redirectTo);
-    return verify.toString();
+    return { url: verify.toString(), ...delivery };
   }
   return null;
 }
@@ -159,6 +335,7 @@ export async function buildRecoveryUrl(
 export async function sendResetEmail(options: {
   to: string;
   recipientName?: string;
+  onBehalfOf?: string;
   resetUrl: string;
   logoUrl: string;
 }): Promise<boolean> {
@@ -180,10 +357,14 @@ export async function sendResetEmail(options: {
     from: SMTP_FROM || SMTP_USER,
     to: options.to,
     subject: RESET_SUBJECT,
-    text: resetEmailText({ resetUrl: options.resetUrl }),
+    text: resetEmailText({
+      resetUrl: options.resetUrl,
+      onBehalfOf: options.onBehalfOf,
+    }),
     html: resetEmailHtml({
       resetUrl: options.resetUrl,
       recipientName: options.recipientName,
+      onBehalfOf: options.onBehalfOf,
     }).replace("{{ logo }}", options.logoUrl),
   });
   return true;
@@ -220,18 +401,35 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const redirectTo = resetPageUrl(req);
-  const verifyUrl = await buildRecoveryUrl(raw, looksLikeEmail, redirectTo);
+  /*
+   * The shared pupil sign-in name, when it is a plain word rather than an
+   * address.
+   *
+   * An address-shaped shared name is the school owner's own mailbox in
+   * practice, and that account is reset like any other: the address is used
+   * directly and the link goes to whoever holds it. A plain word has no
+   * account behind it, and resolving it would find the pupils rather than a
+   * person.
+   */
+  if (!looksLikeEmail && (await isSharedUsername(raw))) {
+    return Response.json({ ok: true, message: SHARED_NAME_RECOVERY });
+  }
 
-  if (verifyUrl) {
-    const recipient = looksLikeEmail ? raw : raw;
+  const redirectTo = resetPageUrl(req);
+  const recovery = await buildRecoveryUrl(raw, looksLikeEmail, redirectTo);
+
+  if (recovery) {
     try {
       await sendResetEmail({
-        to: recipient,
+        // The account's real address, not the value that was typed. A username
+        // is not an address, and mailing one loses the message silently.
+        to: recovery.address,
+        recipientName: recovery.recipientName,
+        onBehalfOf: recovery.onBehalfOf,
         // The token lives in the verify URL, so that is what must be emailed —
         // sending the plain app page would produce a link that never carries a
         // session and always lands on the expired screen.
-        resetUrl: verifyUrl,
+        resetUrl: recovery.url,
         logoUrl: `${siteOrigin(req)}/logo.png`,
       });
     } catch {

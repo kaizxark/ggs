@@ -39,8 +39,8 @@ const ANON_KEY =
  * the browser can validate a username without importing this module — which
  * reads the service key and would put it in the client bundle.
  */
-export { USERNAME_PATTERN } from "../client/src/lib/username";
-import { USERNAME_PATTERN } from "../client/src/lib/username";
+export { USERNAME_PATTERN } from "../client/src/lib/username.js";
+import { USERNAME_PATTERN } from "../client/src/lib/username.js";
 
 /** Emails allow a couple of characters the username pattern excludes. */
 const EMAIL_PATTERN = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
@@ -53,28 +53,49 @@ export function isValidEmail(value: string): boolean {
   return EMAIL_PATTERN.test(value) && value.length <= 254;
 }
 
-/** Username-prefix lookup against the auth users, the record of record. */
+/**
+ * Username-prefix lookup against the auth users, the record of record.
+ *
+ * Every page is searched, not just the first. The admin API pages at two
+ * hundred and this school is close to that already, so a member of staff
+ * further down the list was not found by name — and could neither sign in nor
+ * recover their password.
+ */
 async function resolveAuthEmails(username: string): Promise<string[]> {
   if (!SERVICE_KEY) return [];
   const wanted = username.toLowerCase();
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/auth/v1/admin/users?per_page=200&page=1`,
-      {
-        headers: {
-          apikey: SERVICE_KEY,
-          Authorization: `Bearer ${SERVICE_KEY}`,
-        },
-      }
-    );
-    if (!res.ok) return [];
-    const body = (await res.json()) as { users?: { email?: string }[] };
-    return (body.users ?? [])
-      .map((user) => String(user.email ?? "").trim().toLowerCase())
-      .filter((email) => isValidEmail(email) && email.split("@")[0] === wanted);
-  } catch {
-    return [];
+  const found: string[] = [];
+  for (let page = 1; page <= 20; page += 1) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?per_page=200&page=${page}`,
+        {
+          headers: {
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+          },
+        }
+      );
+      if (!res.ok) return found;
+      const body = (await res.json()) as { users?: { email?: string }[] };
+      const users = body.users ?? [];
+      found.push(
+        ...users
+          .map(user =>
+            String(user.email ?? "")
+              .trim()
+              .toLowerCase()
+          )
+          .filter(
+            email => isValidEmail(email) && email.split("@")[0] === wanted
+          )
+      );
+      if (users.length < 200) break;
+    } catch {
+      return found;
+    }
   }
+  return found;
 }
 
 /**
@@ -107,8 +128,18 @@ export async function resolveEmails(username: string): Promise<string[]> {
   // Percent is handled correctly by encodeURIComponent; the asterisk is not,
   // so it is replaced by hand.
   const filter = encodeURIComponent(`*${wanted}@%`).replace(/\*/g, "%2A");
-  const byEmail = await emailsWhere(`select=email&email=like.${filter}&limit=10`);
+  const byEmail = (
+    await emailsWhere(`select=email&email=like.${filter}&limit=50`)
+  ).filter(email => email.slice(0, email.lastIndexOf("@")) === wanted);
   if (byEmail.length > 0) return byEmail;
+
+  /*
+   * The USN is the pupil identifier, and it lives on the student record rather
+   * than on the profile. A newly enrolled pupil whose profile has not yet been
+   * renamed still has to be able to sign in with the USN printed for them.
+   */
+  const byUsn = await emailsForUsn(wanted);
+  if (byUsn.length > 0) return byUsn;
 
   /*
    * Neither source in `profiles` matched, so consult the auth user list — the
@@ -120,6 +151,61 @@ export async function resolveEmails(username: string): Promise<string[]> {
    * every path resolves the username through a stale copy.
    */
   return resolveAuthEmails(wanted);
+}
+
+/**
+ * The account addresses of the pupil(s) whose USN this is.
+ *
+ * Compared without case, because the USN is printed as `GGS1001` and typed
+ * however the person remembers it, and because this function is called with
+ * the lower-cased form of whatever was entered.
+ */
+async function emailsForUsn(usn: string): Promise<string[]> {
+  if (!SERVICE_KEY) return [];
+  try {
+    const studentRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/students?select=id&usn=ilike.${encodeURIComponent(
+        usn
+      )}&limit=10`,
+      {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+      }
+    );
+    if (!studentRes.ok) return [];
+    const students = (await studentRes.json()) as { id?: string }[];
+    const ids = students.map(student => String(student.id ?? "")).filter(Boolean);
+    if (!ids.length) return [];
+
+    const profileRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?select=email&student_id=in.(${ids
+        .map(id => encodeURIComponent(id))
+        .join(",")})&limit=10`,
+      {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+      }
+    );
+    if (!profileRes.ok) return [];
+    const profiles = (await profileRes.json()) as { email?: string | null }[];
+    return Array.from(
+      new Set(
+        profiles
+          .map(profile =>
+            String(profile?.email ?? "")
+              .trim()
+              .toLowerCase()
+          )
+          .filter(email => isValidEmail(email))
+      )
+    );
+  } catch {
+    return [];
+  }
 }
 
 /** Read the distinct, valid emails of the rows matching a PostgREST query. */
@@ -135,8 +221,12 @@ async function emailsWhere(query: string): Promise<string[]> {
   return Array.from(
     new Set(
       rows
-        .map((row) => String(row?.email ?? "").trim().toLowerCase())
-        .filter((email) => isValidEmail(email))
+        .map(row =>
+          String(row?.email ?? "")
+            .trim()
+            .toLowerCase()
+        )
+        .filter(email => isValidEmail(email))
     )
   );
 }

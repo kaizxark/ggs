@@ -42,47 +42,58 @@
 export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
   overview: {
     label: "Overview",
-    blurb: "school-wide headline KPIs, today's register, announcements and recent activity",
+    blurb:
+      "school-wide headline KPIs, today's register, announcements and recent activity",
   },
   students: {
     label: "Students",
-    blurb: "every enrolled pupil: name, grade, section, admission number, attendance, academic average, status",
+    blurb:
+      "every enrolled pupil: name, grade, section, USN, attendance, academic average, status",
   },
   documents: {
     label: "Documents",
-    blurb: "the student document checklist: what each pupil has submitted and what is still missing",
+    blurb:
+      "the student document checklist: what each pupil has submitted and what is still missing",
   },
   attendance: {
     label: "Attendance",
-    blurb: "the daily register and per-class attendance rates, including the weakest classes",
+    blurb:
+      "the daily register and per-class attendance rates, including the weakest classes",
   },
   finance: {
     label: "Fees & Finance",
-    blurb: "invoices, outstanding and overdue balances, collection rate, monthly collected vs pending",
+    blurb:
+      "invoices, outstanding and overdue balances, collection rate, monthly collected vs pending",
   },
   analytics: {
     label: "Analytics",
-    blurb: "grade and subject performance, year-long trend, wellness metrics and the at-risk ranking",
+    blurb:
+      "grade and subject performance, year-long trend, wellness metrics and the at-risk ranking",
   },
   staff: {
     label: "Staff",
-    blurb: "teaching and non-teaching staff: names, designations, departments, email addresses",
+    blurb:
+      "teaching and non-teaching staff: names, designations, departments, email addresses",
   },
   academics: {
     label: "Academics",
-    blurb: "subjects on offer, who teaches what, today's timetable and term progress",
+    blurb:
+      "subjects on offer, who teaches what, today's timetable and term progress",
   },
   examinations: {
     label: "Examinations",
-    blurb: "the exam schedule, results publishing state and per-paper marking progress",
+    blurb:
+      "the exam schedule, results publishing state and per-paper marking progress",
   },
   assignments: {
     label: "Assignments",
-    blurb: "homework set per class, who has submitted, what is late and what is still ungraded",
+    blurb:
+      "homework set per class, who has submitted, what is late and what is still ungraded",
   },
   transport: {
     label: "Transport",
-    blurb: "routes, vehicles, drivers, pickup points and how many pupils ride each",
+    blurb:
+      "routes, vehicles, drivers, pickup points and how many pupils ride each",
   },
   reports: {
     label: "Reports",
@@ -90,17 +101,26 @@ export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
   },
   users: {
     label: "User management",
-    blurb: "who can sign in, their role and access level, invitations, and student portal logins",
+    blurb:
+      "who can sign in, their role and access level, invitations, and student portal logins",
+  },
+  credentials: {
+    label: "Account logins",
+    blurb:
+      "every pupil and staff account, its username, whether it still needs a password chosen, and the backfill that gives unrecorded addresses a working one",
   },
   settings: {
     label: "Settings",
-    blurb: "school-wide settings plus the signed-in user's own profile, password and AI configuration",
+    blurb:
+      "school-wide settings plus the signed-in user's own profile, password and AI configuration",
   },
 };
 
 export type AiScreenKey = keyof typeof AI_SCREENS;
 
-export const ALL_SCREEN_KEYS: AiScreenKey[] = Object.keys(AI_SCREENS) as AiScreenKey[];
+export const ALL_SCREEN_KEYS: AiScreenKey[] = Object.keys(
+  AI_SCREENS
+) as AiScreenKey[];
 
 /** Human label for a screen key, or null when the key is not a real screen. */
 export function screenLabel(key: string | null | undefined): string | null {
@@ -117,26 +137,35 @@ export function screenLabel(key: string | null | undefined): string | null {
  * spellings have to land on the same screen. Without this the assistant
  * cheerfully told a user to open a screen that did not exist.
  */
-export function screenKeyFromLabel(name: string | null | undefined): string | null {
-  const needle = String(name ?? "").trim().toLowerCase();
+export function screenKeyFromLabel(
+  name: string | null | undefined
+): string | null {
+  const needle = String(name ?? "")
+    .trim()
+    .toLowerCase();
   if (!needle) return null;
-  const byKey = ALL_SCREEN_KEYS.filter((key) => key === needle)[0];
+  const byKey = ALL_SCREEN_KEYS.filter(key => key === needle)[0];
   if (byKey) return byKey;
   const byLabel = ALL_SCREEN_KEYS.filter(
-    (key) => AI_SCREENS[key].label.toLowerCase() === needle
+    key => AI_SCREENS[key].label.toLowerCase() === needle
   )[0];
   return byLabel ?? null;
 }
 
 /** The canonical label for a screen named by key or by label. */
-export function screenLabelByName(name: string | null | undefined): string | null {
+export function screenLabelByName(
+  name: string | null | undefined
+): string | null {
   const key = screenKeyFromLabel(name);
   return key ? AI_SCREENS[key].label : null;
 }
 
 /** True when `key` names a screen that exists. */
 export function isScreenKey(key: unknown): boolean {
-  return typeof key === "string" && Object.prototype.hasOwnProperty.call(AI_SCREENS, key);
+  return (
+    typeof key === "string" &&
+    Object.prototype.hasOwnProperty.call(AI_SCREENS, key)
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -159,12 +188,23 @@ export function isScreenKey(key: unknown): boolean {
  *   • `settings` — school configuration, and the panel holding the AI key.
  */
 const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
+  // Every screen, including `credentials` — the only place the password column
+  // is readable. That key is part of ALL_SCREEN_KEYS because it is declared in
+  // AI_SCREENS, so listing it again here would duplicate it rather than add it.
+  //
+  // The owner is identified by an immutable user id in shared/super-admin.ts.
+  // Every other role below — including `admin` — deliberately drops the key.
   super_admin: ALL_SCREEN_KEYS,
 
-  // Runs the school day to day: everything except nothing. An admin outranks
-  // every other account except the super admin, and in practice needs the same
-  // view of the data.
-  admin: ALL_SCREEN_KEYS,
+  // Runs the school day to day: everything an administrator needs to run the
+  // school, and nothing more. An admin outranks every other account except the
+  // super admin and needs the same view of the data — but not the passwords.
+  //
+  // Written as ALL_SCREEN_KEYS minus `credentials` rather than as a literal
+  // list, so a screen added later reaches this role too. Spelling it out would
+  // mean the next screen had to be remembered in two places, and the one time
+  // somebody forgot, an admin quietly could not open something they should.
+  admin: ALL_SCREEN_KEYS.filter(key => key !== "credentials"),
 
   // The academic head. Sees pupils, teaching and results in depth; the money
   // and the accounts are not theirs to read.
@@ -174,16 +214,31 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
   // rather than a correctly hidden one. `canViewDocuments()` in student-access
   // holds the same rule, and there is a test asserting the two agree.
   principal: [
-    "overview", "students", "attendance", "analytics", "staff",
-    "academics", "examinations", "assignments", "transport", "reports", "settings",
+    "overview",
+    "students",
+    "attendance",
+    "analytics",
+    "staff",
+    "academics",
+    "examinations",
+    "assignments",
+    "transport",
+    "reports",
+    "settings",
   ],
 
   // Teaching staff. Their own pupils and their own marking. No money, no
   // accounts, no school configuration — but they keep Settings, because that
   // screen is also where they change their own password.
   teacher: [
-    "overview", "students", "attendance", "academics",
-    "examinations", "assignments", "transport", "settings",
+    "overview",
+    "students",
+    "attendance",
+    "academics",
+    "examinations",
+    "assignments",
+    "transport",
+    "settings",
   ],
 
   // Non-teaching staff. Enough to help a visitor, nothing that is a ledger.
@@ -191,8 +246,13 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
 
   // The accounts desk. Money in full; nothing about other people's accounts.
   accountant: [
-    "overview", "students", "attendance", "finance", "transport",
-    "reports", "settings",
+    "overview",
+    "students",
+    "attendance",
+    "finance",
+    "transport",
+    "reports",
+    "settings",
   ],
 
   // Pupil portal. A pupil sees themselves and their own documents. The role is
@@ -217,7 +277,9 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
  * about quietly inherits the super admin's view.
  */
 export function screensForRole(role: string | null | undefined): AiScreenKey[] {
-  const key = String(role ?? "").trim().toLowerCase();
+  const key = String(role ?? "")
+    .trim()
+    .toLowerCase();
   if (!key) return ["overview"];
   if (ROLE_SCREENS[key]) return ROLE_SCREENS[key].slice();
   // The dashboard labels roles for display in places ("Super admin"); accept
@@ -228,14 +290,20 @@ export function screensForRole(role: string | null | undefined): AiScreenKey[] {
 }
 
 /** True when this role may read `screenKey`. */
-export function canSeeScreen(role: string | null | undefined, screenKey: string): boolean {
+export function canSeeScreen(
+  role: string | null | undefined,
+  screenKey: string
+): boolean {
   if (!isScreenKey(screenKey)) return false;
   return screensForRole(role).indexOf(screenKey as AiScreenKey) !== -1;
 }
 
 /** The display label for a role, e.g. "Super admin". */
 export function aiRoleLabel(role: string | null | undefined): string {
-  const key = String(role ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const key = String(role ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
   const labels: Record<string, string> = {
     super_admin: "Super admin",
     admin: "Admin",
@@ -268,35 +336,58 @@ export function aiRoleLabel(role: string | null | undefined): string {
 const BRIEF_SCOPES: Array<{ keys: string[]; screens: AiScreenKey[] }> = [
   {
     keys: [
-      "active_students", "grades_running", "grade_roll", "headcount",
-      "lowest_scoring_students", "lowest_scoring_students_note",
+      "active_students",
+      "grades_running",
+      "grade_roll",
+      "headcount",
+      "lowest_scoring_students",
+      "lowest_scoring_students_note",
       "students_below_50_pct_average",
     ],
     screens: ["students"],
   },
   {
     keys: [
-      "worst_attendance_classes", "classes_below_90_pct", "class_attendance_pct",
-      "present_marks", "marked_records_total", "attendance_by_day", "attendance_today",
-      "overall_attendance_pct", "classes_with_attendance",
+      "worst_attendance_classes",
+      "classes_below_90_pct",
+      "class_attendance_pct",
+      "present_marks",
+      "marked_records_total",
+      "attendance_by_day",
+      "attendance_today",
+      "overall_attendance_pct",
+      "classes_with_attendance",
     ],
     screens: ["attendance"],
   },
   {
     keys: [
-      "fees", "top_outstanding_invoices", "top_outstanding_invoices_and_more",
-      "fee_categories", "fee_categories_note", "finance_monthly", "finance_monthly_note",
+      "fees",
+      "top_outstanding_invoices",
+      "top_outstanding_invoices_and_more",
+      "fee_categories",
+      "fee_categories_note",
+      "finance_monthly",
+      "finance_monthly_note",
       "fee_collection_pct",
     ],
     screens: ["finance"],
   },
   {
     keys: [
-      "grade_outcomes", "weakest_grade", "strongest_grade",
-      "school_average_score_pct", "school_average_score_basis",
-      "subjects", "subjects_note", "subject_averages", "subject_averages_note",
-      "performance_trend", "performance_trend_note",
-      "health_metrics", "health_metrics_note",
+      "grade_outcomes",
+      "weakest_grade",
+      "strongest_grade",
+      "school_average_score_pct",
+      "school_average_score_basis",
+      "subjects",
+      "subjects_note",
+      "subject_averages",
+      "subject_averages_note",
+      "performance_trend",
+      "performance_trend_note",
+      "health_metrics",
+      "health_metrics_note",
     ],
     screens: ["analytics"],
   },
@@ -304,10 +395,20 @@ const BRIEF_SCOPES: Array<{ keys: string[]; screens: AiScreenKey[] }> = [
     keys: ["staff_by_department", "staff_total"],
     screens: ["staff"],
   },
-  { keys: ["exams", "exams_note", "exam_results", "exam_results_note"], screens: ["examinations"] },
+  {
+    keys: ["exams", "exams_note", "exam_results", "exam_results_note"],
+    screens: ["examinations"],
+  },
   { keys: ["assignments", "assignments_note"], screens: ["assignments"] },
   {
-    keys: ["transport_routes", "transport_routes_note", "vehicles", "vehicles_note", "activity_feed", "activity_feed_note"],
+    keys: [
+      "transport_routes",
+      "transport_routes_note",
+      "vehicles",
+      "vehicles_note",
+      "activity_feed",
+      "activity_feed_note",
+    ],
     screens: ["transport"],
   },
   { keys: ["people", "people_note"], screens: ["users"] },
@@ -315,7 +416,14 @@ const BRIEF_SCOPES: Array<{ keys: string[]; screens: AiScreenKey[] }> = [
   { keys: ["library_books", "library_books_note"], screens: ["academics"] },
   { keys: ["report_exports", "report_exports_note"], screens: ["reports"] },
   {
-    keys: ["announcements", "announcements_note", "messages", "messages_note", "notifications", "notifications_note"],
+    keys: [
+      "announcements",
+      "announcements_note",
+      "messages",
+      "messages_note",
+      "notifications",
+      "notifications_note",
+    ],
     screens: ["overview"],
   },
   { keys: ["schedule", "schedule_note"], screens: ["academics"] },
@@ -371,8 +479,13 @@ export function scopeBrief(
   const allowed = screensForRole(role);
   const allowedSet = new Set<string>(allowed as string[]);
   const isAdmin =
-    String(role ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_") === "super_admin" ||
-    String(role ?? "").trim().toLowerCase() === "admin";
+    String(role ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_") === "super_admin" ||
+    String(role ?? "")
+      .trim()
+      .toLowerCase() === "admin";
   const out: Record<string, unknown> = {};
   const withheld: string[] = [];
 
@@ -380,7 +493,7 @@ export function scopeBrief(
   const scopedHeadline: Record<string, unknown> = {};
 
   for (const rule of BRIEF_SCOPES) {
-    const permitted = rule.screens.some((screen) => allowedSet.has(screen));
+    const permitted = rule.screens.some(screen => allowedSet.has(screen));
     for (const key of rule.keys) {
       if (!(key in brief)) continue;
       if (ADMIN_ONLY_KEYS.has(key) && !isAdmin) {
@@ -404,8 +517,8 @@ export function scopeBrief(
   // fee collection percentage.
   if (headline && typeof headline === "object") {
     for (const field of Object.keys(headline as Record<string, unknown>)) {
-      const rule = BRIEF_SCOPES.find((entry) => entry.keys.indexOf(field) !== -1);
-      if (rule && rule.screens.some((screen) => allowedSet.has(screen))) {
+      const rule = BRIEF_SCOPES.find(entry => entry.keys.indexOf(field) !== -1);
+      if (rule && rule.screens.some(screen => allowedSet.has(screen))) {
         scopedHeadline[field] = (headline as Record<string, unknown>)[field];
       } else {
         withheld.push(`headline.${field}`);
@@ -419,8 +532,10 @@ export function scopeBrief(
   if (ready && typeof ready === "object") {
     const kept: Record<string, unknown> = {};
     for (const topic of Object.keys(ready as Record<string, unknown>)) {
-      const screens = READY_ANSWER_SCOPES[topic] ?? (allowedSet.has("overview") ? ["overview"] : []);
-      if (screens.some((screen) => allowedSet.has(screen))) {
+      const screens =
+        READY_ANSWER_SCOPES[topic] ??
+        (allowedSet.has("overview") ? ["overview"] : []);
+      if (screens.some(screen => allowedSet.has(screen))) {
         kept[topic] = (ready as Record<string, unknown>)[topic];
       } else {
         withheld.push(`ready_made_answers.${topic}`);
@@ -432,9 +547,17 @@ export function scopeBrief(
   // Structural fields always travel: they describe the school and the access
   // rules, not the school's records.
   for (const key of [
-    "school", "academic_context", "how_to_read_this", "not_tracked_in_this_dashboard",
-    "assistant_role", "assistant_role_label", "screens_available_to_this_user",
-    "active_screen", "screen_index", "generated_at", "record_counts",
+    "school",
+    "academic_context",
+    "how_to_read_this",
+    "not_tracked_in_this_dashboard",
+    "assistant_role",
+    "assistant_role_label",
+    "screens_available_to_this_user",
+    "active_screen",
+    "screen_index",
+    "generated_at",
+    "record_counts",
   ]) {
     if (key in brief) out[key] = brief[key];
   }
@@ -489,7 +612,10 @@ export function sanitiseSuggestion(
   raw: unknown,
   role: string | null | undefined
 ): AiSuggestion {
-  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
 
   const answer =
     typeof obj.answer === "string" ? obj.answer.trim().slice(0, 4000) : "";
@@ -502,7 +628,8 @@ export function sanitiseSuggestion(
     for (const item of obj.actions) {
       if (!item || typeof item !== "object") continue;
       const entry = item as Record<string, unknown>;
-      const screen = typeof entry.screen === "string" ? entry.screen.trim() : "";
+      const screen =
+        typeof entry.screen === "string" ? entry.screen.trim() : "";
       if (!isScreenKey(screen)) continue;
       if (!canSeeScreen(role, screen)) continue;
       const fallback = AI_SCREENS[screen].label;
@@ -521,7 +648,9 @@ export function sanitiseSuggestion(
 
   const confidenceRaw = String(obj.confidence ?? "").toLowerCase();
   const confidence: AiSuggestion["confidence"] =
-    confidenceRaw === "low" || confidenceRaw === "medium" ? confidenceRaw : "high";
+    confidenceRaw === "low" || confidenceRaw === "medium"
+      ? confidenceRaw
+      : "high";
 
   return { answer, bullets, actions, followUps, sources, confidence };
 }
@@ -532,7 +661,8 @@ export function sanitiseSuggestion(
  */
 export function emptySuggestion(): AiSuggestion {
   return {
-    answer: "Ask me anything about this school — attendance, fees, results, staff or transport.",
+    answer:
+      "Ask me anything about this school — attendance, fees, results, staff or transport.",
     bullets: [],
     actions: [],
     followUps: [],

@@ -1,1 +1,16 @@
-{"projectId":"prj_KuiuxAhwAzJ8PuUe3vtzfscEeX8e","orgId":"team_WbfrXGimFtc8vqsyATNat4rP","projectName":"erp"}
+{
+  "projectId": "prj_KuiuxAhwAzJ8PuUe3vtzfscEeX8e",
+  "orgId": "team_WbfrXGimFtc8vqsyATNat4rP",
+  "projectName": "erp",
+  "settings": {
+    "createdAt": 1790687700007,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}

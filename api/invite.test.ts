@@ -196,7 +196,7 @@ describe("POST /api/invite — super admin cannot be granted", () => {
           JSON.stringify([
             {
               id: "student-1",
-              admission_no: "ADM/26-27/0041",
+              usn: "adm26270041",
               first_name: "Yashaswini",
               last_name: "Naidu",
               email: "yashaswini.naidu@gks.edu.in",

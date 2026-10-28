@@ -15,11 +15,13 @@ import { useEffect, useState } from "react";
  * shipped to the client — it is only used server-side (not part of this app).
  */
 const FALLBACK_URL = "https://fmlwzxmjrecbtvgraqqm.supabase.co";
-const FALLBACK_ANON_KEY =
-  "sb_publishable_Y1oStHbYHErfX2FD6xyKeg_PXuVcQ1w";
+const FALLBACK_ANON_KEY = "sb_publishable_Y1oStHbYHErfX2FD6xyKeg_PXuVcQ1w";
 
-const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || FALLBACK_URL;
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || FALLBACK_ANON_KEY;
+const url =
+  (import.meta.env.VITE_SUPABASE_URL as string | undefined) || FALLBACK_URL;
+const anonKey =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ||
+  FALLBACK_ANON_KEY;
 
 export const supabase: SupabaseClient = createClient(url, anonKey, {
   auth: {
@@ -43,6 +45,33 @@ export const supabase: SupabaseClient = createClient(url, anonKey, {
   },
 });
 
+/*
+ * Whether this page load began with a recovery link.
+ *
+ * Read once, at module load, because `detectSessionInUrl` may rewrite the URL
+ * before React's first render — and a page that then asks "are there recovery
+ * parameters?" would see none and refuse a perfectly valid link.
+ *
+ * The event is a second net for the implicit flow, where the fragment can be
+ * consumed before the flag is read.
+ */
+let recoveryFlowDetected =
+  typeof window !== "undefined" && isRecoverySession();
+supabase.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") recoveryFlowDetected = true;
+});
+
+/**
+ * True when the page was opened through a password-recovery link.
+ *
+ * The reset screen uses this — rather than "is anybody signed in" — so an
+ * ordinary session in an unattended browser cannot be used to set a new
+ * password.
+ */
+export function isRecoveryFlow(): boolean {
+  return recoveryFlowDetected || isRecoverySession();
+}
+
 // ---------------------------------------------------------------------------
 // Admin login — Supabase Auth.
 //
@@ -58,6 +87,7 @@ export const supabase: SupabaseClient = createClient(url, anonKey, {
 
 export type AuthResult =
   | { status: "ok" }
+  | { status: "otp"; message: string; emailHint: string }
   | { status: "invalid" }
   | { status: "error"; message: string };
 
@@ -101,13 +131,15 @@ export function isRecoverySession(): boolean {
  * timeout stops a slow or silent exchange from leaving the page spinning
  * forever.
  */
-export async function getRecoverySession(timeoutMs = 8000): Promise<Session | null> {
+export async function getRecoverySession(
+  timeoutMs = 8000
+): Promise<Session | null> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const { data } = await supabase.auth.getSession();
     if (data.session) return data.session;
     if (Date.now() >= deadline) return null;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise(resolve => setTimeout(resolve, 250));
   }
 }
 
@@ -150,7 +182,9 @@ export async function sendPasswordReset(
  * then installed here so every later request carries it exactly as if the user
  * had signed in directly.
  *
- * A full email address is also accepted, since people paste those.
+ * Students and staff sign in with their USN. A successful password step for
+ * them returns `status: "otp"` rather than a session; the code is the second
+ * factor and `/api/otp` mints the session.
  */
 export function isValidUsername(username: string): boolean {
   if (typeof username !== "string") return false;
@@ -176,6 +210,8 @@ export async function signInWithUsername(
         access_token: string;
         refresh_token: string;
       };
+      otpRequired?: boolean;
+      emailHint?: string;
       message?: string;
       error?: string;
     };
@@ -189,6 +225,21 @@ export async function signInWithUsername(
         message:
           json.message ??
           "Cannot reach the server. Check your connection and try again.",
+      };
+    }
+
+    /*
+     * A student or member of staff has passed the password step but is not
+     * signed in yet. The route has mailed a code and returned no session, so
+     * the caller must ask for that code before anything is installed.
+     */
+    if (json.otpRequired) {
+      return {
+        status: "otp",
+        message:
+          json.message ??
+          "Enter the six-digit code sent to the email on your record.",
+        emailHint: json.emailHint ?? "",
       };
     }
 
@@ -235,7 +286,9 @@ export async function signInWithUsername(
 export async function updateUsername(
   username: string
 ): Promise<{ error: Error | null }> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
     return { error: new Error("Not signed in") };
   }
@@ -262,7 +315,9 @@ export async function updateUsername(
  */
 export async function resetPasswordByUsername(
   username: string
-): Promise<{ status: "ok"; message: string } | { status: "error"; message: string }> {
+): Promise<
+  { status: "ok"; message: string } | { status: "error"; message: string }
+> {
   try {
     /*
      * /api/recover, not /api/login. The app sends this mail itself, because
@@ -326,7 +381,10 @@ export async function updatePassword(
             "This recovery link is no longer valid. Request a new one — links expire after a short time.",
         };
       }
-      if (reason.includes("8 character") || reason.includes("password should")) {
+      if (
+        reason.includes("8 character") ||
+        reason.includes("password should")
+      ) {
         return {
           status: "error",
           message: "That password is too short. Use at least 8 characters.",
@@ -420,4 +478,254 @@ export function useSession() {
 export async function signOut() {
   const { error } = await supabase.auth.signOut();
   return error;
+}
+
+/* ------------------------------------------------------------------------ *
+ * Portal sign-in: the emailed code, and the account that follows it
+ *
+ * Deliberately its own module rather than more functions in supabase.ts. That
+ * file is the Supabase client itself and is imported by everything; the rules
+ * here are about one screen, and mixing them in is how a sign-in flow grows
+ * three overlapping ways to do the same thing.
+ * ------------------------------------------------------------------------ */
+
+/** What the account behind a verified code turned out to be. */
+export interface PortalSubjectInfo {
+  kind: "student" | "staff" | "super_admin";
+  name: string;
+  role: string;
+  username: string;
+}
+
+export type CodeResult =
+  | { status: "ok"; message: string }
+  | { status: "cooldown"; message: string }
+  | { status: "error"; message: string };
+
+/**
+ * Ask for a sign-in code.
+ *
+ * The identifier is whatever the person can actually produce: an email
+ * address, a USN, or a username they chose. The server works
+ * out which it is from the shape of the value, so the screen does not have to
+ * ask which kind it is and get it wrong.
+ *
+ * "cooldown" is reported separately from "error" because the wording differs:
+ * too many requests is a thing you can do something about, whereas an error
+ * is not, and collapsing the two makes the screen feel broken either way.
+ */
+export async function requestSignInCode(
+  identifier: string
+): Promise<CodeResult> {
+  try {
+    const res = await fetch("/api/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "request",
+        identifier: identifier.trim(),
+      }),
+    });
+    const json = (await res.json()) as { message?: string; error?: string };
+    if (res.status === 429) {
+      return {
+        status: "cooldown",
+        message: json.message ?? "Wait a few minutes and try again.",
+      };
+    }
+    if (!res.ok) {
+      return {
+        status: "error",
+        message:
+          json.message ?? "That code could not be sent. Please try again.",
+      };
+    }
+    return {
+      status: "ok",
+      message:
+        json.message ?? "If that address is registered, a code is on its way.",
+    };
+  } catch {
+    return {
+      status: "error",
+      message: "Cannot reach the server. Check your connection and try again.",
+    };
+  }
+}
+
+export type VerifyResult =
+  | { status: "ok"; mustSetPassword: boolean; subject: PortalSubjectInfo }
+  | { status: "invalid"; message: string }
+  | { status: "no_password"; message: string }
+  | { status: "error"; message: string };
+
+/**
+ * Type the code back in. A session is installed when it is right.
+ *
+ * The same identifier is used as was used to ask for the code. A pupil who
+ * asked with a USN types the USN again, and the
+ * two have to arrive at the same account.
+ */
+export async function verifySignInCode(
+  identifier: string,
+  code: string
+): Promise<VerifyResult> {
+  try {
+    const res = await fetch("/api/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "verify",
+        identifier: identifier.trim(),
+        code: code.trim(),
+      }),
+    });
+    const json = (await res.json()) as {
+      session?: { access_token: string; refresh_token: string };
+      mustSetPassword?: boolean;
+      subject?: PortalSubjectInfo;
+      message?: string;
+      error?: string;
+    };
+
+    if (res.status === 409) {
+      return {
+        status: "no_password",
+        message: json.message ?? "This account needs a password set up first.",
+      };
+    }
+    if (!res.ok) {
+      return {
+        status: "invalid",
+        message: json.message ?? "That code is not right.",
+      };
+    }
+    if (!json.session?.access_token || !json.session?.refresh_token) {
+      return {
+        status: "error",
+        message: "The login service returned an incomplete session.",
+      };
+    }
+
+    const { error } = await supabase.auth.setSession({
+      access_token: json.session.access_token,
+      refresh_token: json.session.refresh_token,
+    });
+    if (error) {
+      return {
+        status: "error",
+        message: "Your session could not be started. Please try again.",
+      };
+    }
+    return {
+      status: "ok",
+      mustSetPassword: Boolean(json.mustSetPassword),
+      subject: json.subject ?? {
+        kind: "staff",
+        name: "",
+        role: "",
+        username: "",
+      },
+    };
+  } catch {
+    return {
+      status: "error",
+      message: "Cannot reach the server. Check your connection and try again.",
+    };
+  }
+}
+
+/** The state of the signed-in person's own account. */
+export interface PortalAccount {
+  subject: "student" | "staff";
+  recordId: string;
+  email: string;
+  username: string;
+  name: string;
+  role: string;
+}
+
+function authHeaders(): Record<string, string> {
+  return { "Content-Type": "application/json" };
+}
+
+/**
+ * Read this session's account.
+ *
+ * Returns null rather than throwing when there is no session: the caller is
+ * deciding whether to show the setup screen, and "not signed in" is an ordinary
+ * answer to that question, not an error.
+ */
+export async function readPortalAccount(): Promise<PortalAccount | null> {
+  const { data } = await supabase.auth.getSession();
+  if (!data.session?.access_token) return null;
+  try {
+    const res = await fetch("/api/portal-admin", {
+      headers: {
+        ...authHeaders(),
+        Authorization: `Bearer ${data.session.access_token}`,
+      },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { account?: PortalAccount };
+    return json.account ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export type SaveResult =
+  | { status: "ok" }
+  | { status: "error"; message: string };
+
+/**
+ * Change the username, the password, or both.
+ *
+ * The current password is required either way: an email address proves control
+ * of a mailbox, not knowledge of a password, and without this check anyone who
+ * reached an open tab could take the account over permanently.
+ */
+export async function changePortalCredentials(
+  username: string | undefined,
+  password: string | undefined,
+  currentPassword: string
+): Promise<SaveResult> {
+  const body: Record<string, string> = { currentPassword };
+  if (username !== undefined) body.username = username;
+  if (password !== undefined) body.password = password;
+  return saveAccount("/api/portal-admin", "PATCH", body);
+}
+
+async function saveAccount(
+  path: string,
+  method: "POST" | "PATCH",
+  body: Record<string, string>
+): Promise<SaveResult> {
+  const { data } = await supabase.auth.getSession();
+  if (!data.session?.access_token) {
+    return { status: "error", message: "You are not signed in." };
+  }
+  try {
+    const res = await fetch(path, {
+      method,
+      headers: {
+        ...authHeaders(),
+        Authorization: `Bearer ${data.session.access_token}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as { message?: string };
+    if (!res.ok) {
+      return {
+        status: "error",
+        message: json.message ?? "That could not be saved.",
+      };
+    }
+    return { status: "ok" };
+  } catch {
+    return {
+      status: "error",
+      message: "Cannot reach the server. Check your connection.",
+    };
+  }
 }

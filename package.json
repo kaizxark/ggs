@@ -11,7 +11,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "build:landing": "node scripts/build-landing.mjs"
+    "preview:landing": "node scripts/preview-landing.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

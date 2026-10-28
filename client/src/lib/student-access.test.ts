@@ -35,7 +35,7 @@ describe("directory access", () => {
   });
 
   it("refuses parents and pupils the whole roll call", () => {
-    // The failure this prevents: a parent reading every child's admission number.
+    // The failure this prevents: a parent reading every child's USN.
     expect(canListStudents("parent")).toBe(false);
     expect(canListStudents("student")).toBe(false);
   });

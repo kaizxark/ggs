@@ -167,7 +167,7 @@ button, a, input, select, textarea { outline-color: var(--brand); }
 /* Square, so `width` is set rather than left to `auto` — that suited the old
    wide logo, but on a round mark an auto width collapses to the intrinsic
    height and the emblem ends up smaller than its 44px box. */
-.brand-logo { display: block; height: 44px; width: 44px; flex: 0 0 auto; border-radius: 50%; }
+.brand-logo { display: block; height: 52px; width: 52px; flex: 0 0 auto; border-radius: 50%; }
 /* Absolute so the mobile close button never squeezes the logo. */
 .brand-row .sidebar-close-mobile { position: absolute; top: 0; right: 0; }
 .sidebar-nav { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 15px 10px; }
@@ -371,6 +371,8 @@ button.breadcrumb-root:hover { color: var(--brand); }
 .breadcrumb-sep { color: var(--text-faint); }
 .breadcrumb-current { color: var(--text-hover); font-weight: 600; }
 .back-link:hover { color: var(--brand-strong); }
+.dashboard-overview { --text-muted: #a2adb7; }
+.dashboard-overview .recharts-cartesian-axis-tick-value { fill: var(--text-muted); }
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 11px; background: var(--bg-panel); box-shadow: 0 4px 13px rgba(0,0,0,.25); }
 .metric-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .metric-block { min-width: 0; padding: 20px; }
@@ -384,9 +386,10 @@ button.breadcrumb-root:hover { color: var(--brand); }
    being squeezed into 35% of the width and wrapping awkwardly. Handing it more
    room costs the chart column little, because the chart is fluid anyway. */
 .dashboard-grid-top { grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr); }
-.dashboard-grid-mid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.dashboard-grid-mid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 .panel { min-width: 0; border: 1px solid var(--border); border-radius: 11px; background: var(--bg-panel); box-shadow: 0 4px 13px rgba(0,0,0,.25); }
 .panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 20px 21px 0; }
+.dashboard-attendance-controls { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .chart-legend { display: flex; align-items: center; gap: 16px; padding: 19px 22px 0; color: var(--text-muted); font-size: 12px; }
 .chart-legend span, .mini-label { display: inline-flex; align-items: center; gap: 6px; }
 .legend-dot { display: inline-block; height: 7px; width: 7px; border-radius: 999px; }
@@ -453,6 +456,95 @@ button.breadcrumb-root:hover { color: var(--brand); }
 .health-metric:last-child { border-right: 0; padding-right: 0; }
 .health-ring { display: grid; height: 43px; width: 43px; flex: 0 0 auto; place-items: center; border-radius: 999px; }
 .health-ring-inner { display: grid; height: 36px; width: 36px; place-items: center; border-radius: 999px; background: var(--bg-panel); color: var(--text-hover); font-size: 12.5px; font-weight: 700; }
+.health-grid.two { grid-template-columns: repeat(2, 1fr); }
+.health-grid.three { grid-template-columns: repeat(3, 1fr); }
+.class-watch-list { display: grid; gap: 2px; padding: 12px 14px 16px; }
+.class-watch-row { display: flex; width: 100%; align-items: center; gap: 14px; border: 0; border-radius: 8px; background: transparent; padding: 10px 8px; text-align: left; }
+.class-watch-row:hover { background: var(--bg-hover); }
+.class-watch-main { min-width: 0; flex: 1; }
+.class-watch-label { display: block; overflow: hidden; color: var(--text-secondary); font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.class-watch-teacher { display: block; margin-top: 3px; overflow: hidden; color: var(--text-muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.class-watch-meter { display: flex; width: 132px; flex: 0 0 auto; align-items: center; gap: 9px; }
+.class-watch-bar { height: 5px; flex: 1; overflow: hidden; border-radius: 999px; background: var(--border-strong); }
+.class-watch-bar > span { display: block; height: 100%; border-radius: 999px; }
+.class-watch-value { width: 34px; color: var(--text-secondary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.pupil-dashboard { --text-muted: #a2adb7; }
+.pupil-hero { position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: radial-gradient(120% 140% at 100% 0%, rgba(63,184,162,.10), transparent 55%), var(--bg-panel); padding: 24px; box-shadow: 0 4px 13px rgba(0,0,0,.25); }
+.pupil-hero::after { content: ""; position: absolute; right: -80px; top: -120px; width: 260px; height: 260px; border-radius: 999px; border: 1px solid rgba(63,184,162,.12); pointer-events: none; }
+.pupil-hero-copy { position: relative; z-index: 1; min-width: 0; }
+.pupil-hero .breadcrumb { margin-bottom: 14px; }
+.pupil-hero .page-title { font-size: clamp(28px, 3.4vw, 38px); }
+.pupil-hero .page-subtitle { max-width: 54ch; }
+.pupil-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.pupil-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg-input); padding: 5px 10px; color: var(--text-muted); font-size: 12px; font-weight: 500; }
+.pupil-chip.is-active { border-color: var(--success-border); background: var(--success-soft); color: var(--brand); }
+.pupil-hero-side { position: relative; z-index: 1; flex: 0 0 240px; border: 1px solid var(--border-strong); border-radius: 10px; background: rgba(15,17,21,.45); padding: 14px 15px; }
+.pupil-side-label { margin: 0; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.pupil-teacher { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.pupil-teacher-avatar { display: grid; height: 34px; width: 34px; flex: 0 0 auto; place-items: center; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 700; }
+.pupil-teacher > div > strong { display: block; color: var(--text-secondary); font-size: 13.5px; font-weight: 600; }
+.pupil-teacher > div > span { display: block; margin-top: 2px; color: var(--text-muted); font-size: 12px; }
+.pupil-side-divider { height: 1px; margin: 14px 0 12px; background: var(--border); }
+.pupil-side-value { display: block; margin-top: 6px; color: var(--text-secondary); font-size: 14px; font-weight: 600; }
+.pupil-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.pupil-metric { padding: 17px 17px 16px; }
+.pupil-metric-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pupil-metric-label { color: var(--text-muted); font-size: 12.5px; font-weight: 500; }
+.pupil-metric-icon { display: grid; height: 27px; width: 27px; place-items: center; border-radius: 7px; }
+.pupil-metric-icon.teal { background: var(--brand-soft); color: var(--brand); }
+.pupil-metric-icon.violet { background: var(--violet-soft); color: var(--violet); }
+.pupil-metric-icon.amber { background: var(--warning-soft); color: var(--warning); }
+.pupil-metric-icon.blue { background: var(--info-soft); color: var(--info); }
+.pupil-metric-value { margin: 14px 0 0; color: var(--text-primary); font-family: Manrope, sans-serif; font-size: 27px; font-weight: 700; letter-spacing: -.06em; line-height: 1; }
+.pupil-metric-note { margin: 8px 0 0; overflow: hidden; color: var(--text-muted); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.pupil-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 24px; }
+.pupil-grid.even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pupil-chart-panel { padding-bottom: 16px; }
+.pupil-chart { display: flex; align-items: flex-end; gap: 10px; min-height: 190px; padding: 24px 22px 8px; }
+.pupil-chart-col { display: flex; min-width: 0; flex: 1; flex-direction: column; align-items: center; gap: 7px; }
+.pupil-chart-value { color: var(--text-muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.pupil-chart-track { display: flex; height: 126px; width: 100%; max-width: 44px; align-items: flex-end; overflow: hidden; border-radius: 5px; background: var(--bg-input); }
+.pupil-chart-fill { display: block; width: 100%; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, var(--brand), rgba(63,184,162,.35)); }
+.pupil-chart-label { color: var(--text-muted); font-size: 11px; font-weight: 500; }
+.pupil-chart-foot { display: flex; flex-wrap: wrap; gap: 12px 16px; border-top: 1px solid var(--border); margin: 4px 22px 0; padding: 14px 0 0; color: var(--text-muted); font-size: 12px; }
+.pupil-chart-foot span { display: inline-flex; align-items: center; gap: 6px; }
+.pupil-next-body { display: grid; gap: 10px; padding: 16px 20px 20px; }
+.pupil-next-card { display: flex; align-items: flex-start; gap: 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-input); padding: 12px; }
+.pupil-next-card.is-empty { border-style: dashed; background: transparent; }
+.pupil-next-icon { display: grid; height: 31px; width: 31px; flex: 0 0 auto; place-items: center; border-radius: 8px; }
+.pupil-next-icon.teal { background: var(--brand-soft); color: var(--brand); }
+.pupil-next-icon.violet { background: var(--violet-soft); color: var(--violet); }
+.pupil-next-icon.amber { background: var(--warning-soft); color: var(--warning); }
+.pupil-next-card p { margin: 0; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.pupil-next-card > div > strong { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.pupil-next-card > div > span { display: block; margin-top: 4px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.pupil-alert { display: flex; align-items: center; gap: 8px; border: 1px solid var(--warning-border); border-radius: 8px; background: var(--warning-soft); padding: 10px 12px; color: var(--warning); font-size: 12.5px; font-weight: 500; }
+.pupil-result-list { display: grid; gap: 14px; padding: 18px 21px 21px; }
+.pupil-result-row { display: grid; gap: 7px; }
+.pupil-result-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--text-secondary); font-size: 13px; }
+.pupil-result-head span:last-child { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pupil-result-head em { margin-left: 6px; color: var(--brand); font-style: normal; font-weight: 600; }
+.pupil-result-bar { height: 5px; overflow: hidden; border-radius: 999px; background: var(--border-strong); }
+.pupil-result-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--brand), var(--info)); }
+.pupil-score { display: inline-grid; min-width: 48px; place-items: center; border: 1px solid var(--brand-border); border-radius: 999px; background: var(--brand-soft); padding: 4px 10px; color: var(--brand); font-size: 13px; font-weight: 700; }
+.pupil-list { display: grid; gap: 2px; padding: 10px 12px 14px; }
+.pupil-list-row { display: flex; align-items: center; gap: 10px; border-radius: 8px; padding: 9px; }
+.pupil-list-row:hover { background: var(--bg-hover); }
+.pupil-list-icon { display: grid; height: 29px; width: 29px; flex: 0 0 auto; place-items: center; border-radius: 7px; }
+.pupil-list-icon.teal { background: var(--brand-soft); color: var(--brand); }
+.pupil-list-icon.violet { background: var(--violet-soft); color: var(--violet); }
+.pupil-list-icon.danger { background: var(--danger-soft); color: var(--danger); }
+.pupil-list-row > div > strong { display: block; overflow: hidden; color: var(--text-secondary); font-size: 13px; font-weight: 600; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.pupil-list-row > div > span { display: block; margin-top: 2px; overflow: hidden; color: var(--text-muted); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.pupil-empty { display: flex; min-height: 150px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 24px; text-align: center; }
+.pupil-empty-icon { display: grid; height: 38px; width: 38px; place-items: center; border-radius: 10px; background: var(--bg-input); color: var(--text-muted); }
+.pupil-empty strong { color: var(--text-secondary); font-size: 13.5px; font-weight: 600; }
+.pupil-empty p { max-width: 34ch; margin: 0; color: var(--text-muted); font-size: 12.5px; line-height: 1.5; }
+.pupil-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 24px; padding: 8px 21px 21px; }
+.pupil-detail { border-top: 1px solid var(--border); padding: 12px 0; }
+.pupil-detail > span { display: block; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.pupil-detail > strong { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--text-secondary); font-size: 13px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.pupil-detail > strong svg { flex: 0 0 auto; color: var(--text-muted); }
 .avatar { display: inline-grid; flex: 0 0 auto; place-items: center; border-radius: 999px; font-weight: 700; }
 .avatar-sm { height: 32px; width: 32px; font-size: 12.5px; }
 .avatar-lg { height: 48px; width: 48px; font-size: 15px; }
@@ -917,8 +1009,14 @@ button.breadcrumb-root:hover { color: var(--brand); }
   .content-area { padding-inline: 24px; }
   .topbar { padding-inline: 24px; }
   .health-grid { grid-template-columns: repeat(2, 1fr); row-gap: 22px; }
+  .health-grid.two, .health-grid.three { grid-template-columns: repeat(2, 1fr); }
   .health-metric:nth-child(2) { border-right: 0; padding-right: 0; }
   .report-card-grid { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-overview .overview-metric > div:nth-child(2) > svg { display: none; }
+  .dashboard-overview .dashboard-attendance-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .dashboard-overview .dashboard-attendance-controls { width: 100%; }
+  .dashboard-overview .dashboard-attendance-controls .segmented-control { flex: 1; justify-content: space-between; }
+  .dashboard-overview .dashboard-attendance-controls .segmented-control button { flex: 1; }
 }
 @media (max-width: 946px) {
   .sidebar { width: 246px; transform: translateX(-100%); box-shadow: 10px 0 30px rgba(0,0,0,.5); }
@@ -942,6 +1040,11 @@ button.breadcrumb-root:hover { color: var(--brand); }
   .metric-block:nth-child(4) { border-top: 1px solid var(--border); }
   .metric-grid.three { grid-template-columns: 1fr; }
   .metric-grid.three .metric-block + .metric-block { border-left: 0; border-top: 1px solid var(--border); }
+  .pupil-hero { align-items: flex-start; flex-direction: column; }
+  .pupil-hero-side { width: 100%; flex-basis: auto; }
+  .pupil-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pupil-grid, .pupil-grid.even { grid-template-columns: 1fr; }
+  .pupil-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 616px) {
   /* A fleet row is wide: icon, registration, driver, route, status. On a phone
@@ -974,6 +1077,7 @@ button.breadcrumb-root:hover { color: var(--brand); }
   .segmented-control button { padding-inline: 5px; }
   .chart-legend { padding-inline: 16px; gap: 9px; }
   .chart-footnote { margin-inline: 16px; }
+  .dashboard-overview .chart-footnote { align-items: flex-start; flex-direction: column; gap: 6px; }
   .health-grid { grid-template-columns: 1fr; padding-inline: 15px; }
   .health-metric { border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 15px; }
   .health-metric:last-child { border-bottom: 0; padding-bottom: 0; }
@@ -989,6 +1093,22 @@ button.breadcrumb-root:hover { color: var(--brand); }
   .mini-label { display: none; }
   .command-backdrop { padding-top: 72px; }
   .command-footer { gap: 8px; }
+  .pupil-hero { padding: 18px; }
+  .pupil-hero .page-title { font-size: 27px; }
+  .pupil-metrics { grid-template-columns: 1fr; }
+  .pupil-chart { min-height: 170px; gap: 6px; padding-inline: 14px; }
+  .pupil-chart-track { height: 108px; }
+  .pupil-chart-value { font-size: 9.5px; }
+  .pupil-chart-foot { margin-inline: 14px; gap: 8px 12px; }
+  .pupil-next-body { padding-inline: 15px; }
+  .pupil-result-list { padding-inline: 15px; }
+  .pupil-list { padding-inline: 8px; }
+  .pupil-detail-grid { grid-template-columns: 1fr; padding-inline: 15px; }
+  .class-watch-list { padding-inline: 8px; }
+  .class-watch-row { gap: 10px; }
+  .class-watch-meter { width: 104px; }
+  .class-watch-teacher { display: none; }
+  .health-grid.two, .health-grid.three { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -1196,29 +1316,13 @@ button.breadcrumb-root:hover { color: var(--brand); }
 .row-actions .row-more { display: inline-flex; align-items: center; justify-content: center; }
 .row-actions .row-more.danger:hover { color: var(--danger, #e2705f); background: rgba(226,112,95,.1); }
 
-/* ---------- Expanded directory row ------------------------------------ */
-
-.expanded-row > td { padding: 0; background: var(--bg-inset, rgba(255,255,255,.015)); }
-
-.expanded-panel {
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 22px;
-  border-block: 1px solid var(--border);
-  padding: 17px 19px 19px 53px;
-  animation: erp-rise-soft .18s var(--ease-out) both;
-}
-
-.expanded-summary {
-  display: grid; gap: 16px 26px;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  flex: 1 1 auto; min-width: 0;
-}
-
-.summary-item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+/*
+ * Label/value pairs, shared by the pupil drawer and anything else that lists
+ * a record's fields. The expanded directory row that used to need its own copy
+ * of these is gone — the record opens in the drawer instead.
+ */
 .summary-label { color: var(--text-muted); font-size: 11.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
 .summary-value { color: var(--text-primary); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-.summary-note { color: var(--text-muted); font-size: 11.5px; }
-
-.expanded-actions { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; }
 
 /* ---------- Server-side pager ----------------------------------------- */
 
@@ -1440,6 +1544,23 @@ button.breadcrumb-root:hover { color: var(--brand); }
 
 .field-error { color: #e2705f; font-size: 11.5px; font-weight: 600; }
 
+/*
+ * A checkbox is a control, not a text field. The `.form-grid input` rule above
+ * stretches every input to the width of its column, which turned a checkbox
+ * into a block the width of the dialog.
+ */
+.form-grid label.checkbox-field {
+  flex-direction: row; align-items: center; gap: 9px;
+  grid-column: 1 / -1;
+  color: var(--text-secondary); font-size: 12.5px; font-weight: 500;
+  cursor: pointer;
+}
+.form-grid label.checkbox-field input {
+  display: inline-block; flex: 0 0 auto;
+  width: 15px; height: 15px; margin: 0;
+  accent-color: var(--brand);
+}
+
 /* ---------- Documents --------------------------------------------------- */
 
 .upload-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); margin-top: 15px; }
@@ -1506,8 +1627,6 @@ button.breadcrumb-root:hover { color: var(--brand); }
 }
 
 @media (max-width: 946px) {
-  .expanded-panel { flex-direction: column; align-items: stretch; padding-left: 19px; }
-  .expanded-actions { flex-direction: row; }
   .notice { flex-wrap: wrap; }
 }
 
@@ -1526,5 +1645,938 @@ button.breadcrumb-root:hover { color: var(--brand); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .expanded-panel, .skeleton-line, .bar-fill { animation: none !important; transition: none !important; }
+  .skeleton-line, .bar-fill { animation: none !important; transition: none !important; }
+}
+/* ------------------------------------------------------------------ *
+ * Drawing a panel over the page
+ * ------------------------------------------------------------------ */
+
+/*
+ * Blur and dim the page behind an open panel.
+ *
+ * The blur is a `backdrop-filter` on the sheet below the panel, which is the
+ * only placement that works here.
+ *
+ * The obvious alternative — putting `filter: blur()` on `.main-area` and
+ * `.sidebar` so the page itself goes soft — breaks the panel. Both `filter` and
+ * `transform` on an ancestor make that ancestor the containing block for its
+ * `position: fixed` descendants, so the drawer stopped being fixed to the
+ * viewport and became fixed to `.main-area`, which is exactly `100dvh` tall and
+ * `overflow: hidden`. It stopped scrolling, got clipped to the page box, and
+ * slid with the content. A backdrop-filter on a sibling below it in the
+ * stacking order leaves the panel completely untouched.
+ *
+ * The sheet sits at z-45 and the drawer at z-50, so the panel is painted above
+ * and is never part of the backdrop image that gets sampled.
+ */
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 45;
+  background: rgba(3,6,8,.42);
+  /*
+   * Standard property only. The `-webkit-` alias was here "for Safari", and it
+   * cost the effect entirely: current Chrome no longer honours it, and the CSS
+   * minifier treated it as the canonical spelling and dropped the unprefixed
+   * declaration that was the one actually working. The sheet rendered as a flat
+   * dim with no blur at all.
+   */
+  backdrop-filter: blur(4px) saturate(.85);
+  animation: fade-in .22s var(--ease-out) both;
+  /* `pointer-events` matter more than paint here: the sheet is invisible, and
+     without this the page behind stays clickable straight through the blur. */
+  cursor: default;
+}
+
+/*
+ * Stop the page behind from scrolling.
+ *
+ * `.main-area` is the scroller, not the window, so `body { overflow: hidden }`
+ * changed nothing and the roll call drifted behind the panel. Lenis is stopped
+ * from script as well, because it drives the wheel itself and ignores a CSS
+ * overflow change while it is running.
+ *
+ * `overscroll-behavior: contain` stops the wheel chaining onward once the panel
+ * is scrolled to its own end, which is the other half of the problem.
+ */
+.page-scroll-locked .main-area,
+.page-scroll-locked .table-scroll,
+.page-scroll-locked .command-content {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+/* A locked page should not still be selectable by dragging across it. */
+.page-scroll-locked .main-area,
+.page-scroll-locked .sidebar {
+  user-select: none;
+}
+
+/*
+ * Reduced motion: the panel still slides in, because that transition is the
+ * affordance, but the sheet fades rather than animating. The blur itself stays —
+ * it is the thing telling you the page behind is not in play.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .drawer-backdrop { animation: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Pupil drawer
+ *
+ * The staff drawer is 355px, which suits a name, a department and a leave
+ * balance. A pupil record is fourteen sections, so this one starts wider and
+ * can be widened again from inside itself.
+ *
+ * The two widths are not decoration. Narrow is a single column you read top to
+ * bottom. Expanded is two columns, so a fourteen-section record stops being one
+ * long scroll and becomes something you can compare across at a glance — which
+ * is the whole reason to widen it.
+ * ------------------------------------------------------------------ */
+.pupil-drawer {
+  width: min(560px, calc(100vw / var(--ui-zoom)));
+  /* The panel is the page while it is open, so its footer has to leave the
+     content above it rather than overlay it. */
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.pupil-drawer.expanded {
+  width: min(1020px, calc(100vw / var(--ui-zoom)));
+}
+
+/* Everything between the header and the footer scrolls; the header and footer
+   stay put. A 1020px panel of fourteen sections is too tall to re-find the
+   close button after one scroll. */
+.pupil-drawer > .drawer-header,
+.pupil-drawer > .drawer-avatar,
+.pupil-drawer > .drawer-stats,
+.pupil-drawer > .drawer-tabs {
+  flex: 0 0 auto;
+}
+
+.pupil-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--border);
+  padding: 4px 0 20px;
+}
+
+.drawer-footer {
+  display: flex; flex: 0 0 auto; align-items: center; gap: 10px;
+  border-top: 1px solid var(--border-strong);
+  background: var(--bg-panel);
+  padding: 14px 25px;
+}
+.drawer-footer .primary-button { margin-left: auto; }
+
+.drawer-expand {
+  display: grid; height: 32px; width: 32px; place-items: center;
+  border: 1px solid var(--border-strong); border-radius: 7px;
+  background: transparent; color: var(--text-muted);
+  transition: background-color .16s var(--ease-out), color .16s var(--ease-out);
+}
+.drawer-expand:hover { background: var(--bg-hover); color: var(--text-primary); }
+.drawer-expand[aria-pressed="true"] { background: var(--brand-soft-2); color: var(--brand); border-color: transparent; }
+
+/* Fourteen tabs do not fit any sane width. The strip scrolls sideways rather
+   than wrapping into a block that pushes the record off the screen. */
+.drawer-tabs.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -25px;
+  padding: 0 25px 8px;
+  overscroll-behavior-x: contain;
+}
+.drawer-tabs.scroll-x::-webkit-scrollbar { display: none; }
+.drawer-tabs.scroll-x button { flex: 0 0 auto; }
+
+/* Label/value pairs. In the narrow panel they stack; in the expanded one they
+   sit two abreast, which is what makes the wider panel worth having. */
+.drawer-facts { display: grid; grid-template-columns: 1fr; }
+
+/*
+ * Two columns only when the panel genuinely has the room.
+ *
+ * `.expanded` is a request, not a guarantee — the width is clamped to the
+ * viewport, so on a phone the "expanded" panel is the same 355px as the narrow
+ * one. Laying two columns into that gave each fact 134px and wrapped every
+ * label. Tying the second column to the viewport rather than to the class means
+ * the layout follows the space it actually has.
+ */
+@media (min-width: 1100px) {
+  .pupil-drawer.expanded .drawer-facts { grid-template-columns: 1fr 1fr; column-gap: 34px; }
+}
+
+/* Nothing to widen into on a phone, so the control would only be a dead
+   button that looks like it does something. */
+@media (max-width: 720px) {
+  .pupil-drawer .drawer-expand[aria-pressed] { display: none; }
+}
+
+.drawer-fact {
+  display: flex; flex-direction: column; gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 0;
+}
+.drawer-fact .summary-label { font-size: 11.5px; letter-spacing: .01em; }
+.drawer-fact .summary-value { color: var(--text-primary); font-size: 13.5px; line-height: 1.5; word-break: break-word; }
+
+/*
+ * Sub-rows — a guardian's phone under their name, a paper under its exam —
+ * carry their indentation in the label itself, so the rule here is only about
+ * not uppercasing them: "  Contact" should read as "Contact".
+ */
+.drawer-fact .summary-label { text-transform: none; letter-spacing: 0; }
+.drawer-facts > .drawer-fact:nth-last-child(-n+2) { border-bottom: 0; }
+
+.pupil-drawer .empty-state { border: 0; padding: 28px 0; }
+
+/* ================================================================
+ * Pupil dashboard — phone layout
+ *
+ * Four tabs instead of the rail: today, schoolwork, fees, and the
+ * pupil's own record. Reached only below the 946px breakpoint, and
+ * only for the student role, so nothing here has to defend itself
+ * against a desktop layout.
+ *
+ * The bar is a flex child rather than `position: fixed`. A fixed bar
+ * sits over the last card and every tab has to remember to reserve
+ * room for it; a column with the bar at the end cannot overlap the
+ * content at all, and it keeps its place when the phone keyboard
+ * changes the visual viewport.
+ * ================================================================ */
+
+.pupil-mobile {
+  display: flex;
+  height: calc(100vh / var(--ui-zoom));
+  height: calc(100dvh / var(--ui-zoom));
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+.pupil-m-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pupil-m-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 14px 28px;
+}
+
+/* ---------- Greeting ---------- */
+
+.pupil-m-hero {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: -16px -14px 0;
+  padding: 20px 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  background:
+    radial-gradient(120% 90% at 12% 0%, rgba(63, 184, 162, .16), transparent 62%),
+    var(--bg-page);
+}
+
+.pupil-m-photo {
+  display: grid;
+  height: 58px;
+  width: 58px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--brand-border);
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.pupil-m-photo img { height: 100%; width: 100%; object-fit: cover; }
+
+.pupil-m-hero-copy { min-width: 0; }
+.pupil-m-hero-copy h1 {
+  margin: 0;
+  font-family: "Manrope", "DM Sans", sans-serif;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.2;
+}
+.pupil-m-hero-copy > p { margin: 3px 0 0; color: var(--text-muted); font-size: 12.5px; }
+
+.pupil-m-eyebrow {
+  margin: 0 0 3px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.pupil-m-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.pupil-m-chips span {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.pupil-m-chips .good { border-color: var(--brand-border); background: var(--brand-soft); color: var(--brand); }
+.pupil-m-chips .warn { border-color: var(--warning-border); background: var(--warning-soft); color: var(--warning); }
+.pupil-m-chips .bad { border-color: var(--danger-border); background: var(--danger-soft); color: var(--danger); }
+
+/* ---------- Quick actions ---------- */
+
+.pupil-m-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pupil-m-quick button {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  padding: 12px 4px 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  transition: background-color .16s var(--ease-out), border-color .16s var(--ease-out);
+}
+.pupil-m-quick button svg { color: var(--brand); }
+.pupil-m-quick button:active { background: var(--bg-hover); border-color: var(--border-hover); }
+
+/* ---------- Cards ---------- */
+
+.pupil-m-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  padding: 14px;
+}
+
+.pupil-m-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pupil-m-card-head > div { min-width: 0; }
+.pupil-m-card-head h2 {
+  margin: 0;
+  font-family: "Manrope", "DM Sans", sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  line-height: 1.3;
+}
+.pupil-m-card-head > svg { flex: 0 0 auto; margin-top: 2px; color: var(--text-muted); }
+
+.pupil-m-link {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 2px 2px;
+  color: var(--brand);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pupil-m-link:hover { color: var(--brand-strong); }
+
+.pupil-m-count {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  padding: 2px 9px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Grouped sections (Academics) ---------- */
+
+.pupil-m-group { display: flex; flex-direction: column; gap: 10px; }
+.pupil-m-group-label {
+  margin: 6px 2px -2px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+/* ---------- Lists and rows ---------- */
+
+.pupil-m-list { display: flex; flex-direction: column; }
+.pupil-m-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.pupil-m-row:first-child { border-top: 0; padding-top: 2px; }
+.pupil-m-row > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.pupil-m-row strong { font-size: 13px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.pupil-m-row > div > span { color: var(--text-muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
+
+.pupil-m-row-icon {
+  display: grid;
+  height: 30px;
+  width: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+}
+.pupil-m-row-icon.good { background: var(--brand-soft); color: var(--brand); }
+.pupil-m-row-icon.warn { background: var(--warning-soft); color: var(--warning); }
+.pupil-m-row-icon.bad { background: var(--danger-soft); color: var(--danger); }
+.pupil-m-row-icon.violet { background: var(--violet-soft); color: var(--violet); }
+.pupil-m-row-icon.teal { background: var(--info-soft); color: var(--info); }
+.pupil-m-row-icon.amber { background: var(--orange-soft); color: var(--orange); }
+
+.pupil-m-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  padding: 3px 8px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.pupil-m-pill.good { background: var(--brand-soft); color: var(--brand); }
+.pupil-m-pill.warn { background: var(--warning-soft); color: var(--warning); }
+.pupil-m-pill.bad { background: var(--danger-soft); color: var(--danger); }
+
+/* ---------- Timetable on the greeting screen ---------- */
+
+.pupil-m-timeline { display: flex; flex-direction: column; gap: 0; }
+.pupil-m-timeline-row {
+  display: grid;
+  grid-template-columns: 44px 1px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+.pupil-m-timeline-row:first-child { padding-top: 0; }
+.pupil-m-timeline-row:last-child { padding-bottom: 0; }
+.pupil-m-timeline-row > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pupil-m-timeline-row strong { font-size: 13px; font-weight: 600; }
+.pupil-m-timeline-row > div > span { color: var(--text-muted); font-size: 11.5px; }
+.pupil-m-time {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.pupil-m-line { align-self: stretch; background: var(--border-strong); border-radius: 1px; }
+
+/* ---------- Attendance ---------- */
+
+.pupil-m-attendance-body { display: flex; align-items: baseline; gap: 14px; }
+.pupil-m-attendance-body strong {
+  font-family: "Manrope", "DM Sans", sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.pupil-m-progress {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-raised);
+}
+.pupil-m-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand), var(--brand-strong));
+}
+
+.pupil-m-mini-stats { display: flex; flex-wrap: wrap; gap: 12px; }
+.pupil-m-mini-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.pupil-m-mini-stats i { height: 6px; width: 6px; border-radius: 50%; background: var(--text-faint); }
+.pupil-m-mini-stats i.good { background: var(--brand); }
+.pupil-m-mini-stats i.warn { background: var(--warning); }
+.pupil-m-mini-stats i.bad { background: var(--danger); }
+
+/* ---------- Segmented controls ---------- */
+
+.pupil-m-segmented,
+.pupil-m-toggle {
+  display: flex;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  padding: 3px;
+}
+.pupil-m-segmented button,
+.pupil-m-toggle button {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 7px 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: background-color .16s var(--ease-out), color .16s var(--ease-out);
+}
+.pupil-m-segmented button span { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.pupil-m-segmented button.active,
+.pupil-m-toggle button.active {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+}
+.pupil-m-segmented button.active { color: var(--brand); }
+.pupil-m-segmented button.active span { color: var(--brand); }
+.pupil-m-toggle { flex: 0 0 auto; }
+.pupil-m-toggle button { flex: 0 0 auto; padding: 5px 11px; font-size: 11px; }
+
+/* ---------- Timetable: day strip and week view ---------- */
+
+.pupil-m-days {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.pupil-m-days::-webkit-scrollbar { display: none; }
+.pupil-m-days button {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  padding: 5px 11px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.pupil-m-days button.active {
+  border-color: var(--brand-border);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.pupil-m-week { display: flex; flex-direction: column; }
+.pupil-m-week-day {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.pupil-m-week-day:first-child { border-top: 0; padding-top: 0; }
+.pupil-m-week-day strong { color: var(--text-secondary); font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pupil-m-week-day span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+
+/* ---------- Attendance calendar ---------- */
+
+.pupil-m-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pupil-m-calendar-head strong { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
+.pupil-m-calendar-head button {
+  display: grid;
+  height: 28px;
+  width: 28px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.pupil-m-calendar-head button:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.pupil-m-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.pupil-m-calendar-label {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  padding-bottom: 2px;
+}
+.pupil-m-calendar-day {
+  display: grid;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.pupil-m-calendar-day.good { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.pupil-m-calendar-day.warn { background: var(--warning-soft); color: var(--warning); font-weight: 600; }
+.pupil-m-calendar-day.bad { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+
+.pupil-m-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.pupil-m-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+.pupil-m-legend i { height: 7px; width: 7px; border-radius: 2px; background: var(--text-faint); }
+.pupil-m-legend i.good { background: var(--brand); }
+.pupil-m-legend i.warn { background: var(--warning); }
+.pupil-m-legend i.bad { background: var(--danger); }
+
+.pupil-m-subhead {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+/* ---------- Notes and empty states ---------- */
+
+.pupil-m-note {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-left: 2px solid var(--brand-border);
+  border-radius: 0 8px 8px 0;
+  background: var(--bg-raised);
+  padding: 9px 11px;
+}
+.pupil-m-note.warn { border-left-color: var(--warning-border); }
+.pupil-m-note strong { font-size: 12px; font-weight: 600; }
+.pupil-m-note span { color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
+
+.pupil-m-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 18px 10px;
+  text-align: center;
+}
+.pupil-m-empty > span {
+  display: grid;
+  height: 38px;
+  width: 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+}
+.pupil-m-empty strong { font-size: 12.5px; font-weight: 600; }
+.pupil-m-empty p { margin: 0; max-width: 30ch; color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
+
+.pupil-m-error { padding: 34px 10px; gap: 10px; }
+.pupil-m-error .pupil-m-primary { margin-top: 8px; }
+
+/* ---------- Exam select and results ---------- */
+
+.pupil-m-select { display: flex; flex-direction: column; gap: 5px; }
+.pupil-m-select > span {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.pupil-m-select select {
+  width: 100%;
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--bg-input);
+  padding: 9px 11px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+}
+
+.pupil-m-result-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 11px;
+  background: var(--brand-soft);
+  padding: 12px 13px;
+}
+.pupil-m-result-summary > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pupil-m-result-summary strong {
+  font-family: "Manrope", "DM Sans", sans-serif;
+  color: var(--brand);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.pupil-m-result-summary > div > span { color: var(--text-muted); font-size: 11.5px; }
+.pupil-m-result-summary > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pupil-m-result-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.pupil-m-result-row:first-child { border-top: 0; padding-top: 0; }
+.pupil-m-result-row > div:first-child { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pupil-m-result-row strong { font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+.pupil-m-result-row > div:first-child > span { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.pupil-m-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 108px;
+  padding-top: 4px;
+}
+.pupil-m-trend-col { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: center; gap: 5px; height: 100%; }
+.pupil-m-trend-col > span { color: var(--text-secondary); font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pupil-m-trend-col > div {
+  display: flex;
+  width: 100%;
+  flex: 1;
+  align-items: flex-end;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--bg-raised);
+}
+.pupil-m-trend-col i { display: block; width: 100%; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, var(--brand-strong), var(--brand)); }
+.pupil-m-trend-col small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Fees ---------- */
+
+.pupil-m-fee-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.pupil-m-fee-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--bg-panel);
+  padding: 12px 13px;
+}
+.pupil-m-fee-card > span { color: var(--text-muted); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.pupil-m-fee-card strong {
+  font-family: "Manrope", "DM Sans", sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.pupil-m-fee-card small { color: var(--text-muted); font-size: 10.5px; }
+.pupil-m-fee-card.good strong { color: var(--brand); }
+.pupil-m-fee-card.bad strong { color: var(--danger); }
+
+.pupil-m-primary {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: var(--success-bg);
+  padding: 12px 14px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color .16s var(--ease-out);
+}
+.pupil-m-primary:hover:not(:disabled) { background: var(--success-bg-hover); }
+
+/* ---------- Profile ---------- */
+
+.pupil-m-profile-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 4px 2px 0;
+}
+.pupil-m-profile-head > div:last-child { min-width: 0; }
+.pupil-m-profile-head h1 {
+  margin: 0;
+  font-family: "Manrope", "DM Sans", sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.25;
+}
+.pupil-m-profile-head p { margin: 2px 0 0; color: var(--text-muted); font-size: 12px; }
+.pupil-m-profile-head span { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.pupil-m-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 12px; }
+.pupil-m-detail { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pupil-m-detail > span { color: var(--text-muted); font-size: 10.5px; letter-spacing: .03em; }
+.pupil-m-detail > strong { font-size: 12.5px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+
+.pupil-m-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 11px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.pupil-m-address svg { flex: 0 0 auto; margin-top: 2px; color: var(--text-faint); }
+
+.pupil-m-contact-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.pupil-m-contact-actions a {
+  display: grid;
+  height: 30px;
+  width: 30px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--brand);
+  text-decoration: none;
+}
+.pupil-m-contact-actions a:hover { background: var(--brand-soft); border-color: var(--brand-border); }
+
+.pupil-m-transport { display: flex; flex-direction: column; gap: 11px; }
+.pupil-m-transport-top { display: flex; align-items: center; gap: 10px; }
+.pupil-m-transport-top > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pupil-m-transport-top strong { font-size: 13px; font-weight: 600; }
+.pupil-m-transport-top span { color: var(--text-muted); font-size: 11.5px; }
+
+.pupil-m-menu-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  padding: 12px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+.pupil-m-menu-row:first-of-type { border-top: 0; }
+.pupil-m-menu-row span { flex: 1; }
+.pupil-m-menu-row svg:last-child { color: var(--text-faint); }
+.pupil-m-menu-row.danger { color: var(--danger); }
+.pupil-m-menu-row.danger svg:first-child { color: var(--danger); }
+
+/* ---------- Bottom navigation ---------- */
+
+.pupil-bottom-nav {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+}
+
+.pupil-bottom-nav button,
+.pupil-bottom-nav > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  padding: 7px 2px 6px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  transition: color .16s var(--ease-out), background-color .16s var(--ease-out);
+}
+.pupil-bottom-nav button.active,
+.pupil-bottom-nav > span.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.pupil-bottom-nav button:active { background: var(--bg-hover); }
+
+/* ---------- Loading ---------- */
+
+.pupil-m-sk {
+  display: block;
+  border-radius: 6px;
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(100deg,
+    transparent 22%,
+    rgba(63, 184, 162, .05) 42%,
+    var(--skeleton-sheen) 50%,
+    rgba(63, 184, 162, .05) 58%,
+    transparent 78%);
+  background-repeat: no-repeat;
+  background-size: 240% 100%;
+  animation: erp-shimmer 1.45s linear infinite;
+}
+.pupil-m-sk-photo { height: 58px; width: 58px; flex: 0 0 auto; border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .pupil-m-sk { animation: none; background-image: none; }
 }

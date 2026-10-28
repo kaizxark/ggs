@@ -16,11 +16,11 @@ import type {
  */
 
 const students = [
-  { id: "1", name: "Aarav Sharma", initials: "AS", grade: "5", section: "B", attendance: 71, attendance_records: 60, average: 64, scored_papers: 5, fees: "Due", transport: "—", status: "Active", tone: "teal", admission_no: "GKS-0111" },
-  { id: "2", name: "Diya Nair", initials: "DN", grade: "8", section: "A", attendance: 73, attendance_records: 58, average: 81, scored_papers: 6, fees: "Paid", transport: "Bus 2", status: "Active", tone: "blue", admission_no: "GKS-0204" },
-  { id: "3", name: "Rohan Iyer", initials: "RI", grade: "3", section: "C", attendance: 0, attendance_records: 0, average: 58, scored_papers: 2, fees: "Due", transport: "—", status: "Active", tone: "violet", admission_no: "GKS-0342" },
-  { id: "4", name: "Sara Khan", initials: "SK", grade: "5", section: "B", attendance: 96, attendance_records: 62, average: 92, scored_papers: 6, fees: "Paid", transport: "Van 1", status: "Active", tone: "amber", admission_no: "GKS-0112" },
-  { id: "5", name: "Inactive Pupil", initials: "IP", grade: "5", section: "B", attendance: 40, attendance_records: 50, average: 20, scored_papers: 3, fees: "Due", transport: "—", status: "Inactive", tone: "slate", admission_no: "GKS-0999" },
+  { id: "1", name: "Aarav Sharma", initials: "AS", grade: "5", section: "B", attendance: 71, attendance_records: 60, average: 64, scored_papers: 5, fees: "Due", transport: "—", status: "Active", tone: "teal", usn: "GKS-0111" },
+  { id: "2", name: "Diya Nair", initials: "DN", grade: "8", section: "A", attendance: 73, attendance_records: 58, average: 81, scored_papers: 6, fees: "Paid", transport: "Bus 2", status: "Active", tone: "blue", usn: "GKS-0204" },
+  { id: "3", name: "Rohan Iyer", initials: "RI", grade: "3", section: "C", attendance: 0, attendance_records: 0, average: 58, scored_papers: 2, fees: "Due", transport: "—", status: "Active", tone: "violet", usn: "GKS-0342" },
+  { id: "4", name: "Sara Khan", initials: "SK", grade: "5", section: "B", attendance: 96, attendance_records: 62, average: 92, scored_papers: 6, fees: "Paid", transport: "Van 1", status: "Active", tone: "amber", usn: "GKS-0112" },
+  { id: "5", name: "Inactive Pupil", initials: "IP", grade: "5", section: "B", attendance: 40, attendance_records: 50, average: 20, scored_papers: 3, fees: "Due", transport: "—", status: "Inactive", tone: "slate", usn: "GKS-0999" },
 ] as unknown as Student[];
 
 const staff = [

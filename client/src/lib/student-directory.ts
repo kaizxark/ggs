@@ -47,7 +47,7 @@ export class ApiError extends Error {
 /** One row of the directory, as the server assembled it for this caller's role. */
 export interface DirectoryStudent {
   id: string;
-  admission_no: string;
+  usn: string;
   first_name: string;
   last_name: string;
   name: string;
@@ -170,9 +170,36 @@ function query(filters: DirectoryFilters): string {
   return s ? `?${s}` : "";
 }
 
-/** One page of the directory. */
-export function fetchDirectory(filters: DirectoryFilters = {}, signal?: AbortSignal): Promise<DirectoryPage> {
-  return apiFetch<DirectoryPage>(`/api/students${query(filters)}`, { signal });
+interface CacheEntry {
+  expires: number;
+  data: DirectoryPage;
+}
+
+const directoryCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+export function clearDirectoryCache() {
+  directoryCache.clear();
+}
+
+/** One page of the directory, served from in-memory cache if fresh. */
+export async function fetchDirectory(
+  filters: DirectoryFilters = {},
+  signal?: AbortSignal
+): Promise<DirectoryPage> {
+  const url = `/api/students${query(filters)}`;
+  const cached = directoryCache.get(url);
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+
+  const data = await apiFetch<DirectoryPage>(url, { signal });
+  directoryCache.set(url, { expires: Date.now() + CACHE_TTL_MS, data });
+  if (directoryCache.size > 100) {
+    const oldestKey = directoryCache.keys().next().value;
+    if (oldestKey) directoryCache.delete(oldestKey);
+  }
+  return data;
 }
 
 /** The server's filter parameters, including the `export` flag the route reads. */
@@ -214,7 +241,7 @@ export async function downloadDirectoryExport(
 export interface StudentDraft {
   first_name: string;
   last_name: string;
-  admission_no?: string;
+  usn?: string;
   date_of_birth?: string;
   gender?: string;
   email?: string;
@@ -242,14 +269,16 @@ export interface StudentDraft {
   };
 }
 
-export function createStudent(draft: StudentDraft): Promise<{ student: DirectoryStudent }> {
+export async function createStudent(draft: StudentDraft): Promise<{ student: DirectoryStudent }> {
+  clearDirectoryCache();
   return apiFetch("/api/students", { method: "POST", body: JSON.stringify(draft) });
 }
 
-export function updateStudent(
+export async function updateStudent(
   id: string,
   patch: Partial<StudentDraft>
 ): Promise<{ student: DirectoryStudent }> {
+  clearDirectoryCache();
   return apiFetch("/api/students", {
     method: "PATCH",
     body: JSON.stringify({ id, ...patch }),
@@ -257,7 +286,8 @@ export function updateStudent(
 }
 
 /** Archive a pupil. This is a status change, not a delete: records are kept. */
-export function archiveStudent(id: string): Promise<{ student: DirectoryStudent; archived: boolean }> {
+export async function archiveStudent(id: string): Promise<{ student: DirectoryStudent; archived: boolean }> {
+  clearDirectoryCache();
   return apiFetch("/api/students", { method: "DELETE", body: JSON.stringify({ id }) });
 }
 
@@ -267,7 +297,7 @@ export function archiveStudent(id: string): Promise<{ student: DirectoryStudent;
 
 export interface ProfileStudent {
   id: string;
-  admission_no: string | null;
+  usn: string | null;
   first_name: string | null;
   last_name: string | null;
   name: string;
@@ -336,7 +366,6 @@ export interface ProfilePayload {
       active: boolean;
       enrolled_on: string | null;
     }>;
-    assignments: Array<{ id: string; title: string; subject: string | null; due_at: string | null }>;
     subjects: Array<{ id: string; subject: string; code: string | null; teacher: string | null }>;
   };
   attendance: {
@@ -423,24 +452,6 @@ export interface ProfilePayload {
       action_taken: string | null;
       severity: string;
       notified_guardian: boolean;
-    }>;
-  };
-  transport: {
-    enrolled: boolean;
-    allocations: Array<{
-      id: string;
-      active: boolean;
-      route_code: string | null;
-      route_name: string | null;
-      vehicle_no: string | null;
-      driver_name: string | null;
-      driver_phone: string | null;
-      stop_name: string | null;
-      pickup_time: string | null;
-      drop_time: string | null;
-      fare_amount: number | null;
-      is_authorized_pickup: boolean;
-      ended_on: string | null;
     }>;
   };
   activities: Array<{

@@ -8,20 +8,14 @@
  * which swapped that document into the root so `/` served it. Both are gone.
  * The export is served as it sits in the folder.
  *
- * ## Why the page lives under /webflow/ rather than /
+ * ## Where the pages and assets are published
  *
- * The export references its assets relatively - "assets/cdn.prod.website-files.com/..."
- * - and a browser resolves those against the document's base URL. At the root
- * that is /assets/, which is the directory Vite writes the React app's hashed
- * bundles into; those requests miss, every script is aborted, Webflow's
- * interaction library never runs, and the hero heading is left at
- * visibility:hidden.
+ * The export's pages are published at the site root. Its relative asset refs
+ * are rebased to /school-assets/ so they cannot collide with Vite's /assets/
+ * directory, which contains the ERP app's hashed bundles.
  *
- * So vercel.json redirects / to /webflow/ rather than rewriting it. A rewrite
- * would serve the right bytes but leave the base URL at /, and the relative
- * refs would still miss. Only a redirect moves the base URL. The same applies
- * to the other pages: their links to "about-us.html" and "programs/play-based-learning.html"
- * resolve against /webflow/, which is where they are published.
+ * The page links stay relative so they resolve to the root-level export pages.
+ * Video files are requested only as their sections approach the viewport.
  *
  * ## The changes made to each page
  *
@@ -42,13 +36,28 @@
  * 4. The rebrand. "Joyloo" becomes "Global Kids" throughout the visible
  *    copy, and the footer's "Powered by Webflow" credit is dropped.
  *
- * 5. The logo. The export's wordmark draws "Joyloo" as outlined vector paths -
- *    the letters are <path> data, never text - so it survives every text
- *    replacement and is invisible to grep. The two logo images are repointed at
- *    a "Global Kids" lockup built from the template's own roundel and brand
- *    orange, in the same two lockup geometries. See emitLogoAssets.
+ * 5. The two logo images are replaced with the school's blue-and-green emblem.
+ *    Its SVG wrapper adds the dark-blue circular border and reuses the existing
+ *    PNG artwork.
  *
  * 6. The "Programs" item is dropped from the header menu.
+ *
+ * 7. A "Login" button is added beside the header's Contact Us button,
+ *    pointing at the app's /login route (vercel.json rewrites it to the React
+ *    shell). It reuses the template's own button markup and border variant so
+ *    it inherits the site's styling rather than shipping its own.
+ *
+ * 8. The whitespace in one mirrored Webflow runtime chunk, which turned its
+ *    `?.` and `??` into syntax errors. Left alone, the chunk is rejected, the
+ *    IX2 animation engine never boots, and every element that waits to be
+ *    revealed from `style="opacity:0"` - the hero background, the widget
+ *    cards, the programs slider - stays invisible with no error to explain it.
+ *
+ * 9. The stylesheet link and the one runtime chunk the operator repair
+ *    rewrites, repointed from the vendor's CDN at the mirrored copies in
+ *    assets/ - along with the subresource integrity hashes, which describe the
+ *    vendor's files rather than the edited ones and so get the resource
+ *    discarded. Thirty-one of the thirty-two pages were affected.
  *
  * All of this is applied while serving, so webflow-site/ stays exactly as it
  * is.
@@ -57,11 +66,13 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Script } from "node:vm";
+import { addMobileNavActions, elementSpan, MOBILE_NAV_STYLES } from "./mobile-navigation.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = resolve(ROOT, "dist/public");
 const EXPORT = resolve(ROOT, "webflow-site");
-const MOUNT = resolve(OUT, "webflow");
+const ASSET_MOUNT = resolve(OUT, "school-assets");
 
 if (!existsSync(OUT)) {
   console.error(`No build output at ${OUT}. Run vite build first.`);
@@ -101,36 +112,6 @@ if (existsSync(INDEX)) {
 /* ------------------------------------------------------------------ */
 /* Balanced element scanning                                          */
 /* ------------------------------------------------------------------ */
-
-/**
- * Find where the element starting at `start` ends, counting nesting.
- *
- * A regex cannot do this: the nav items being removed contain <ul> and <li>
- * inside them, so the first "</li>" belongs to a child, not to the element
- * being cut, and a non-greedy match would leave the tail behind.
- */
-function elementSpan(html, start, tag) {
-  const open = new RegExp(`<${tag}\\b`, "gi");
-  const close = new RegExp(`</${tag}>`, "gi");
-  let depth = 0;
-  let cursor = start;
-  while (cursor < html.length) {
-    open.lastIndex = cursor;
-    close.lastIndex = cursor;
-    const nextOpen = open.exec(html);
-    const nextClose = close.exec(html);
-    if (!nextClose) return null;
-    if (nextOpen && nextOpen.index < nextClose.index) {
-      depth += 1;
-      cursor = nextOpen.index + nextOpen[0].length;
-    } else {
-      depth -= 1;
-      cursor = nextClose.index + nextClose[0].length;
-      if (depth === 0) return { start, end: cursor };
-    }
-  }
-  return null;
-}
 
 /**
  * Remove every element of `tag` whose text contains `marker`.
@@ -247,9 +228,67 @@ function rebrand(html) {
   return {
     html: html
       .replace(/ Powered by\s*<a\b[^>]*>\s*Webflow\s*<\/a>/g, "")
-      .replace(/Joyloo/g, "Global Kids"),
+      .replace(/Joyloo/g, "Global Kids")
+      .replace(/<title>[\s\S]*?<\/title>/i, "<title>Global Kids</title>"),
     credits: credits.length,
   };
+}
+
+function replaceBrandIcons(html) {
+  return html.replace(
+    /<link\b(?=[^>]*\brel=["'](?:shortcut icon|icon|apple-touch-icon)["'])[^>]*>/gi,
+    (tag) =>
+      /\brel=["']apple-touch-icon["']/i.test(tag)
+        ? '<link rel="apple-touch-icon" href="/logo-192.png">'
+        : '<link rel="icon" type="image/svg+xml" href="/global-kids-logo.svg">'
+  );
+}
+
+function rebaseExportAssets(html) {
+  return html.replace(/(["'(=\s])(?:\.\.\/)*assets\//g, "$1/school-assets/");
+}
+
+/*
+ * Serve the runtime the build edits from the local mirror instead of the
+ * vendor's CDN.
+ *
+ * Two files matter, and they are the two the build changes: the stylesheet,
+ * which carries the school's own rules, and the one runtime chunk whose
+ * operators repairRuntimeOperators rewrites. The export's pages point both at
+ * the vendor, so the edits never reach them - and the mirrored copies under
+ * assets/ ship without ever being requested. The other chunks are left alone:
+ * several of them are not in the mirror at all, so repointing those would turn
+ * working requests into 404s.
+ *
+ * Webflow also stamps a subresource integrity hash on both. That hash covers
+ * the vendor's copy, which is not the file being served once the local copy is
+ * edited, so a browser that checks it discards the resource outright. The
+ * effect is a page rendered with no styling at all and nothing in the console
+ * to say why. The attributes are dropped with the rewrite, on the rewritten tag
+ * only - the vendor chunks that are still being fetched need theirs.
+ */
+const VENDOR_BASE = "https://cdn.prod.website-files.com/69936edfd4a65317864b054d/";
+const LOCAL_BASE = "assets/cdn.prod.website-files.com/69936edfd4a65317864b054d/";
+const LOCALISED_VENDOR_FILES = [
+  "css/joyloo.webflow.shared.decbc9d32.css",
+  "js/webflow.schunk.f089d6e689fa5bdf.js",
+];
+
+function localiseVendorRuntime(html) {
+  const escaped = VENDOR_BASE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const targets = LOCALISED_VENDOR_FILES.map((file) => file.replace(/\./g, "\\."));
+  const tag = new RegExp(
+    `<(link|script)\\b[^>]*\\b(?:href|src)="${escaped}(${targets.join("|")})"[^>]*>`,
+    "g"
+  );
+
+  return html.replace(tag, (whole, _name, file) => {
+    const local = whole
+      .replace(VENDOR_BASE + file, LOCAL_BASE + file)
+      .replace(/\s+integrity="[^"]*"/g, "")
+      .replace(/\s+crossorigin(?:="[^"]*")?/g, "");
+    return local;
+  });
 }
 
 /**
@@ -262,8 +301,97 @@ function rebrand(html) {
  * creates for itself at runtime.
  */
 function suppressBadge(html) {
-  const style = "<style>a.w-webflow-badge{display:none!important}</style>";
+  const style =
+    "<style>a.w-webflow-badge{display:none!important}" +
+    ".navbar-brand-header{width:auto!important;height:36px!important;display:flex;align-items:center;justify-content:center}" +
+    ".gks-header-lockup{display:flex;align-items:center;gap:8px}" +
+    ".navbar-brand-header-logo{width:36px!important;height:36px!important;object-fit:contain}" +
+    ".gks-wordmark{color:#000;font-family:inherit;font-size:18px;font-weight:700;line-height:1;white-space:nowrap}" +
+    ".gks-header-lockup .gks-wordmark{font-size:26px}" +
+    ".gks-footer-brand{display:flex;align-items:center;gap:8px}" +
+    ".gks-footer-brand .gks-wordmark{font-size:26px}" +
+    ".footer-brand-logo{width:36px;height:36px;object-fit:contain;flex:none}" +
+    ".gks-footer-ticker-lockup{height:143px;display:flex;align-items:center;gap:18px;flex:none}" +
+    ".gks-footer-ticker-emblem{width:104px;height:104px;object-fit:contain;flex:none}" +
+    ".gks-footer-ticker-wordmark{color:#000;font-family:inherit;font-size:clamp(48px,6.67vw,96px);font-weight:700;line-height:1;white-space:nowrap}" +
+    MOBILE_NAV_STYLES +
+    "html.w-mod-js:not(.w-mod-ix3) .hero-section.hero-section *,html.w-mod-js:not(.w-mod-ix3) .navbar.navbar .navigation-button *{visibility:visible!important;opacity:1!important}" +
+    "@media(max-width:767px){.gks-footer-ticker-emblem{width:72px;height:72px}}</style>";
   return html.includes("</head>") ? html.replace("</head>", style + "</head>") : style + html;
+}
+
+function deferExportVideos(html) {
+  let deferred = 0;
+  const withDeferredSources = html.replace(/<video\b[^>]*>[\s\S]*?<\/video>/gi, (video) => {
+    if (!/<source\b[^>]*\bsrc=/i.test(video)) return video;
+
+    deferred += 1;
+    return video
+      .replace(/\s+autoplay(?:=(?:"[^"]*"|'[^']*'|[^\s>]+))?/i, "")
+      .replace(/<video\b/i, '<video preload="none" data-gks-lazy-video')
+      .replace(/<source\b[^>]*>/gi, (source) =>
+        source.replace(/\s+src=(["'])(.*?)\1/i, ' data-gks-src="$2"')
+      );
+  });
+
+  if (deferred === 0) return { html: withDeferredSources, deferred };
+
+  const loader = `<script>
+    (() => {
+      const videos = document.querySelectorAll("video[data-gks-lazy-video]");
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const load = (video) => {
+        if (video.dataset.gksLoaded) return;
+        video.querySelectorAll("source[data-gks-src]").forEach((source) => {
+          source.src = source.dataset.gksSrc;
+          delete source.dataset.gksSrc;
+        });
+        video.dataset.gksLoaded = "true";
+        video.load();
+      };
+      const play = (video) => {
+        load(video);
+        video.play().catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          console.warn("School video playback failed.", error);
+        });
+      };
+      if (!("IntersectionObserver" in window)) {
+        videos.forEach(play);
+        return;
+      }
+      const visible = new WeakSet();
+      const pending = new WeakMap();
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(({ isIntersecting, target }) => {
+          if (isIntersecting) {
+            visible.add(target);
+            if (!pending.has(target)) {
+              const timer = window.setTimeout(() => {
+                pending.delete(target);
+                if (visible.has(target)) play(target);
+              }, 350);
+              pending.set(target, timer);
+            }
+          } else {
+            visible.delete(target);
+            window.clearTimeout(pending.get(target));
+            pending.delete(target);
+            target.pause();
+          }
+        });
+      }, { threshold: 0.15 });
+      videos.forEach((video) => observer.observe(video));
+    })();
+  </script>`;
+
+  if (!withDeferredSources.includes("</body>")) {
+    throw new Error("Could not add the lazy video loader: document has no closing body tag.");
+  }
+  return {
+    html: withDeferredSources.replace("</body>", `${loader}</body>`),
+    deferred,
+  };
 }
 
 /**
@@ -293,21 +421,75 @@ function stripNavLink(html, label) {
 }
 
 /**
- * Replace the template's logo with the school's own.
+ * Add a "Login" button beside the header's Contact Us button.
  *
- * The export's logo is badge-free but its wordmark is drawn as outlined vector
- * paths - the letters "Joyloo" exist as <path> data, never as text - so no
- * amount of find-and-replace in the HTML touches it. The two <img> sources are
- * repointed at the lockups emitLogoAssets writes.
+ * The header's .navigation-button is a flex row built to hold more than one
+ * child - the mobile dropdown was a sibling of the Contact button - so a second
+ * button sits beside it with the row's own gap, no new CSS.
+ *
+ * The anchor is spliced in directly after the Contact button rather than at the
+ * closing tag of the wrapper, so it cannot land next to the mobile menu button
+ * if the wrapper's contents change. The href is root-absolute: the export's own
+ * links are relative and the pages sit at two depths, so a relative "login"
+ * would resolve to the wrong place on programs/* and blog/* pages. vercel.json
+ * rewrites /login to the app shell.
+ *
+ * The "border" variant is reused so the new button reads as the secondary of
+ * the pair; the class list is copied from the template's own bordered button
+ * (the hero's "View Programs") rather than invented.
+ */
+const LOGIN_BUTTON =
+  '<a href="/login" data-wf--button--variant="border" class="button w-variant-3f31f549-f502-686e-7aaa-054807767326 w-inline-block">' +
+  '<div class="button-text-wrapper"><div class="button-text">Login</div>' +
+  '<div class="button-text">Login</div></div><div class="button-bg"></div></a>';
+
+function addLoginButton(html) {
+  const wrapper = /<div class="navigation-button">/.exec(html);
+  if (!wrapper) return { html, added: false };
+
+  const outer = elementSpan(html, wrapper.index, "div");
+  if (!outer) return { html, added: false };
+
+  const inner = html.slice(outer.start, outer.end);
+  // The export writes the Contact button's href relative to the page (a bare
+  // "contact-enorrlment.html" at the root, "../contact-enorrlment.html" under
+  // programs/ and blog/), so the button is found by its variant attribute
+  // rather than by the exact href. The variant is unique inside the wrapper.
+  const contact = /<a\b[^>]*data-wf--button--variant="secondary-sm"[^>]*>/.exec(inner);
+  if (!contact) return { html, added: false };
+
+  const span = elementSpan(inner, contact.index, "a");
+  if (!span) return { html, added: false };
+
+  const patched = inner.slice(0, span.end) + LOGIN_BUTTON + inner.slice(span.end);
+  return { html: html.slice(0, outer.start) + patched + html.slice(outer.end), added: true };
+}
+
+/**
+ * Replace the template's logo with the school's blue-and-green emblem.
+ *
+ * The export uses two different source files for its navbar and footer logos.
+ * Both are redirected to the shared SVG wrapper around the school's existing
+ * artwork.
  */
 function swapLogo(html) {
-  // The whole src, not just the filename. The export's hrefs are
-  // "assets/<host>/<id>_main-logo.svg" (and, in the footer, the same file from
-  // cdn.prod.website-files.com), so replacing only the trailing filename would
-  // leave a stale path in front of ours.
+  // Replace both local and absolute template URLs without leaving a stale
+  // prefix before the shared school logo path.
   return html
     .replace(/(?:https?:\/\/[^'"\s]*\/)?(?:assets\/[^"'\s]*\/)?699a5a61a516cf380bf13bc4_main-logo\.svg/g, LOGO.main)
-    .replace(/(?:https?:\/\/[^'"\s]*\/)?(?:assets\/[^"'\s]*\/)?699a704f228b19546a29c7d9_logo\.svg/g, LOGO.large);
+    .replace(/(?:https?:\/\/[^'"\s]*\/)?(?:assets\/[^"'\s]*\/)?699a704f228b19546a29c7d9_logo\.svg/g, LOGO.large)
+    .replace(
+      /(<a\b[^>]*class="navbar-brand-header[^"]*"[^>]*>)(<img\b[^>]*class="navbar-brand-header-logo"[^>]*>)/,
+      '$1<span class="gks-header-lockup">$2<span class="gks-wordmark">Global Kids</span></span>'
+    )
+    .replace(
+      /(<div class="footer-left-top-block">)\s*<img\b[^>]*src="\/global-kids-logo\.svg"[^>]*>/,
+      '$1<div class="gks-footer-brand"><img loading="lazy" src="/global-kids-logo.svg" class="footer-brand-logo" alt=""><span class="gks-wordmark">Global Kids</span></div>'
+    )
+    .replace(
+      /<img\b(?=[^>]*class="footer-ticker-logo")(?=[^>]*src="\/global-kids-logo\.svg")[^>]*>/g,
+      '<div class="gks-footer-ticker-lockup"><img src="/global-kids-logo.svg" class="gks-footer-ticker-emblem" alt=""><span class="gks-footer-ticker-wordmark">Global Kids</span></div>'
+    );
 }
 
 /* ------------------------------------------------------------------ */
@@ -392,10 +574,9 @@ const LOCKUPS = {
 
 /** Where the logo files are served from; root-absolute because the export's own
  *  asset refs are relative and the pages sit at two different depths. */
-const LOGO_BASE = "/webflow/";
 const LOGO = {
-  main: `${LOGO_BASE}${LOCKUPS.main.name}`,
-  large: `${LOGO_BASE}${LOCKUPS.large.name}`,
+  main: "/global-kids-logo.svg",
+  large: "/global-kids-logo.svg",
 };
 
 /** One lockup as a standalone SVG document, at the given pixel height. */
@@ -446,6 +627,64 @@ function logoSvg(lockup, height) {
 }
 
 /**
+ * Undo the whitespace the scraper injected into Webflow's operators.
+ *
+ * One of the mirrored runtime chunks has every `?.` written as `? .` and every
+ * `??` as `? ?`. Both are syntax errors, so the browser rejects the whole chunk
+ * and Webflow's IX2 engine never boots. Nothing throws visibly: the engine is
+ * what reveals the elements carrying `style="opacity:0"`, so instead the hero
+ * background, the widget cards and the programs slider simply stay invisible
+ * forever, with no error to trace it back to.
+ *
+ * Only the two operators are restored, and only where they cannot be something
+ * else: a `?.` is only rewritten when the character after the dot is not a
+ * digit, because `cond ? .5 : x` is a ternary returning a decimal and needs
+ * that space to stay a ternary.
+ *
+ * The export is not in git, so this has to happen at build time - a fresh
+ * checkout arrives mangled again.
+ *
+ * @returns {number} how many chunks were repaired.
+ */
+function repairRuntimeOperators() {
+  const optionalChain = /\?\s+\.(?![0-9])/g;
+  const nullishCoalesce = /\?\s+\?/g;
+  let repaired = 0;
+
+  for (const file of walkJs(ASSET_MOUNT)) {
+    const source = readFileSync(file, "utf8");
+    const fixed = source.replace(optionalChain, "?.").replace(nullishCoalesce, "??");
+    if (fixed === source) continue;
+
+    // The whole point is that the file must parse, so check it rather than
+    // assume: a rewrite that still left the chunk unreadable would trade a
+    // visible bug for an invisible one.
+    try {
+      new Script(fixed, { filename: file });
+    } catch (error) {
+      console.error(`${file}: still does not parse after the operator repair: ${error.message}`);
+      process.exit(1);
+    }
+
+    writeFileSync(file, fixed, "utf8");
+    repaired += 1;
+  }
+
+  return repaired;
+}
+
+/** Every .js file under `dir`, depth first. */
+function walkJs(dir) {
+  const found = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...walkJs(full));
+    else if (entry.name.endsWith(".js")) found.push(full);
+  }
+  return found;
+}
+
+/**
  * Write both lockups next to the pages. Files rather than data: URIs: the
  * outlines are ~5 KB, and inlining them would add that to every one of the 31
  * pages twice over. buildLogoGuards checks they landed.
@@ -459,7 +698,7 @@ function emitLogoAssets() {
       console.error(`The ${key} lockup did not render: ${svg.slice(0, 200)}`);
       process.exit(1);
     }
-    writeFileSync(join(MOUNT, lockup.name), svg, "utf8");
+    writeFileSync(join(ASSET_MOUNT, lockup.name), svg, "utf8");
   }
 }
 
@@ -467,10 +706,10 @@ function emitLogoAssets() {
 /* Publish                                                            */
 /* ------------------------------------------------------------------ */
 
-rmSync(MOUNT, { recursive: true, force: true });
-cpSync(resolve(EXPORT, "assets"), resolve(MOUNT, "assets"), { recursive: true });
-emitLogoAssets();
-
+rmSync(ASSET_MOUNT, { recursive: true, force: true });
+mkdirSync(ASSET_MOUNT, { recursive: true });
+cpSync(resolve(EXPORT, "assets"), ASSET_MOUNT, { recursive: true });
+const repairedChunks = repairRuntimeOperators();
 const templateButton = /<a\b[^>]*class="template-button[^"]*"[\s\S]*?<\/a>/g;
 
 /** Every page in the export, as an export-relative path. */
@@ -512,11 +751,17 @@ for (const page of pages) {
   const nav = stripHeaderDropdowns(stripped.html);
   totalDropdowns += nav.removed;
   const noPrograms = stripNavLink(nav.html, "Programs");
-  const rebranded = rebrand(noPrograms.html);
+  const withLogin = addLoginButton(noPrograms.html);
+  const withMobileNavActions = addMobileNavActions(withLogin.html);
+  const rebranded = rebrand(withMobileNavActions);
   totalCredits += rebranded.credits;
-  const served = suppressBadge(swapLogo(rebranded.html));
+  const withBrandIcons = replaceBrandIcons(rebranded.html);
+  const withDeferredVideos = deferExportVideos(withBrandIcons);
+  const served = suppressBadge(
+    rebaseExportAssets(localiseVendorRuntime(swapLogo(withDeferredVideos.html)))
+  );
 
-  const target = join(MOUNT, page);
+  const target = join(OUT, page);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, served, "utf8");
 
@@ -558,6 +803,17 @@ for (const page of pages) {
     console.error(`${page}: "Joyloo" survived the rebrand.`);
     process.exit(1);
   }
+  if (!/<title>Global Kids<\/title>/i.test(served)) {
+    console.error(`${page}: the page title is not "Global Kids".`);
+    process.exit(1);
+  }
+  if (
+    (source.match(/<video\b[^>]*\bsrc=|<source\b[^>]*\bsrc=/gi) || []).length !== 0 &&
+    served.includes("data-gks-lazy-video") === false
+  ) {
+    console.error(`${page}: video sources were not deferred.`);
+    process.exit(1);
+  }
   if (/Powered by/i.test(served)) {
     console.error(`${page}: a "Powered by Webflow" credit survived.`);
     process.exit(1);
@@ -567,6 +823,23 @@ for (const page of pages) {
   const contactBtn = 'class="button-text">Contact Us</div>';
   if (source.includes(contactBtn) && !nav.html.includes(contactBtn)) {
     console.error(`${page}: the header Contact Us button was removed.`);
+    process.exit(1);
+  }
+  // The Login button must be present on every page, and it must sit next to the
+  // Contact button rather than replacing it: a splice that ate the Contact
+  // anchor would otherwise still satisfy the login check.
+  if (!served.includes('class="button-text">Login</div>')) {
+    console.error(`${page}: the header Login button was not added.`);
+    process.exit(1);
+  }
+  if ((served.match(/class="mobile-nav-action"/g) || []).length !== 2) {
+    console.error(`${page}: the mobile navigation must include Contact Us and Login.`);
+    process.exit(1);
+  }
+  const loginAfterContact =
+    /<a href="[^"]*contact-enorrlment\.html"[^>]*>.*?class="button-text">Contact Us<\/div>.*?<\/a>\s*<a href="\/login"/s;
+  if (!loginAfterContact.test(served)) {
+    console.error(`${page}: the Login button is not beside the Contact Us button.`);
     process.exit(1);
   }
 
@@ -604,9 +877,10 @@ for (const page of pages) {
   }
 }
 
-console.log(`Published ${pages.length} pages to /webflow/`);
+console.log(`Published ${pages.length} pages at the site root`);
 console.log(`  removed ${totalButtons} template buttons, ${totalDropdowns} header dropdowns, ${totalCredits} vendor credits`);
 console.log("  rebranded Joyloo -> Global Kids, swapped the logo, removed the Programs nav item")
+console.log("  added the header Login button")
+console.log(`  repaired the operators in ${repairedChunks} Webflow runtime chunk(s)`)
 
-console.log("  /            -> /webflow/          webflow-site export");
 console.log("  /login       app.html              React app shell");

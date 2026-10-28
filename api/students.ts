@@ -48,6 +48,7 @@ import {
   canViewFees,
   exportColumnsForRole,
 } from "../shared/student-access.js";
+import { provisionPortalAccount } from "../shared/portal-server.js";
 
 /** Hard ceiling. A caller asking for 10,000 rows gets this and no more. */
 const MAX_PAGE_SIZE = 200;
@@ -91,7 +92,10 @@ function parseFilters(url: URL): Filter {
     sort: (p.get("sort") ?? "name").trim().slice(0, 20),
     direction: p.get("direction") === "desc" ? "desc" : "asc",
     page: Math.max(1, int(p.get("page"), 1)),
-    pageSize: Math.min(MAX_PAGE_SIZE, Math.max(1, int(p.get("pageSize"), DEFAULT_PAGE_SIZE))),
+    pageSize: Math.min(
+      MAX_PAGE_SIZE,
+      Math.max(1, int(p.get("pageSize"), DEFAULT_PAGE_SIZE))
+    ),
   };
 }
 
@@ -104,7 +108,7 @@ function parseFilters(url: URL): Filter {
  */
 const SORT_COLUMNS: Record<string, string> = {
   name: "last_name",
-  admission_no: "admission_no",
+  usn: "usn",
   grade: "grade",
   section: "section",
   roll_no: "roll_no",
@@ -116,6 +120,17 @@ const SORT_COLUMNS: Record<string, string> = {
 
 /** Only these statuses may be written, matching the table's own CHECK. */
 const STATUSES = new Set(["active", "inactive", "graduated", "withdrawn"]);
+
+/**
+ * The shape of a USN the school hands out: its initials and four digits.
+ *
+ * `GGS1234`. It replaces the old `adm2627nnnn` form, which carried the
+ * academic year and grew a digit longer than a child could comfortably copy.
+ * The first number is 1001 rather than 0001 so a printed USN never looks like
+ * a padded row index.
+ */
+const USN_PREFIX = "GGS";
+const USN_FIRST_NUMBER = 1001;
 
 /**
  * Normalise a value written by a form.
@@ -130,7 +145,27 @@ const STATUSES = new Set(["active", "inactive", "graduated", "withdrawn"]);
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
 
 function clean(value: unknown, max = 120): string {
-  return String(value ?? "").replace(CONTROL_CHARS, "").trim().slice(0, max);
+  return String(value ?? "")
+    .replace(CONTROL_CHARS, "")
+    .trim()
+    .slice(0, max);
+}
+
+/**
+ * The USN as it is stored: compact and upper-case, the way it is printed.
+ *
+ * The school may write it with slashes or spaces, but those are presentation.
+ * The identifier itself is the letters and digits, so `GGS1001` and `ggs1001`
+ * are the same pupil and cannot both exist. Upper case is the stored form
+ * because the number is read off a printed slip, and a pupil should see on
+ * their profile exactly the string they were handed.
+ */
+function normaliseUsn(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 40);
 }
 
 function isIsoDate(value: string): boolean {
@@ -217,7 +252,9 @@ async function relationshipTo(
 
   // Teaching one of their classes.
   const staff = await readJson<Json[]>(
-    await rest(`staff?select=id&profile_id=eq.${caller.id}&organisation_id=eq.${orgId}`)
+    await rest(
+      `staff?select=id&profile_id=eq.${caller.id}&organisation_id=eq.${orgId}`
+    )
   ).catch(() => [] as Json[]);
   const staffId = staff[0]?.id ? String(staff[0].id) : "";
 
@@ -225,20 +262,22 @@ async function relationshipTo(
     const classrooms = await readJson<Json[]>(
       await rest(
         `classrooms?select=id&organisation_id=eq.${orgId}` +
-          `&(class_teacher_id=eq.${staffId},id=in.(${(
-            await readJson<Json[]>(
-              await rest(
-                `subject_teachers?select=classroom_id&staff_id=eq.${staffId}&organisation_id=eq.${orgId}`
-              )
-            ).catch(() => [] as Json[])
-          )
-            .map((r) => String(r.classroom_id))
-            .filter(Boolean)
-            .join(",") || "00000000-0000-0000-0000-000000000000"}))`
+          `&(class_teacher_id=eq.${staffId},id=in.(${
+            (
+              await readJson<Json[]>(
+                await rest(
+                  `subject_teachers?select=classroom_id&staff_id=eq.${staffId}&organisation_id=eq.${orgId}`
+                )
+              ).catch(() => [] as Json[])
+            )
+              .map(r => String(r.classroom_id))
+              .filter(Boolean)
+              .join(",") || "00000000-0000-0000-0000-000000000000"
+          }))`
       )
     ).catch(() => [] as Json[]);
 
-    const classroomIds = classrooms.map((c) => String(c.id)).filter(Boolean);
+    const classroomIds = classrooms.map(c => String(c.id)).filter(Boolean);
     if (classroomIds.length) {
       const enrolled = await readJson<Json[]>(
         await rest(
@@ -281,74 +320,95 @@ async function loadDirectory(
   orgId: string,
   filter: Filter,
   maySeeFees: boolean,
-  maySeeContacts: boolean
-): Promise<{ rows: Json[]; total: number; scanned: number; truncated: boolean }> {
+  maySeeContacts: boolean,
+  isExport = false
+): Promise<{
+  rows: Json[];
+  total: number;
+  scanned: number;
+  truncated: boolean;
+}> {
   const params = new URLSearchParams();
-  params.set("select", "id,admission_no,first_name,last_name,date_of_birth,gender,phone,email," +
-    "guardian_name,guardian_phone,guardian_email,photo_url,status,joined_on,address," +
-    "blood_group,nationality,mother_tongue,emergency_contact_name,emergency_contact_phone");
+  params.set(
+    "select",
+    "id,usn,first_name,last_name,date_of_birth,gender,phone,email," +
+      "guardian_name,guardian_phone,guardian_email,photo_url,status,joined_on,address," +
+      "blood_group,nationality,mother_tongue,emergency_contact_name,emergency_contact_phone"
+  );
   params.set("organisation_id", `eq.${orgId}`);
 
   if (filter.status && STATUSES.has(filter.status)) {
     params.append("status", `eq.${filter.status}`);
   }
 
-  // Search across name, admission number and the pupil's own id. PostgREST
-  // `or` takes the whole expression in one parameter; each term is quoted so a
-  // comma or parenthesis in the search box cannot restructure the query.
+  // Search across name, USN and the pupil's own id. PostgREST
+  // `or` takes the whole expression in one parameter. Commas, parentheses,
+  // quotes and wildcards are removed so the term cannot restructure the query
+  // or turn into a match-everything pattern.
   if (filter.search) {
-    const term = filter.search.replace(/[%,()]/g, " ").trim();
+    const term = filter.search.replace(/[%,()*"_]/g, " ").trim();
     if (term) {
-      const safe = `"${term}"`;
-      params.set(
-        "or",
-        `(first_name.ilike.*${safe}*,last_name.ilike.*${safe}*,admission_no.ilike.*${safe}*,id.eq.${term})`
-      );
+      const fields = [
+        `first_name.ilike.*${term}*`,
+        `last_name.ilike.*${term}*`,
+        `usn.ilike.*${term}*`,
+      ];
+      // `id` is a uuid. Comparing it to a name or a USN makes Postgres raise
+      // 22P02 before it can ignore the branch, so only add the id branch when
+      // the term could actually be an id.
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(term)) {
+        fields.push(`id.eq.${term}`);
+      }
+      params.set("or", `(${fields.join(",")})`);
     }
   }
 
-  if (filter.admissionFrom) params.append("joined_on", `gte.${filter.admissionFrom}`);
-  if (filter.admissionTo) params.append("joined_on", `lte.${filter.admissionTo}`);
+  if (filter.admissionFrom)
+    params.append("joined_on", `gte.${filter.admissionFrom}`);
+  if (filter.admissionTo)
+    params.append("joined_on", `lte.${filter.admissionTo}`);
 
-  // One extra row so the caller can tell whether a next page exists without a
-  // second count query.
-  const countRes = await rest(
-    `students?select=id&${params.toString()}&limit=1`,
-    { headers: { Prefer: "count=exact", Range: "0-0" } }
-  );
-  const total = Number(countRes.headers.get("content-range")?.split("/")[1] ?? 0) || 0;
-
-  /*
-   * The full matching set is fetched, capped at a ceiling well above one page,
-   * then the class/roll filters and the sort are applied here.
-   *
-   * Grade and section live on `classrooms`, joined through `enrollments`, so
-   * they cannot be pushed into the same PostgREST query. Capping rather than
-   * paginating in the database is a deliberate trade: it keeps this to two round
-   * trips and stays exact for a school of any plausible size, and the ceiling
-   * is reported in the response so a school that outgrows it finds out rather
-   * than silently seeing a truncated list.
-   */
   const SCAN_CAP = 5000;
-  const scanRes = await rest(
-    `students?${params.toString()}&order=last_name.asc,first_name.asc&limit=${SCAN_CAP}`
-  );
+
+  // Run the initial queries concurrently rather than awaiting them one after another:
+  // count probe, student scan, current academic year and published examinations.
+  const [countRes, scanRes, yearRes, examRes] = await Promise.all([
+    rest(
+      `students?select=id&${params.toString()}&limit=1`,
+      { headers: { Prefer: "count=exact", Range: "0-0" } }
+    ),
+    rest(
+      `students?${params.toString()}&order=last_name.asc,first_name.asc&limit=${SCAN_CAP}`
+    ),
+    rest(
+      `academic_years?select=id,name&organisation_id=eq.${orgId}&is_current=eq.true&limit=1`
+    ),
+    rest(
+      `examinations?select=id&organisation_id=eq.${orgId}&published=eq.true&limit=200`
+    ),
+  ]);
+
+  const total =
+    Number(countRes.headers.get("content-range")?.split("/")[1] ?? 0) || 0;
+
   let students = await readJson<Json[]>(scanRes);
   const truncated = students.length >= SCAN_CAP;
 
-  const studentIds = students.map((s) => String(s.id));
+  const studentIds = students.map(s => String(s.id));
   if (!studentIds.length) return { rows: [], total, scanned: 0, truncated };
 
   const idList = studentIds.join(",");
 
-  // Current enrolment: one active row per pupil per year, and the current year
-  // is not assumed to be the newest one — an administrator may be editing a
-  // closed year.
-  const yearRes = await rest(
-    `academic_years?select=id,name&organisation_id=eq.${orgId}&is_current=eq.true&limit=1`
-  );
-  const years = await readJson<Json[]>(yearRes);
+  const years = await readJson<Json[]>(yearRes).catch(() => [] as Json[]);
   const currentYearId = years[0]?.id ? String(years[0].id) : "";
+
+  const examIds = Array.from(
+    new Set(
+      (
+        await readJson<Json[]>(examRes).catch(() => [] as Json[])
+      ).map(e => String(e.id))
+    )
+  );
 
   const enrolments = await readJson<Json[]>(
     await rest(
@@ -358,8 +418,12 @@ async function loadDirectory(
   ).catch(() => [] as Json[]);
 
   const yearEnrolments = currentYearId
-    ? enrolments.filter((e) => String(e.academic_year_id ?? "") === currentYearId && e.active === true)
-    : enrolments.filter((e) => e.active === true);
+    ? enrolments.filter(
+        e =>
+          String(e.academic_year_id ?? "") === currentYearId &&
+          e.active === true
+      )
+    : enrolments.filter(e => e.active === true);
 
   // A pupil with no current-year enrolment is still listed, under "Unassigned".
   const enrolmentByStudent = new Map<string, Json>();
@@ -369,7 +433,9 @@ async function loadDirectory(
   }
 
   const classroomIds = Array.from(
-    new Set(yearEnrolments.map((e) => String(e.classroom_id ?? "")).filter(Boolean))
+    new Set(
+      yearEnrolments.map(e => String(e.classroom_id ?? "")).filter(Boolean)
+    )
   );
 
   const classrooms = classroomIds.length
@@ -380,17 +446,170 @@ async function loadDirectory(
         )
       ).catch(() => [] as Json[])
     : [];
-  const classroomById = new Map(classrooms.map((c) => [String(c.id), c]));
+  const classroomById = new Map(classrooms.map(c => [String(c.id), c]));
 
-  // Attendance percentage. Restricted to the pupils on this page rather than the
-  // whole school: the register is by far the largest table here.
-  const attendance = await readJson<Json[]>(
-    await rest(
-      `attendance?select=student_id,status&organisation_id=eq.${orgId}` +
-        `&student_id=in.(${idList})&limit=20000`
-    )
-  ).catch(() => [] as Json[]);
+  // Base rows with identity and classroom placements.
+  const baseRows: Json[] = students.map(s => {
+    const id = String(s.id);
+    const enrolment = enrolmentByStudent.get(id);
+    const room = enrolment
+      ? classroomById.get(String(enrolment.classroom_id ?? ""))
+      : undefined;
 
+    return {
+      id,
+      usn: String(s.usn ?? ""),
+      first_name: String(s.first_name ?? ""),
+      last_name: String(s.last_name ?? ""),
+      name: `${String(s.first_name ?? "")} ${String(s.last_name ?? "")}`.trim(),
+      date_of_birth: s.date_of_birth ?? null,
+      gender: s.gender ?? null,
+      status: String(s.status ?? "active"),
+      photo_url: s.photo_url ?? null,
+      joined_on: s.joined_on ?? null,
+      grade: room ? String(room.grade ?? "") : "Unassigned",
+      section: room ? String(room.section ?? "") : "",
+      roll_no: enrolment ? (enrolment.roll_no ?? null) : null,
+      enrolment_status: enrolment ? "active" : "not_enrolled",
+      academic_year_id: currentYearId,
+      attendance_percentage: null,
+      attendance_records: 0,
+      academic_average: null,
+      scored_papers: 0,
+      guardian_name: s.guardian_name ?? null,
+      fees: maySeeFees ? "Paid" : null,
+    };
+  });
+
+  // Class and section filters, applied after the join because those columns
+  // come from classrooms.
+  let filteredRows = baseRows;
+  if (filter.grade) {
+    filteredRows = filteredRows.filter(r => String(r.grade) === filter.grade);
+  }
+  if (filter.section) {
+    filteredRows = filteredRows.filter(
+      r => String(r.section) === filter.section
+    );
+  }
+
+  // Attendance and academic average stats are only needed across the entire scanned
+  // dataset if sorting by those computed fields, or if exporting the entire roll call.
+  // For standard browsing and searching (sorted by name, usn, class, etc.), we can
+  // paginate first and fetch statistics for ONLY the page's ~20 pupils. This turns an
+  // 8-second query scanning 50,000 joined records into a 200ms sub-second response.
+  const needsAllStats =
+    isExport ||
+    filter.sort === "attendance" ||
+    filter.sort === "average";
+
+  if (needsAllStats) {
+    // Fetch full stats in parallel
+    const [attendance, results, invoices] = await Promise.all([
+      readJson<Json[]>(
+        await rest(
+          `attendance?select=student_id,status&organisation_id=eq.${orgId}` +
+            `&student_id=in.(${idList})&limit=20000`
+        )
+      ).catch(() => [] as Json[]),
+      examIds.length
+        ? readJson<Json[]>(
+            await rest(
+              `exam_results?select=student_id,marks,max_marks&organisation_id=eq.${orgId}` +
+                `&examination_id=in.(${examIds.join(",")})&student_id=in.(${idList})&limit=20000`
+            )
+          ).catch(() => [] as Json[])
+        : Promise.resolve([] as Json[]),
+      readJson<Json[]>(
+        await rest(
+          `invoices?select=student_id,total,paid_amount,due_on,status&organisation_id=eq.${orgId}` +
+            `&student_id=in.(${idList})&limit=10000`
+        )
+      ).catch(() => [] as Json[]),
+    ]);
+
+    enrichWithStats(filteredRows, attendance, results, invoices, maySeeFees);
+    enrichWithContacts(filteredRows, students, maySeeContacts);
+
+    sortRows(filteredRows, filter.sort, filter.direction);
+
+    const start = (filter.page - 1) * filter.pageSize;
+    return {
+      rows: isExport ? filteredRows : filteredRows.slice(start, start + filter.pageSize),
+      total: truncated ? SCAN_CAP : filteredRows.length,
+      scanned: studentIds.length,
+      truncated,
+    };
+  }
+
+  // Fast path: sort and slice the page first, then fetch stats for only the visible slice!
+  sortRows(filteredRows, filter.sort, filter.direction);
+
+  const start = (filter.page - 1) * filter.pageSize;
+  const pageRows = filteredRows.slice(start, start + filter.pageSize);
+  const pageIds = pageRows.map(r => String(r.id));
+
+  if (pageIds.length > 0) {
+    const pageIdList = pageIds.join(",");
+    const [attendance, results, invoices] = await Promise.all([
+      readJson<Json[]>(
+        await rest(
+          `attendance?select=student_id,status&organisation_id=eq.${orgId}` +
+            `&student_id=in.(${pageIdList})&limit=2000`
+        )
+      ).catch(() => [] as Json[]),
+      examIds.length
+        ? readJson<Json[]>(
+            await rest(
+              `exam_results?select=student_id,marks,max_marks&organisation_id=eq.${orgId}` +
+                `&examination_id=in.(${examIds.join(",")})&student_id=in.(${pageIdList})&limit=2000`
+            )
+          ).catch(() => [] as Json[])
+        : Promise.resolve([] as Json[]),
+      readJson<Json[]>(
+        await rest(
+          `invoices?select=student_id,total,paid_amount,due_on,status&organisation_id=eq.${orgId}` +
+            `&student_id=in.(${pageIdList})&limit=1000`
+        )
+      ).catch(() => [] as Json[]),
+    ]);
+
+    enrichWithStats(pageRows, attendance, results, invoices, maySeeFees);
+  }
+
+  enrichWithContacts(pageRows, students, maySeeContacts);
+
+  return {
+    rows: pageRows,
+    total: truncated ? SCAN_CAP : filteredRows.length,
+    scanned: studentIds.length,
+    truncated,
+  };
+}
+
+function sortRows(rows: Json[], sortField: string, direction: "asc" | "desc") {
+  const sortColumn = SORT_COLUMNS[sortField] ?? SORT_COLUMNS.name;
+  const dir = direction === "desc" ? -1 : 1;
+  rows.sort((a, b) => {
+    const av = a[sortColumn];
+    const bv = b[sortColumn];
+    if (typeof av === "number" && typeof bv === "number")
+      return (av - bv) * dir;
+    const cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+    return cmp * dir || String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function enrichWithStats(
+  rows: Json[],
+  attendance: Json[],
+  results: Json[],
+  invoices: Json[],
+  maySeeFees: boolean
+) {
   const tally = new Map<string, { present: number; total: number }>();
   for (const row of attendance) {
     const id = String(row.student_id ?? "");
@@ -398,36 +617,16 @@ async function loadDirectory(
     const entry = tally.get(id) ?? { present: 0, total: 0 };
     const status = String(row.status ?? "");
     entry.total += 1;
-    // An approved leave is not an absence, so it counts as present. A half day
-    // counts as present: the pupil was in the building for part of it.
-    if (status === "present" || status === "late" || status === "half_day" || status === "leave") {
+    if (
+      status === "present" ||
+      status === "late" ||
+      status === "half_day" ||
+      status === "leave"
+    ) {
       entry.present += 1;
     }
     tally.set(id, entry);
   }
-
-  // Academic average: only published examinations, so a pupil's average does not
-  // move because a teacher saved an unpublished draft.
-  const examIds = Array.from(
-    new Set(
-      (
-        await readJson<Json[]>(
-          await rest(
-            `examinations?select=id&organisation_id=eq.${orgId}&published=eq.true&limit=200`
-          )
-        ).catch(() => [] as Json[])
-      ).map((e) => String(e.id))
-    )
-  );
-
-  const results = examIds.length
-    ? await readJson<Json[]>(
-        await rest(
-          `exam_results?select=student_id,marks,max_marks&organisation_id=eq.${orgId}` +
-            `&examination_id=in.(${examIds.join(",")})&student_id=in.(${idList})&limit=20000`
-        )
-      ).catch(() => [] as Json[])
-    : [];
 
   const marks = new Map<string, { got: number; max: number; papers: number }>();
   for (const row of results) {
@@ -442,129 +641,79 @@ async function loadDirectory(
     marks.set(id, entry);
   }
 
-  // Fees, for the roles allowed to see them. The column is dropped from every
-  // other role's row below, not merely hidden in the UI.
-  const invoices = await readJson<Json[]>(
-    await rest(
-      `invoices?select=student_id,total,paid_amount,due_on,status&organisation_id=eq.${orgId}` +
-        `&student_id=in.(${idList})&limit=10000`
-    )
-  ).catch(() => [] as Json[]);
-
-  const feeByStudent = new Map<string, { due: number; outstanding: number; overdue: boolean }>();
+  const feeByStudent = new Map<
+    string,
+    { due: number; outstanding: number; overdue: boolean }
+  >();
   const today = new Date().toISOString().slice(0, 10);
   for (const row of invoices) {
     const id = String(row.student_id ?? "");
     if (!id) continue;
-    const entry = feeByStudent.get(id) ?? { due: 0, outstanding: 0, overdue: false };
+    const entry = feeByStudent.get(id) ?? {
+      due: 0,
+      outstanding: 0,
+      overdue: false,
+    };
     const total = Number(row.total ?? 0);
     const paid = Number(row.paid_amount ?? 0);
     entry.due += total;
     entry.outstanding += Math.max(0, total - paid);
     const dueOn = String(row.due_on ?? "");
-    if (dueOn && dueOn < today && total - paid > 0 && row.status !== "cancelled") {
+    if (
+      dueOn &&
+      dueOn < today &&
+      total - paid > 0 &&
+      row.status !== "cancelled"
+    ) {
       entry.overdue = true;
     }
     feeByStudent.set(id, entry);
   }
 
-  const composed: Json[] = students.map((s) => {
-    const id = String(s.id);
-    const enrolment = enrolmentByStudent.get(id);
-    const room = enrolment ? classroomById.get(String(enrolment.classroom_id ?? "")) : undefined;
-
+  for (const row of rows) {
+    const id = String(row.id);
     const a = tally.get(id);
     const m = marks.get(id);
     const f = feeByStudent.get(id);
 
-    const row: Json = {
-      id,
-      admission_no: String(s.admission_no ?? ""),
-      first_name: String(s.first_name ?? ""),
-      last_name: String(s.last_name ?? ""),
-      name: `${String(s.first_name ?? "")} ${String(s.last_name ?? "")}`.trim(),
-      date_of_birth: s.date_of_birth ?? null,
-      gender: s.gender ?? null,
-      status: String(s.status ?? "active"),
-      photo_url: s.photo_url ?? null,
-      joined_on: s.joined_on ?? null,
-      grade: room ? String(room.grade ?? "") : "Unassigned",
-      section: room ? String(room.section ?? "") : "",
-      roll_no: enrolment ? enrolment.roll_no ?? null : null,
-      enrolment_status: enrolment ? "active" : "not_enrolled",
-      academic_year_id: currentYearId,
-      attendance_percentage: a && a.total > 0 ? round1((a.present / a.total) * 100) : null,
-      attendance_records: a ? a.total : 0,
-      academic_average: m && m.max > 0 ? round1((m.got / m.max) * 100) : null,
-      scored_papers: m ? m.papers : 0,
-      guardian_name: s.guardian_name ?? null,
-    };
+    row.attendance_percentage =
+      a && a.total > 0 ? round1((a.present / a.total) * 100) : null;
+    row.attendance_records = a ? a.total : 0;
+    row.academic_average = m && m.max > 0 ? round1((m.got / m.max) * 100) : null;
+    row.scored_papers = m ? m.papers : 0;
 
-    // Contact details and the money are role-gated here, at the point they are
-    // assembled, so they are not merely unused by the client — they are never
-    // built for a role that may not have them.
     if (maySeeFees) {
-      row.fees = f ? (f.outstanding <= 0 ? "Paid" : f.overdue ? "Overdue" : "Due") : "Paid";
+      row.fees = f
+        ? f.outstanding <= 0
+          ? "Paid"
+          : f.overdue
+            ? "Overdue"
+            : "Due"
+        : "Paid";
       row.outstanding_fees = f ? round2(f.outstanding) : 0;
       row.total_fees = f ? round2(f.due) : 0;
     } else {
       row.fees = null;
     }
-
-    return row;
-  });
-
-  // Class and section filters, applied after the join because those columns
-  // come from classrooms.
-  let filteredRows = composed;
-  if (filter.grade) {
-    filteredRows = filteredRows.filter((r) => String(r.grade) === filter.grade);
   }
-  if (filter.section) {
-    filteredRows = filteredRows.filter((r) => String(r.section) === filter.section);
+}
+
+function enrichWithContacts(
+  rows: Json[],
+  students: Json[],
+  maySeeContacts: boolean
+) {
+  if (!maySeeContacts) return;
+  const byId = new Map(students.map(s => [String(s.id), s]));
+  for (const row of rows) {
+    const source = byId.get(String(row.id));
+    if (!source) continue;
+    row.phone = source.phone ?? null;
+    row.email = source.email ?? null;
+    row.guardian_phone = source.guardian_phone ?? null;
+    row.guardian_email = source.guardian_email ?? null;
+    row.address = source.address ?? null;
   }
-
-  const sortColumn = SORT_COLUMNS[filter.sort] ?? SORT_COLUMNS.name;
-  const dir = filter.direction === "desc" ? -1 : 1;
-  filteredRows.sort((a, b) => {
-    // Numbers compare numerically; everything else as a locale-aware string so
-    // "Ananya" sorts before "Bhuvan" rather than after it.
-    const av = a[sortColumn];
-    const bv = b[sortColumn];
-    if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
-    const cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, {
-      numeric: true,
-      sensitivity: "base",
-    });
-    return cmp * dir || String(a.id).localeCompare(String(b.id));
-  });
-
-  // Contact details, only for the roles allowed to read them. The values are
-  // copied onto the page's rows rather than left on `students`, so a row for a
-  // role without access never carries a phone number.
-  if (maySeeContacts) {
-    const byId = new Map(students.map((s) => [String(s.id), s]));
-    for (const row of filteredRows) {
-      const source = byId.get(String(row.id));
-      if (!source) continue;
-      row.phone = source.phone ?? null;
-      row.email = source.email ?? null;
-      row.guardian_phone = source.guardian_phone ?? null;
-      row.guardian_email = source.guardian_email ?? null;
-      row.address = source.address ?? null;
-    }
-  }
-
-  const start = (filter.page - 1) * filter.pageSize;
-  return {
-    rows: filteredRows.slice(start, start + filter.pageSize),
-    // When the scan was truncated the true total is unknown, so the ceiling is
-    // reported instead. The client shows that this list is not exhaustive rather
-    // than presenting a number as complete.
-    total: truncated ? SCAN_CAP : filteredRows.length,
-    scanned: studentIds.length,
-    truncated,
-  };
 }
 
 function round1(n: number): number {
@@ -578,18 +727,22 @@ function round2(n: number): number {
 /** Distinct values for the filter dropdowns, so the UI never guesses. */
 async function filterOptions(orgId: string): Promise<Json> {
   const classrooms = await readJson<Json[]>(
-    await rest(`classrooms?select=grade,section&organisation_id=eq.${orgId}&order=grade.asc`)
+    await rest(
+      `classrooms?select=grade,section&organisation_id=eq.${orgId}&order=grade.asc`
+    )
   ).catch(() => [] as Json[]);
 
   const years = await readJson<Json[]>(
-    await rest(`academic_years?select=id,name,is_current&organisation_id=eq.${orgId}&order=name.desc`)
+    await rest(
+      `academic_years?select=id,name,is_current&organisation_id=eq.${orgId}&order=name.desc`
+    )
   ).catch(() => [] as Json[]);
 
   const grades = Array.from(
-    new Set(classrooms.map((c) => String(c.grade ?? "")).filter(Boolean))
+    new Set(classrooms.map(c => String(c.grade ?? "")).filter(Boolean))
   );
   const sections = Array.from(
-    new Set(classrooms.map((c) => String(c.section ?? "")).filter(Boolean))
+    new Set(classrooms.map(c => String(c.section ?? "")).filter(Boolean))
   );
 
   return { grades: grades.sort(), sections: sections.sort(), years };
@@ -606,7 +759,7 @@ function csvCell(value: unknown): string {
 
 function toCsv(rows: Json[], columns: string[]): string {
   const head = columns.join(",");
-  const body = rows.map((row) => columns.map((c) => csvCell(row[c])).join(","));
+  const body = rows.map(row => columns.map(c => csvCell(row[c])).join(","));
   // A BOM so Excel opens a UTF-8 file with Indian names correctly rather than
   // rendering them as mojibake.
   return `﻿${[head, ...body].join("\n")}`;
@@ -618,7 +771,11 @@ function toCsv(rows: Json[], columns: string[]): string {
 
 export default async function handler(req: Request): Promise<Response> {
   if (!SERVICE_KEY) {
-    return fail("The database is not configured on this deployment.", 503, "not_configured");
+    return fail(
+      "The database is not configured on this deployment.",
+      503,
+      "not_configured"
+    );
   }
 
   const caller = await resolveCaller(req);
@@ -637,10 +794,19 @@ export default async function handler(req: Request): Promise<Response> {
     // options reveal only which grades and sections this school runs.
     if (url.searchParams.has("options")) {
       if (!canListStudents(caller.role)) {
-        return fail("You do not have access to the student list.", 403, "forbidden");
+        return fail(
+          "You do not have access to the student list.",
+          403,
+          "forbidden"
+        );
       }
       const orgId = await callerOrg(caller);
-      if (!orgId) return fail("Your account is not linked to a school.", 403, "no_organisation");
+      if (!orgId)
+        return fail(
+          "Your account is not linked to a school.",
+          403,
+          "no_organisation"
+        );
       return Response.json(await filterOptions(orgId));
     }
 
@@ -649,7 +815,7 @@ export default async function handler(req: Request): Promise<Response> {
        * A parent or a pupil asking for the directory is refused outright. They
        * reach their own child through the profile route, which resolves the
        * link server-side. Returning a filtered list instead would still leak the
-       * existence and admission number of every other child.
+       * existence and USN of every other child.
        */
       return fail(
         "The student list is not available to your account. Open your profile to see your records.",
@@ -659,17 +825,24 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const orgId = await callerOrg(caller);
-    if (!orgId) return fail("Your account is not linked to a school.", 403, "no_organisation");
+    if (!orgId)
+      return fail(
+        "Your account is not linked to a school.",
+        403,
+        "no_organisation"
+      );
 
     const maySeeFees = canViewFees(caller.role);
     const maySeeContacts = SCHOOL_ONLY(caller.role);
 
     const filter = parseFilters(url);
+    const isExport = url.searchParams.has("export");
     const { rows, total, scanned, truncated } = await loadDirectory(
       orgId,
       filter,
       maySeeFees,
-      maySeeContacts
+      maySeeContacts,
+      isExport
     );
 
     // Export. Same authorisation as the screen, but the columns are narrowed to
@@ -708,7 +881,12 @@ export default async function handler(req: Request): Promise<Response> {
       return fail("Only an administrator can add a student.", 403, "forbidden");
     }
     const orgId = await callerOrg(caller);
-    if (!orgId) return fail("Your account is not linked to a school.", 403, "no_organisation");
+    if (!orgId)
+      return fail(
+        "Your account is not linked to a school.",
+        403,
+        "no_organisation"
+      );
 
     let body: Json;
     try {
@@ -724,29 +902,46 @@ export default async function handler(req: Request): Promise<Response> {
     if (!firstName) fieldErrors.first_name = "Enter a first name.";
     if (!lastName) fieldErrors.last_name = "Enter a last name.";
     if (Object.keys(fieldErrors).length) {
-      return Response.json({ error: "validation", fieldErrors }, { status: 400 });
+      return Response.json(
+        { error: "validation", fieldErrors },
+        { status: 400 }
+      );
     }
 
-    // The admission number is either supplied or generated. Generated numbers
-    // embed the current year so they sort chronologically and are readable when
-    // printed on a report card.
-    let admissionNo = clean(body.admission_no, 40);
-    if (!admissionNo) {
-      const year = new Date().getFullYear();
-      const prefix = `ADM/${String(year).slice(2)}-${String(year + 1).slice(2)}/`;
+    /*
+     * The USN is either supplied or generated. A generated one is the school's
+     * initials and the next four-digit number: GGS1001. The school asked for
+     * that shape because it is short enough for a child to read off a slip and
+     * type unaided, and the number continues where the roll call ended rather
+     * than restarting each year, so no two pupils ever share one.
+     */
+    let usn = normaliseUsn(body.usn);
+    if (!usn) {
+      const prefix = USN_PREFIX;
+      /*
+       * The highest number already in use, not an arbitrary one.
+       *
+       * The query used to ask for a single row with no ordering, so it
+       * returned whichever row the database happened to give first — the
+       * lowest one. The number after it was then handed out again, the
+       * database refused the insert for being a duplicate, and the enrolment
+       * came back as "that USN is already in use" for every
+       * pupil the school tried to add.
+       */
       const existing = await readJson<Json[]>(
         await rest(
-          `students?select=admission_no&organisation_id=eq.${orgId}` +
-            `&admission_no=like.${encodeURIComponent(prefix)}*&limit=1`
+          `students?select=usn&organisation_id=eq.${orgId}` +
+            `&usn=ilike.${encodeURIComponent(prefix)}*` +
+            `&order=usn.desc&limit=1`
         )
       ).catch(() => [] as Json[]);
-      let next = 1;
+      let next = USN_FIRST_NUMBER;
       if (existing.length) {
-        const last = String(existing[0].admission_no ?? "");
-        const n = Number.parseInt(last.split("/").pop() ?? "1", 10);
+        const last = String(existing[0].usn ?? "");
+        const n = Number.parseInt(last.slice(prefix.length), 10);
         if (Number.isFinite(n)) next = n + 1;
       }
-      admissionNo = `${prefix}${String(next).padStart(4, "0")}`;
+      usn = `${prefix}${String(next).padStart(4, "0")}`;
     }
 
     const status = clean(body.status, 20) || "active";
@@ -761,11 +956,13 @@ export default async function handler(req: Request): Promise<Response> {
 
     const payload: Json = {
       organisation_id: orgId,
-      admission_no: admissionNo,
+      usn,
       first_name: firstName,
       last_name: lastName,
       status,
-      joined_on: isoDateOrNull(clean(body.joined_on, 10)) ?? new Date().toISOString().slice(0, 10),
+      joined_on:
+        isoDateOrNull(clean(body.joined_on, 10)) ??
+        new Date().toISOString().slice(0, 10),
     };
 
     // Optional fields are written only when present. A column with an empty
@@ -787,7 +984,7 @@ export default async function handler(req: Request): Promise<Response> {
       "emergency_contact_phone",
     ];
     for (const field of optional) {
-      const value = clean(body[field], 200);
+      const value = clean(body[field], field === "photo_url" ? 400 : 200);
       if (value) payload[field] = value;
     }
 
@@ -816,15 +1013,17 @@ export default async function handler(req: Request): Promise<Response> {
 
     if (!created.length) {
       /*
-       * Most likely the admission number already exists: there is a unique index
-       * on (organisation_id, admission_no). That is a user-correctable mistake,
+       * Most likely the USN already exists: there is a unique index
+       * on (organisation_id, usn). That is a user-correctable mistake,
        * so it is reported as a field error rather than a generic failure.
        */
-      if (await admissionNumberTaken(orgId, admissionNo)) {
+      if (await usnTaken(orgId, usn)) {
         return Response.json(
           {
             error: "validation",
-            fieldErrors: { admission_no: "That admission number is already in use." },
+            fieldErrors: {
+              usn: "That USN is already in use.",
+            },
           },
           { status: 400 }
         );
@@ -832,7 +1031,16 @@ export default async function handler(req: Request): Promise<Response> {
       return fail("The student could not be created.", 500, "create_failed");
     }
 
-    return Response.json({ student: created[0] }, { status: 201 });
+    const { account, detail } = await ensureStudentAccount(
+      orgId,
+      caller.id,
+      created[0]
+    );
+
+    return Response.json(
+      { student: created[0], account, accountDetail: detail },
+      { status: 201 }
+    );
   }
 
   /* ---------------------------------------------------------------- *
@@ -841,10 +1049,19 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (req.method === "PATCH") {
     if (!canEditStudent(caller.role)) {
-      return fail("Only an administrator can change a student record.", 403, "forbidden");
+      return fail(
+        "Only an administrator can change a student record.",
+        403,
+        "forbidden"
+      );
     }
     const orgId = await callerOrg(caller);
-    if (!orgId) return fail("Your account is not linked to a school.", 403, "no_organisation");
+    if (!orgId)
+      return fail(
+        "Your account is not linked to a school.",
+        403,
+        "no_organisation"
+      );
 
     let body: Json;
     try {
@@ -860,7 +1077,9 @@ export default async function handler(req: Request): Promise<Response> {
     // Without this, an admin of one school could update a pupil in another by
     // guessing a UUID.
     const existing = await readJson<Json[]>(
-      await rest(`students?select=id&organisation_id=eq.${orgId}&id=eq.${id}&limit=1`)
+      await rest(
+        `students?select=id,usn&organisation_id=eq.${orgId}&id=eq.${id}&limit=1`
+      )
     ).catch(() => [] as Json[]);
     if (!existing.length) {
       return fail("That student could not be found.", 404, "not_found");
@@ -897,15 +1116,15 @@ export default async function handler(req: Request): Promise<Response> {
       patch[field] = value;
     }
 
-    if ("admission_no" in body) {
-      const admissionNo = clean(body.admission_no, 40);
-      if (!admissionNo) {
-        fieldErrors.admission_no = "Enter an admission number.";
-      } else if (admissionNo !== String(existing[0].admission_no ?? "")) {
-        if (await admissionNumberTaken(orgId, admissionNo)) {
-          fieldErrors.admission_no = "That admission number is already in use.";
+    if ("usn" in body) {
+      const usn = normaliseUsn(body.usn);
+      if (!usn) {
+        fieldErrors.usn = "Enter a USN.";
+      } else if (usn !== normaliseUsn(existing[0].usn)) {
+        if (await usnTaken(orgId, usn)) {
+          fieldErrors.usn = "That USN is already in use.";
         } else {
-          patch.admission_no = admissionNo;
+          patch.usn = usn;
         }
       }
     }
@@ -943,7 +1162,10 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     if (Object.keys(fieldErrors).length) {
-      return Response.json({ error: "validation", fieldErrors }, { status: 400 });
+      return Response.json(
+        { error: "validation", fieldErrors },
+        { status: 400 }
+      );
     }
 
     if (!Object.keys(patch).length) {
@@ -969,9 +1191,24 @@ export default async function handler(req: Request): Promise<Response> {
      * actor explicitly. That distinction matters: without this, every change made
      * through the API would show an unattributed edit in the audit history.
      */
-    await writeAudit(orgId, caller.id, "update", id, updated[0]).catch(() => null);
+    await writeAudit(orgId, caller.id, "update", id, updated[0]).catch(
+      () => null
+    );
 
-    return Response.json({ student: updated[0] });
+    // Re-run provisioning so a changed address reaches the login too. A family
+    // that corrects an email address must keep their child's account rather
+    // than have to ask an administrator to reissue it.
+    const { account, detail } = await ensureStudentAccount(
+      orgId,
+      caller.id,
+      updated[0]
+    );
+
+    return Response.json({
+      student: updated[0],
+      account,
+      accountDetail: detail,
+    });
   }
 
   /* ---------------------------------------------------------------- *
@@ -980,10 +1217,19 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (req.method === "DELETE") {
     if (!canEditStudent(caller.role)) {
-      return fail("Only an administrator can archive a student record.", 403, "forbidden");
+      return fail(
+        "Only an administrator can archive a student record.",
+        403,
+        "forbidden"
+      );
     }
     const orgId = await callerOrg(caller);
-    if (!orgId) return fail("Your account is not linked to a school.", 403, "no_organisation");
+    if (!orgId)
+      return fail(
+        "Your account is not linked to a school.",
+        403,
+        "no_organisation"
+      );
 
     let body: Json;
     try {
@@ -996,7 +1242,9 @@ export default async function handler(req: Request): Promise<Response> {
     if (!id) return fail("Which student?", 400, "missing_id");
 
     const existing = await readJson<Json[]>(
-      await rest(`students?select=id,status&organisation_id=eq.${orgId}&id=eq.${id}&limit=1`)
+      await rest(
+        `students?select=id,status&organisation_id=eq.${orgId}&id=eq.${id}&limit=1`
+      )
     ).catch(() => [] as Json[]);
     if (!existing.length) {
       return fail("That student could not be found.", 404, "not_found");
@@ -1017,10 +1265,16 @@ export default async function handler(req: Request): Promise<Response> {
     ).catch(() => [] as Json[]);
 
     if (!updated.length) {
-      return fail("The student record could not be archived.", 500, "archive_failed");
+      return fail(
+        "The student record could not be archived.",
+        500,
+        "archive_failed"
+      );
     }
 
-    await writeAudit(orgId, caller.id, "archive", id, updated[0]).catch(() => null);
+    await writeAudit(orgId, caller.id, "archive", id, updated[0]).catch(
+      () => null
+    );
 
     return Response.json({
       student: updated[0],
@@ -1034,18 +1288,64 @@ export default async function handler(req: Request): Promise<Response> {
 
 /** Roles whose directory rows carry contact details. */
 function SCHOOL_ONLY(role: string): boolean {
-  const r = String(role ?? "").trim().toLowerCase();
+  const r = String(role ?? "")
+    .trim()
+    .toLowerCase();
   return r === "super_admin" || r === "admin" || r === "principal";
 }
 
-async function admissionNumberTaken(orgId: string, admissionNo: string): Promise<boolean> {
+async function usnTaken(orgId: string, usn: string): Promise<boolean> {
   const rows = await readJson<Json[]>(
     await rest(
       `students?select=id&organisation_id=eq.${orgId}` +
-        `&admission_no=eq.${encodeURIComponent(admissionNo)}&limit=1`
+        `&usn=ilike.${encodeURIComponent(normaliseUsn(usn))}&limit=1`
     )
   ).catch(() => [] as Json[]);
   return rows.length > 0;
+}
+
+/**
+ * Give this pupil an account, and keep the one they have in step with the record.
+ *
+ * Called on every save rather than from a button. A parent told their child has
+ * a place should be able to sign in that afternoon, and a step somebody has to
+ * remember is a step that does not happen for the families who need it most.
+ *
+ * Best effort, and deliberately so: enrolling a child is the school's real work
+ * and must not fail because an account could not be minted. The outcome travels
+ * back in the response so an administrator can see which record needs attention,
+ * rather than a parent discovering it when sign-in does not work.
+ */
+async function ensureStudentAccount(
+  orgId: string,
+  actorId: string,
+  student: Json
+): Promise<{ account: string | null; detail: Json }> {
+  const id = String(student.id ?? "");
+  if (!id || !orgId) return { account: null, detail: {} };
+  try {
+    const result = await provisionPortalAccount({
+      subject: "student",
+      recordId: id,
+      organisationId: orgId,
+      email: student.email,
+      name: `${String(student.first_name ?? "")} ${String(student.last_name ?? "")}`.trim(),
+      role: "student",
+      // The first password is the date of birth in six digits. A save must never
+      // rewrite it, because from the first sign-in the password belongs to the
+      // pupil rather than to the record.
+      birthDate: student.date_of_birth,
+      actorId,
+    });
+    if (!result.ok)
+      return { account: null, detail: { reason: result.reason ?? "unknown" } };
+    return {
+      account: result.created ? "created" : "existing",
+      detail: { username: result.username, email: result.email },
+    };
+  } catch {
+    return { account: null, detail: { reason: "unexpected" } };
+  }
 }
 
 /**

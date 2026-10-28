@@ -300,7 +300,7 @@ function ProfileHeader({
             {student.name}
           </h1>
           <p className="profile-meta">
-            <span>{student.admission_no ?? "No admission number"}</span>
+            <span>{student.usn ?? "No USN"}</span>
             {klass.grade && (
               <>
                 <span aria-hidden="true">·</span>
@@ -493,7 +493,7 @@ function PersonalSection({ data }: { data: ProfilePayload }) {
         <div className="panel">
           <h2 className="panel-title">Personal information</h2>
           <dl className="detail-list">
-            <Detail label="Admission number" value={s.admission_no} />
+            <Detail label="USN" value={s.usn} />
             <Detail label="Full name" value={s.name} />
             <Detail label="Date of birth" value={formatDate(s.date_of_birth)} />
             <Detail label="Age" value={s.age !== null ? `${s.age} years` : "Not recorded"} />
@@ -1533,7 +1533,7 @@ function EditStudentDialog({
   const [form, setForm] = useState({
     first_name: s.first_name ?? "",
     last_name: s.last_name ?? "",
-    admission_no: s.admission_no ?? "",
+    usn: s.usn ?? "",
     date_of_birth: s.date_of_birth ?? "",
     gender: s.gender ?? "",
     email: s.email ?? "",
@@ -1559,7 +1559,7 @@ function EditStudentDialog({
     () =>
       form.first_name !== (s.first_name ?? "") ||
       form.last_name !== (s.last_name ?? "") ||
-      form.admission_no !== (s.admission_no ?? ""),
+      form.usn !== (s.usn ?? ""),
     // Recomputed only when the record itself changes, not on every keystroke:
     // the dirty flag guards the close handler, not the form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1595,7 +1595,7 @@ function EditStudentDialog({
       await onSaved({
         first_name: form.first_name,
         last_name: form.last_name,
-        admission_no: form.admission_no,
+        usn: form.usn,
         date_of_birth: form.date_of_birth,
         gender: form.gender,
         email: form.email,
@@ -1648,9 +1648,9 @@ function EditStudentDialog({
                 {fieldErrors.last_name && <span className="field-error">{fieldErrors.last_name}</span>}
               </label>
               <label>
-                Admission number
-                <input value={form.admission_no} onChange={(e) => set("admission_no")(e.target.value)} />
-                {fieldErrors.admission_no && <span className="field-error">{fieldErrors.admission_no}</span>}
+                USN
+                <input value={form.usn} onChange={(e) => set("usn")(e.target.value)} />
+                {fieldErrors.usn && <span className="field-error">{fieldErrors.usn}</span>}
               </label>
               <label>
                 Date of birth
@@ -1824,7 +1824,7 @@ function ProfileSkeleton({ name, onBack }: { name: string; onBack: () => void })
 /** A CSV summary, for the same role that may export the directory. */
 function downloadSummary(data: ProfilePayload): void {
   const rows: Array<[string, string]> = [
-    ["Admission number", data.student.admission_no ?? ""],
+    ["USN", data.student.usn ?? ""],
     ["Name", data.student.name],
     ["Date of birth", data.student.date_of_birth ?? ""],
     ["Age", data.student.age !== null ? String(data.student.age) : ""],

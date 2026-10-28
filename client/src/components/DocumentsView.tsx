@@ -56,7 +56,7 @@ export function DocumentsView({
     const needle = query.trim().toLowerCase();
     if (!needle) return students;
     return students.filter((student) =>
-      `${student.name} ${student.grade} ${student.section} ${student.admission_no ?? ""}`
+      `${student.name} ${student.grade} ${student.section} ${student.usn ?? ""}`
         .toLowerCase()
         .includes(needle)
     );
@@ -302,7 +302,7 @@ export function DocumentsView({
                         <span className="grade-chip">{student.grade}</span>
                       </td>
                       <td className="muted-cell">
-                        {student.admission_no ?? student.id}
+                        {student.usn ?? student.id}
                       </td>
                       <td>
                         <div className="flex min-w-[132px] items-center gap-3">
@@ -423,7 +423,7 @@ export function DocumentsView({
                 <div>
                   <span>Admission</span>
                   <strong className="text-[13px]">
-                    {selectedStudent.admission_no ?? selectedStudent.id}
+                    {selectedStudent.usn ?? selectedStudent.id}
                   </strong>
                 </div>
               </div>

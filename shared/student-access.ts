@@ -294,15 +294,20 @@ export function sectionsForRole(
   if (SCHOOL_MANAGERS.has(r)) out.push("admission");
 
   // Transport: the front office and office staff need to know who is collected
-  // and by whom. Everyone else sees only whether a child rides the bus.
-  if (SCHOOL_MANAGERS.has(r) || r === "staff") out.push("transport");
+  // and by whom. A pupil may see their own route; everyone else sees only
+  // whether a child rides the bus.
+  if (SCHOOL_MANAGERS.has(r) || r === "staff" || relatesTo === "self") out.push("transport");
 
-  if (canViewFees(r)) out.push("fees");
-  if (canViewDocuments(r)) out.push("documents");
-  if (canViewHealth(r)) out.push("health");
+  // A pupil may read their own money, paperwork, medical notes and bus details.
+  // Those sections stay closed to every other relationship: a guardian only gets
+  // fees when their link row grants it, and a teacher does not need the family's
+  // bank ledger or the child's identity documents.
+  if (canViewFees(r) || relatesTo === "self") out.push("fees");
+  if (canViewDocuments(r) || relatesTo === "self") out.push("documents");
+  if (canViewHealth(r) || relatesTo === "self") out.push("health");
   if (canWriteObservations(r) || SCHOOL_MANAGERS.has(r)) out.push("observations");
   if (SCHOOL_MANAGERS.has(r) || r === "staff") out.push("communications");
-  if (SCHOOL_MANAGERS.has(r) || r === "staff") out.push("library");
+  if (SCHOOL_MANAGERS.has(r) || r === "staff" || relatesTo === "self") out.push("library");
 
   // Account status. Never the credential itself — see `publicAccountFields`.
   if (SCHOOL_MANAGERS.has(r) || relatesTo === "self") out.push("account");
@@ -334,7 +339,7 @@ export const PUBLIC_ACCOUNT_FIELDS = [
  */
 export function exportColumnsForRole(role: string): string[] {
   const base = [
-    "admission_no",
+    "usn",
     "first_name",
     "last_name",
     "status",

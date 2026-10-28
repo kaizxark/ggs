@@ -52,15 +52,20 @@
       "destination": "/app.html"
     },
     {
-      "source": "/((?!api/|assets/|app\\.html).*)",
+      "source": "/((?!$|api/|assets/|school-assets/|app\\.html|.*\\.html$).*)",
       "destination": "/app.html"
     }
   ],
   "redirects": [
     {
-      "source": "/",
-      "destination": "/webflow/",
-      "permanent": false
+      "source": "/webflow/",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/webflow/:path*",
+      "destination": "/:path*",
+      "permanent": true
     }
   ]
 }

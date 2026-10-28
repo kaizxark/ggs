@@ -50,6 +50,18 @@ const GRANTABLE: Record<string, string[]> = {
   staff: [],
 };
 
+/**
+ * The role written to a pupil's linked profile.
+ *
+ * This used to be hard-coded to "parent", on the reasoning that the `app_role`
+ * enum had no `student` member and writing one would be rejected. Migration 001
+ * adds it, so the fallback was no longer needed — and it was actively harmful:
+ * a pupil signed in as a parent, which put them behind the guardian's view of
+ * the school rather than their own record, and meant every student's dashboard
+ * was showing them somebody else's data.
+ */
+const STUDENT_ROLE = "student";
+
 type Json = Record<string, unknown>;
 
 function fail(message: string, status: number, code = "error") {
@@ -57,7 +69,9 @@ function fail(message: string, status: number, code = "error") {
 }
 
 /** Resolve the caller from their bearer token and read their real role. */
-async function resolveCaller(req: Request): Promise<{ id: string; role: string } | null> {
+async function resolveCaller(
+  req: Request
+): Promise<{ id: string; role: string } | null> {
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.replace(/^Bearer\s+/i, "");
   if (!token) return null;
@@ -71,7 +85,12 @@ async function resolveCaller(req: Request): Promise<{ id: string; role: string }
 
   const profileRes = await fetch(
     `${SUPABASE_URL}/rest/v1/profiles?select=id,role&id=eq.${user.id}&limit=1`,
-    { headers: { apikey: SERVICE_KEY || ANON_KEY, Authorization: `Bearer ${SERVICE_KEY || token}` } }
+    {
+      headers: {
+        apikey: SERVICE_KEY || ANON_KEY,
+        Authorization: `Bearer ${SERVICE_KEY || token}`,
+      },
+    }
   );
   const rows = (await profileRes.json()) as Json[];
   /*
@@ -112,7 +131,9 @@ function makePassword(): string {
  * reachable by anyone who knows a schoolchild's date of birth.
  */
 export function studentPassword(dateOfBirth: unknown): string | null {
-  const value = String(dateOfBirth ?? "").trim().slice(0, 10);
+  const value = String(dateOfBirth ?? "")
+    .trim()
+    .slice(0, 10);
   // Accepts the YYYY-MM-DD shape the students table stores.
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
@@ -157,16 +178,19 @@ async function cleanupJunkOrg(userId: string, realOrgId: string) {
  */
 async function patchProfile(userId: string, fields: Json): Promise<boolean> {
   const attempt = async (payload: Json) => {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
-      method: "PATCH",
-      headers: {
-        apikey: SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal, resolution=merge-duplicates",
-      },
-      body: JSON.stringify(payload),
-    });
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal, resolution=merge-duplicates",
+        },
+        body: JSON.stringify(payload),
+      }
+    );
     return { ok: res.ok, body: res.ok ? "" : await res.text() };
   };
 
@@ -179,6 +203,45 @@ async function patchProfile(userId: string, fields: Json): Promise<boolean> {
   }
   result = await attempt(retry);
   return result.ok;
+}
+
+/**
+ * Whether an address already has an account.
+ *
+ * Every page of the auth user list is searched. The admin API pages at fifty
+ * by default, so the first version of this checked one fiftieth of the
+ * school's accounts and let the rest through — the invite then failed at the
+ * create step with a raw database error instead of the plain "that email
+ * already has an account" the screen knows how to show.
+ */
+async function authUserExists(email: string): Promise<boolean> {
+  if (!SERVICE_KEY) return false;
+  const wanted = email.trim().toLowerCase();
+  for (let page = 1; page <= 20; page += 1) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?per_page=200&page=${page}`,
+        {
+          headers: {
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+          },
+        }
+      );
+      if (!res.ok) return false;
+      const body = (await res.json()) as { users?: { email?: string }[] };
+      const users = body.users ?? [];
+      if (
+        users.some(user => String(user.email ?? "").toLowerCase() === wanted)
+      ) {
+        return true;
+      }
+      if (users.length < 200) return false;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 export default async function handler(req: Request): Promise<Response> {
@@ -194,7 +257,11 @@ export default async function handler(req: Request): Promise<Response> {
   const caller = await resolveCaller(req);
   if (!caller) return fail("You must be signed in.", 401, "unauthenticated");
   if (!GRANTABLE[caller.role]) {
-    return fail("You do not have permission to manage users.", 403, "forbidden");
+    return fail(
+      "You do not have permission to manage users.",
+      403,
+      "forbidden"
+    );
   }
 
   let body: Json;
@@ -205,7 +272,9 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const action = String(body.action ?? "");
-  const email = String(body.email ?? "").trim().toLowerCase();
+  const email = String(body.email ?? "")
+    .trim()
+    .toLowerCase();
   const orgId = String(body.organisationId ?? "");
   const fullName = String(body.fullName ?? "").trim();
 
@@ -217,7 +286,8 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   if (action !== "invite") return fail("Unknown action.", 400);
-  if (!email || !email.includes("@")) return fail("Enter a valid email address.", 400);
+  if (!email || !email.includes("@"))
+    return fail("Enter a valid email address.", 400);
   if (!orgId) return fail("Missing school id.", 400);
 
   const role = String(body.role ?? "staff");
@@ -239,14 +309,8 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   // already have an account?
-  const existing = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-  });
-  if (existing.ok) {
-    const list = (await existing.json()) as { users?: { email?: string }[] };
-    if ((list.users ?? []).some((u) => (u.email ?? "").toLowerCase() === email)) {
-      return fail("That email already has an account.", 409, "duplicate");
-    }
+  if (await authUserExists(email)) {
+    return fail("That email already has an account.", 409, "duplicate");
   }
 
   const password = makePassword();
@@ -327,7 +391,7 @@ export default async function handler(req: Request): Promise<Response> {
 /**
  * Give a student a portal login.
  *
- * The username is derived from the admission number so it is unique and
+ * The username is derived from the USN so it is unique and
  * recognisable; the password is generated once and returned to the admin to
  * hand over. It is stored on the student row so it can be reissued, never in
  * the invitations table.
@@ -348,7 +412,7 @@ async function provisionStudent({
   };
 
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/students?select=id,admission_no,first_name,last_name,email,organisation_id,date_of_birth&id=eq.${studentId}&limit=1`,
+    `${SUPABASE_URL}/rest/v1/students?select=id,usn,first_name,last_name,email,organisation_id,date_of_birth&id=eq.${studentId}&limit=1`,
     { headers }
   );
   const rows = (await res.json()) as Json[];
@@ -356,17 +420,18 @@ async function provisionStudent({
   if (!student) return fail("Student not found.", 404, "not_found");
 
   const realOrg = String(student.organisation_id ?? orgId);
-  const admission = String(student.admission_no ?? "").replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+  const usn = String(student.usn ?? "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLowerCase();
   const name = `${student.first_name ?? ""}${student.last_name ?? ""}`
     .replace(/[^A-Za-z]/g, "")
     .toLowerCase();
-  const username = admission || name || `student${studentId.slice(0, 6)}`;
+  const username = usn || name || `student${studentId.slice(0, 6)}`;
   const email = String(student.email ?? "").trim() || `${username}@gks.edu`;
   // Date of birth as DDMMYYYY when we have a usable one, otherwise a generated
   // password — a student with no recorded date of birth still needs a login,
   // and handing out a blank password would be far worse.
-  const password =
-    studentPassword(student.date_of_birth) ?? makePassword();
+  const password = studentPassword(student.date_of_birth) ?? makePassword();
   const passwordIsDob = studentPassword(student.date_of_birth) !== null;
 
   const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -377,7 +442,8 @@ async function provisionStudent({
       password,
       email_confirm: true,
       user_metadata: {
-        full_name: `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim(),
+        full_name:
+          `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim(),
         student_id: studentId,
       },
     }),
@@ -386,13 +452,12 @@ async function provisionStudent({
   if (createRes.ok) {
     const created = (await createRes.json()) as { id?: string };
     if (created.id) {
-      // 'student' is only a valid role after the migration; fall back to
-      // 'parent' so the account works in the meantime.
       await patchProfile(created.id, {
         organisation_id: realOrg,
-        full_name: `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim(),
+        full_name:
+          `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim(),
         email,
-        role: "parent",
+        role: STUDENT_ROLE,
         student_id: studentId,
       });
       await cleanupJunkOrg(created.id, realOrg);
@@ -416,7 +481,10 @@ async function provisionStudent({
     `${SUPABASE_URL}/rest/v1/student_credentials?on_conflict=student_id`,
     {
       method: "POST",
-      headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
+      headers: {
+        ...headers,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
       body: JSON.stringify({
         student_id: studentId,
         organisation_id: realOrg,
@@ -425,7 +493,7 @@ async function provisionStudent({
         issued_by: callerId,
       }),
     }
-  ).then((r) => r.ok);
+  ).then(r => r.ok);
 
   return Response.json({
     ok: true,

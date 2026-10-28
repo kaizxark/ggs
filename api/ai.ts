@@ -117,7 +117,7 @@ export function scopeDatasets(
  * user is looking at.
  *
  * The match is deliberately dumb and total: every field of the row is searched
- * as text. A name, an admission number, a grade, a due date, a driver's phone
+ * as text. A name, a USN, a grade, a due date, a driver's phone
  * number — all of them find the row, which is what someone typing "Bhat" or
  * "Grade 5" or "overdue" into a follow-up expects to happen.
  */
@@ -286,7 +286,7 @@ function buildSearchTool(datasetKeys: string[]) {
         query: {
           type: "string",
           description:
-            "Text to match against any field: a name, an admission number, a grade, a date, a status. Leave empty to list the first rows.",
+            "Text to match against any field: a name, a USN, a grade, a date, a status. Leave empty to list the first rows.",
         },
         limit: { type: "integer", description: "How many rows to return. Default 8, maximum 20." },
       },

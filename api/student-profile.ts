@@ -200,7 +200,7 @@ export default async function handler(req: Request): Promise<Response> {
   const payload: Json = {
     student: {
       id: student.id,
-      admission_no: student.admission_no ?? null,
+      usn: student.usn ?? null,
       first_name: student.first_name ?? null,
       last_name: student.last_name ?? null,
       name: `${String(student.first_name ?? "")} ${String(student.last_name ?? "")}`.trim(),
@@ -455,6 +455,21 @@ export default async function handler(req: Request): Promise<Response> {
     const stSubjectById = new Map(stSubjects.map((s) => [String(s.id), s]));
     const stStaffById = new Map(stStaff.map((s) => [String(s.id), s]));
 
+    // Every exam window for the year, not only those with marks. The pupil
+    // dashboard needs the next sitting before any result exists.
+    const examCalendar = await rows(
+      `examinations?select=id,name,starts_on,ends_on,published&organisation_id=eq.${orgId}` +
+        `&order=starts_on.asc`
+    );
+
+    payload.exams = examCalendar.map((e) => ({
+      id: e.id,
+      name: e.name,
+      starts_on: e.starts_on ?? null,
+      ends_on: e.ends_on ?? null,
+      published: e.published === true,
+    }));
+
     payload.academics = {
       results: byExam,
       subject_performance: subjectPerformance,
@@ -536,6 +551,12 @@ export default async function handler(req: Request): Promise<Response> {
         ...counts,
       },
       trend,
+      // The mobile register calendar needs every marked day, not just absences.
+      days: records.map((r) => ({
+        date: r.attendance_date,
+        status: r.status,
+        notes: r.notes ?? null,
+      })),
       absences,
       corrections,
       leaves: leaves.map((l) => ({

@@ -14,8 +14,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: [path.resolve(templateRoot, "vitest.setup.ts")],
     include: [
       "api/**/*.test.ts",
+      "shared/**/*.test.ts",
       "server/**/*.test.ts",
       "server/**/*.spec.ts",
       "client/**/*.test.ts",

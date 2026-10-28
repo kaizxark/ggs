@@ -18,7 +18,7 @@
  * recognised by his id however the database spells the role today.
  */
 
-import { effectiveRole, isSuperAdminId } from "./super-admin";
+import { effectiveRole, isSuperAdminId } from "./super-admin.js";
 
 type Json = Record<string, unknown>;
 
@@ -38,9 +38,25 @@ export interface Caller {
   superAdmin: boolean;
 }
 
-/** Pull the bearer token off a request, or null when there isn't one. */
-export function bearerToken(req: Request): string | null {
-  const header = req.headers.get("authorization") ?? "";
+/**
+ * Pull the bearer token off a request, or null when there isn't one.
+ *
+ * `headers` arrives as a `Headers` object when the route is bundled for the
+ * Web-style runtime and as a plain object when Node's own request object is
+ * handed through. Calling `.get()` on the latter throws, and it took the portal
+ * account API down in production while it worked everywhere else. Both shapes
+ * are read here so a route behaves the same whichever way it is invoked.
+ */
+export function bearerToken(req: Request | { headers?: unknown }): string | null {
+  const raw = (req as { headers?: unknown })?.headers;
+  const header =
+    typeof (raw as Headers)?.get === "function"
+      ? String((raw as Headers).get("authorization") ?? "")
+      : String(
+          (raw as Record<string, unknown> | undefined)?.["authorization"] ??
+            (raw as Record<string, unknown> | undefined)?.["Authorization"] ??
+            "",
+        );
   const match = header.match(/^Bearer\s+(.+)$/i);
   const token = match ? match[1].trim() : "";
   return token || null;
@@ -54,7 +70,7 @@ export function bearerToken(req: Request): string | null {
  * decoded locally: verifying the signature is the provider's job, and a
  * hand-rolled JWT parse would be the classic place for an auth bypass to hide.
  */
-export async function resolveCaller(req: Request): Promise<Caller | null> {
+export async function resolveCaller(req: Request | { headers?: unknown }): Promise<Caller | null> {
   const token = bearerToken(req);
   if (!token) return null;
 

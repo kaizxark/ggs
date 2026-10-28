@@ -168,7 +168,7 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
           <h2 className="panel-title">
             Required documents
             <span className={`chip ${missing.length === 0 ? "chip-accent" : "chip-muted"}`}>
-              {DOC_TYPES.length - missing.length} of {REQUIRED_DOC_TYPES.length} required on file
+              {REQUIRED_DOC_TYPES.length - missing.length} of {REQUIRED_DOC_TYPES.length} required on file
             </span>
           </h2>
         </div>
