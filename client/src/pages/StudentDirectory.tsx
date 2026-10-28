@@ -71,15 +71,44 @@ import { supabase } from "@/lib/supabase";
 
 const PAGE_SIZE = 20;
 
+function studentFromProfile(data: ProfilePayload): DirectoryStudent {
+  const s = data.student;
+  return {
+    id: s.id,
+    usn: s.usn ?? "",
+    first_name: s.first_name ?? "",
+    last_name: s.last_name ?? "",
+    name: s.name || `${s.first_name ?? ""} ${s.last_name ?? ""}`.trim() || "Pupil",
+    date_of_birth: s.date_of_birth ?? null,
+    gender: s.gender ?? null,
+    status: s.status ?? "active",
+    photo_url: s.photo_url ?? null,
+    joined_on: s.joined_on ?? null,
+    grade: data.class?.grade ?? null,
+    section: data.class?.section ?? null,
+    roll_no: data.class?.roll_no ?? null,
+    enrolment_status: data.class?.enrolment_status ?? "active",
+    attendance_percentage: data.attendance?.summary?.percentage ?? null,
+    attendance_records: data.attendance?.summary?.marked_sessions ?? 0,
+    academic_average: null,
+    scored_papers: data.academics?.results?.length ?? 0,
+    fees: null,
+    outstanding_fees: data.fees?.summary?.outstanding,
+    total_fees: data.fees?.summary?.billed,
+    guardian_name: data.guardians?.[0]?.full_name ?? null,
+  };
+}
+
 export interface StudentDirectoryProps {
-  /** Open this student's profile on first render, from a deep link. */
+  /** Open this student's slide drawer or profile on first render, from a deep link. */
   openStudentId?: string | null;
+  openMode?: "drawer" | "profile";
   onStudentOpened?: () => void;
   onBack?: () => void;
   className?: string;
 }
 
-export function StudentDirectory({ openStudentId, onStudentOpened, onBack }: StudentDirectoryProps) {
+export function StudentDirectory({ openStudentId, openMode = "drawer", onStudentOpened, onBack }: StudentDirectoryProps) {
   const [page, setPage] = useState<DirectoryPage | null>(null);
   const [options, setOptions] = useState<DirectoryOptions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,6 +148,7 @@ export function StudentDirectory({ openStudentId, onStudentOpened, onBack }: Stu
    * for data nobody looked at.
    */
   const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [fallbackDrawerStudent, setFallbackDrawerStudent] = useState<DirectoryStudent | null>(null);
   const [drawerWide, setDrawerWide] = useState(false);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -171,24 +201,66 @@ export function StudentDirectory({ openStudentId, onStudentOpened, onBack }: Stu
     return () => controller.abort();
   }, []);
 
-  // A deep link from the AI assistant or the Overview screen opens the profile.
-  useEffect(() => {
-    if (openStudentId) {
-      setProfileId(openStudentId);
-      onStudentOpened?.();
-    }
-  }, [openStudentId, onStudentOpened]);
-
   const rows = page?.students ?? [];
 
+  // A deep link from the AI assistant or the Overview/Command palette opens the slide drawer or profile.
+  useEffect(() => {
+    if (openStudentId) {
+      if (openMode === "profile") {
+        setProfileId(openStudentId);
+      } else {
+        setDrawerId(openStudentId);
+        setProfileId(null);
+        const matchingRow = rows.find((r) => r.id === openStudentId);
+        if (matchingRow) {
+          setFallbackDrawerStudent(matchingRow);
+        } else {
+          setFallbackDrawerStudent((prev) =>
+            prev?.id === openStudentId
+              ? prev
+              : {
+                  id: openStudentId,
+                  usn: "",
+                  first_name: "",
+                  last_name: "",
+                  name: "Pupil record",
+                  date_of_birth: null,
+                  gender: null,
+                  status: "active",
+                  photo_url: null,
+                  joined_on: null,
+                  grade: null,
+                  section: null,
+                  roll_no: null,
+                  enrolment_status: "active",
+                  attendance_percentage: null,
+                  attendance_records: 0,
+                  academic_average: null,
+                  scored_papers: 0,
+                  fees: null,
+                  guardian_name: null,
+                }
+          );
+          fetchStudentProfile(openStudentId)
+            .then((data) => {
+              setFallbackDrawerStudent(studentFromProfile(data));
+            })
+            .catch(() => {});
+        }
+      }
+      onStudentOpened?.();
+    }
+  }, [openStudentId, openMode, rows, onStudentOpened]);
+
   /*
-   * The row the drawer is showing. Resolved from the current page rather than
-   * held separately, so a search or a page change while the panel is open can
-   * never leave it pointing at a row that is no longer on screen.
+   * The row the drawer is showing. Resolved from the current page, or fallback
+   * from the deep link profile when opening a pupil not on the first page.
    */
   const drawer = useMemo(
-    () => rows.find((row) => row.id === drawerId) ?? null,
-    [rows, drawerId],
+    () =>
+      rows.find((row) => row.id === drawerId) ??
+      (fallbackDrawerStudent?.id === drawerId ? fallbackDrawerStudent : null),
+    [rows, drawerId, fallbackDrawerStudent]
   );
   const mayEdit = canEditStudent(role);
   const maySeeFees = canManageFees(role);
@@ -512,10 +584,18 @@ export function StudentDirectory({ openStudentId, onStudentOpened, onBack }: Stu
           maySeeFees={maySeeFees}
           wide={drawerWide}
           onToggleWide={() => setDrawerWide((value) => !value)}
-          onClose={() => setDrawerId(null)}
-          onOpenProfile={() => setProfileId(drawer.id)}
+          onClose={() => {
+            setDrawerId(null);
+            setFallbackDrawerStudent(null);
+          }}
+          onOpenProfile={() => {
+            setProfileId(drawer.id);
+            setDrawerId(null);
+            setFallbackDrawerStudent(null);
+          }}
           onEdit={() => {
             setDrawerId(null);
+            setFallbackDrawerStudent(null);
             setEditing(drawer);
           }}
         />

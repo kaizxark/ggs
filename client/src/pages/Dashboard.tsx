@@ -5,6 +5,8 @@ import {
   AlertCircle,
   ArrowDownRight,
   ArrowUpRight,
+  Bell,
+  BookMarked,
   BookOpen,
   Bus,
   CalendarDays,
@@ -552,7 +554,7 @@ const THINKING_LINES = [
 function CommandPalette(props: {
   open: boolean;
   onClose: () => void;
-  onNavigate: (view: string, studentId?: RowId) => void;
+  onNavigate: (view: string, entityId?: RowId, entityType?: "student" | "staff") => void;
   activeView?: string;
 }) {
   if (!props.open) return null;
@@ -567,7 +569,7 @@ function CommandPaletteBody({
 }: {
   open: boolean;
   onClose: () => void;
-  onNavigate: (view: string, studentId?: RowId) => void;
+  onNavigate: (view: string, entityId?: RowId, entityType?: "student" | "staff") => void;
   activeView?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -617,7 +619,112 @@ function CommandPaletteBody({
   const currentUser = useCurrentUser();
   const listRef = useRef<HTMLDivElement>(null);
 
+  const userRole = currentUser?.role ?? "staff";
+  const allowedScreens = useMemo(
+    () => VISIBLE_SCREENS_FOR_ROLE(userRole),
+    [userRole]
+  );
+  const allowedScreenSet = useMemo(
+    () => new Set(allowedScreens),
+    [allowedScreens]
+  );
 
+  const navigationPages = useMemo(
+    () => [
+      {
+        view: "Overview",
+        label: "Overview",
+        detail: "Dashboard KPIs, today's roll call, notices & school pulse",
+        icon: LayoutDashboard,
+        keywords: ["overview", "dashboard", "home", "summary", "kpis", "stats", "activities", "pulse"],
+      },
+      {
+        view: "Students",
+        label: "Students",
+        detail: "Pupil directory, enrolment status, class rosters & pupil records",
+        icon: GraduationCap,
+        keywords: ["students", "directory", "pupils", "enrollment", "roll call", "roster", "children", "kids"],
+      },
+      {
+        view: "Documents",
+        label: "Documents",
+        detail: "Student document checklist, verified certificates & missing paperwork",
+        icon: FolderOpen,
+        keywords: ["documents", "records", "verification", "files", "certificates", "uploads", "paperwork"],
+      },
+      {
+        view: "Staff",
+        label: "Staff",
+        detail: "Educators, coordinators, administration team & departments",
+        icon: Users,
+        keywords: ["staff", "teachers", "faculty", "educators", "employees", "directory", "team", "principal"],
+      },
+      {
+        view: "Attendance",
+        label: "Attendance",
+        detail: "Daily roll call, mark attendance, class rates & absence tracking",
+        icon: ClipboardCheck,
+        keywords: ["attendance", "roll call", "absent", "present", "register", "daily register", "leave"],
+      },
+      {
+        view: "Fees & Finance",
+        label: "Fees & Finance",
+        detail: "Fee invoices, collections, overdue balances & payment receipts",
+        icon: IndianRupee,
+        keywords: ["fees", "finance", "billing", "invoices", "payments", "collections", "accounts", "dues", "outstanding", "money"],
+      },
+      {
+        view: "Analytics",
+        label: "Analytics",
+        detail: "Academic performance trends, grade analysis & student wellness",
+        icon: Activity,
+        keywords: ["analytics", "performance", "trends", "metrics", "grades", "statistics", "wellness", "insights"],
+      },
+      {
+        view: "Academics",
+        label: "Academics",
+        detail: "Subjects, curriculum, weekly timetable & syllabus coverage",
+        icon: BookOpen,
+        keywords: ["academics", "curriculum", "subjects", "timetable", "schedule", "syllabus", "classes", "courses"],
+      },
+      {
+        view: "Examinations",
+        label: "Examinations",
+        detail: "Exam timetables, grading progress, marks publishing & report cards",
+        icon: FileText,
+        keywords: ["examinations", "exams", "test", "marks", "results", "assessments", "papers", "report cards", "grading"],
+      },
+      {
+        view: "Reports",
+        label: "Reports",
+        detail: "School performance exports, attendance sheets & compliance reports",
+        icon: FileBarChart,
+        keywords: ["reports", "exports", "data export", "print", "summary reports", "csv", "audit"],
+      },
+      {
+        view: "User management",
+        label: "User management",
+        detail: "Staff access, role assignments, invites & security permissions",
+        icon: UserCog,
+        keywords: ["user management", "users", "permissions", "roles", "access", "invites", "security", "privileges"],
+      },
+      {
+        view: "Account logins",
+        label: "Account logins",
+        detail: "Student and staff portal credentials, usernames & login passwords",
+        icon: KeyRound,
+        keywords: ["account logins", "credentials", "passwords", "login portal", "student logins", "staff logins", "auth"],
+      },
+      {
+        view: "Settings",
+        label: "Settings",
+        detail: "School configuration, academic terms, profile & AI settings",
+        icon: Settings2,
+        keywords: ["settings", "config", "configuration", "preferences", "academic year", "ai settings", "options"],
+      },
+    ].filter(page => allowedScreenSet.has(page.view)),
+    [allowedScreenSet]
+  );
 
   const commands = useMemo(
     () => [
@@ -670,21 +777,144 @@ function CommandPaletteBody({
   const results = useMemo(() => {
     const trimmed = query.trim();
     if (!trimmed) {
-      return { people: [], cmds: commands };
+      return {
+        pages: [],
+        students: [],
+        staff: [],
+        classes: [],
+        invoices: [],
+        exams: [],
+        subjects: [],
+        announcements: [],
+        libraryBooks: [],
+        cmds: commands,
+      };
     }
     const normalized = trimmed.toLowerCase();
-    const people = students
-      .filter(student =>
-        `${student.name} ${student.grade} ${student.section} ${student.usn ?? ""}`
+
+    // 1. Pages & Navigation
+    const matchingPages = navigationPages
+      .filter(
+        p =>
+          p.label.toLowerCase().includes(normalized) ||
+          p.detail.toLowerCase().includes(normalized) ||
+          p.keywords.some(
+            k =>
+              k.toLowerCase().includes(normalized) ||
+              normalized.includes(k.toLowerCase())
+          )
+      )
+      .slice(0, 4);
+
+    // 2. Students
+    const matchingStudents = students
+      .filter(s =>
+        `${s.name} ${s.grade} ${s.section} ${s.usn ?? ""} ${s.status ?? ""}`
           .toLowerCase()
           .includes(normalized)
       )
       .slice(0, 5);
-    const cmds = commands.filter(item =>
-      `${item.label} ${item.detail}`.toLowerCase().includes(normalized)
+
+    // 3. Staff
+    const matchingStaff = staff
+      .filter(m =>
+        `${m.name} ${m.role} ${m.department} ${m.usn ?? ""} ${m.email ?? ""}`
+          .toLowerCase()
+          .includes(normalized)
+      )
+      .slice(0, 4);
+
+    // 4. Classes / Classrooms
+    const matchingClasses = classAttendance
+      .filter(c =>
+        `${c.label} ${c.teacher ?? ""}`.toLowerCase().includes(normalized)
+      )
+      .slice(0, 3);
+
+    // 5. Fee Invoices
+    const matchingInvoices = allowedScreenSet.has("Fees & Finance")
+      ? invoices
+          .filter(inv =>
+            `${inv.student} ${inv.family} ${inv.status} ${inv.id}`
+              .toLowerCase()
+              .includes(normalized)
+          )
+          .slice(0, 3)
+      : [];
+
+    // 6. Examinations
+    const matchingExams = allowedScreenSet.has("Examinations")
+      ? exams
+          .filter(e =>
+            `${e.name} ${e.subject} ${e.grade} ${e.status}`
+              .toLowerCase()
+              .includes(normalized)
+          )
+          .slice(0, 3)
+      : [];
+
+    // 7. Subjects
+    const matchingSubjects = allowedScreenSet.has("Academics")
+      ? subjects
+          .filter(sub =>
+            `${sub.name} ${sub.teacher} ${sub.classes}`
+              .toLowerCase()
+              .includes(normalized)
+          )
+          .slice(0, 3)
+      : [];
+
+    // 8. Announcements
+    const matchingAnnouncements = announcements
+      .filter(a =>
+        `${a.title} ${a.audience ?? ""} ${a.body ?? ""}`
+          .toLowerCase()
+          .includes(normalized)
+      )
+      .slice(0, 2);
+
+    // 9. Library Books
+    const matchingBooks = allowedScreenSet.has("Academics")
+      ? libraryBooks
+          .filter(b =>
+            `${b.title} ${b.author} ${b.category}`
+              .toLowerCase()
+              .includes(normalized)
+          )
+          .slice(0, 2)
+      : [];
+
+    // 10. Commands
+    const matchingCmds = commands.filter(cmd =>
+      `${cmd.label} ${cmd.detail}`.toLowerCase().includes(normalized)
     );
-    return { people, cmds };
-  }, [query, students, commands]);
+
+    return {
+      pages: matchingPages,
+      students: matchingStudents,
+      staff: matchingStaff,
+      classes: matchingClasses,
+      invoices: matchingInvoices,
+      exams: matchingExams,
+      subjects: matchingSubjects,
+      announcements: matchingAnnouncements,
+      libraryBooks: matchingBooks,
+      cmds: matchingCmds,
+    };
+  }, [
+    query,
+    students,
+    staff,
+    navigationPages,
+    classAttendance,
+    invoices,
+    exams,
+    subjects,
+    announcements,
+    libraryBooks,
+    commands,
+    allowedScreenSet,
+  ]);
 
   /**
    * The role-scoped prompts shown when the box is empty.
@@ -707,12 +937,6 @@ function CommandPaletteBody({
    * people, commands and prompts as a single sequence, which is what a user
    * expects from a spotlight palette. Enter opens whichever row is
    * highlighted.
-   *
-   * Every row that is rendered must also appear here, in the same order. When
-   * one did not — the role-scoped prompts were rendered without a `flat` entry
-   * — `findIndex` returned -1 for all of them, so hovering any single prompt
-   * called `setActive(-1)` and every prompt matched `-1 === -1` and lit up at
-   * once. The arrow keys could not reach them either.
    */
   const flat = useMemo(() => {
     const out: { key: string; run: () => void }[] = [];
@@ -729,19 +953,124 @@ function CommandPaletteBody({
           },
         });
       }
+      for (const item of results.cmds) {
+        out.push({
+          key: `c-${item.label}`,
+          run: () => {
+            if (item.view) {
+              onNavigate(item.view);
+              onClose();
+            } else {
+              setQuery(item.label);
+              void runAssistant(item.label);
+            }
+          },
+        });
+      }
+      return out;
     }
 
-    for (const student of results.people) {
+    // When query is non-empty:
+    // 1. Pages & Navigation
+    for (const page of results.pages) {
       out.push({
-        key: `p-${student.id}`,
+        key: `nav-${page.view}`,
         run: () => {
-          // Pass the id through so the directory opens this profile directly
-          // instead of landing on the unfiltered list.
-          onNavigate("Students", student.id);
+          onNavigate(page.view);
           onClose();
         },
       });
     }
+
+    // 2. Students -> opens right slide!
+    for (const student of results.students) {
+      out.push({
+        key: `p-${student.id}`,
+        run: () => {
+          onNavigate("Students", student.id, "student");
+          onClose();
+        },
+      });
+    }
+
+    // 3. Staff -> opens staff slide drawer!
+    for (const member of results.staff) {
+      out.push({
+        key: `st-${member.id}`,
+        run: () => {
+          onNavigate("Staff", member.id, "staff");
+          onClose();
+        },
+      });
+    }
+
+    // 4. Classes
+    for (const cls of results.classes) {
+      out.push({
+        key: `cls-${cls.id}`,
+        run: () => {
+          onNavigate("Attendance");
+          onClose();
+        },
+      });
+    }
+
+    // 5. Fee Invoices
+    for (const inv of results.invoices) {
+      out.push({
+        key: `inv-${inv.id}`,
+        run: () => {
+          onNavigate("Fees & Finance");
+          onClose();
+        },
+      });
+    }
+
+    // 6. Exams
+    for (const exam of results.exams) {
+      out.push({
+        key: `ex-${exam.id}`,
+        run: () => {
+          onNavigate("Examinations");
+          onClose();
+        },
+      });
+    }
+
+    // 7. Subjects
+    for (const sub of results.subjects) {
+      out.push({
+        key: `sub-${sub.id}`,
+        run: () => {
+          onNavigate("Academics");
+          onClose();
+        },
+      });
+    }
+
+    // 8. Announcements
+    for (const a of results.announcements) {
+      out.push({
+        key: `ann-${a.id}`,
+        run: () => {
+          onNavigate("Overview");
+          onClose();
+        },
+      });
+    }
+
+    // 9. Library Books
+    for (const b of results.libraryBooks) {
+      out.push({
+        key: `lib-${b.id}`,
+        run: () => {
+          onNavigate("Academics");
+          onClose();
+        },
+      });
+    }
+
+    // 10. Quick Actions / Commands
     for (const item of results.cmds) {
       out.push({
         key: `c-${item.label}`,
@@ -756,12 +1085,15 @@ function CommandPaletteBody({
         },
       });
     }
-    if (query.trim().length >= 3) {
+
+    // 11. AI Assistant query
+    if (query.trim().length >= 2) {
       out.push({
         key: "ai",
         run: () => void runAssistant(query.trim()),
       });
     }
+
     return out;
   }, [results, query, suggestions, onNavigate, onClose]);
 
@@ -875,7 +1207,7 @@ function CommandPaletteBody({
   }) => {
     const label = screenLabelByName(action.screen);
     if (!label) return;
-    if (action.studentId) onNavigate(label, action.studentId);
+    if (action.studentId) onNavigate(label, action.studentId, "student");
     else onNavigate(label);
     onClose();
   };
@@ -939,7 +1271,7 @@ function CommandPaletteBody({
             placeholder={
               hasAnswer
                 ? "Ask a follow-up, or edit and resend…"
-                : "Search students, or ask the assistant anything…"
+                : "Search students, staff, classes, fees, pages, or ask anything…"
             }
           />
           {hasAnswer && (
@@ -1081,17 +1413,49 @@ function CommandPaletteBody({
               search rather than a separate screen that replaces it — which is
               what let the user keep picking things to search for while an
               answer was being read. */}
-          {results.people.length > 0 && (
+          {/* 1. Pages & Navigation */}
+          {results.pages.length > 0 && (
             <div className="command-group">
-              <p className="command-heading">People</p>
-              {results.people.map(student => {
+              <p className="command-heading">Pages &amp; Navigation</p>
+              {results.pages.map(page => {
+                const idx = flat.findIndex(f => f.key === `nav-${page.view}`);
+                return (
+                  <button
+                    key={`nav-${page.view}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    <span className="command-icon">
+                      <page.icon size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block font-medium text-[var(--text-secondary)]">
+                        {page.label}
+                      </span>
+                      <span className="block truncate text-[12.5px] text-[var(--text-muted)]">
+                        {page.detail}
+                      </span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 2. Students */}
+          {results.students.length > 0 && (
+            <div className="command-group">
+              <p className="command-heading">Students</p>
+              {results.students.map(student => {
                 const idx = flat.findIndex(f => f.key === `p-${student.id}`);
                 return (
                   <button
-                    key={student.id}
+                    key={`p-${student.id}`}
                     className={`command-item ${idx === active ? "active" : ""}`}
                     onMouseEnter={() => setActive(idx)}
-                    onClick={flat[idx].run}
+                    onClick={flat[idx]?.run}
                   >
                     <span
                       className={`avatar avatar-sm ${avatarTones[student.tone]}`}
@@ -1104,7 +1468,7 @@ function CommandPaletteBody({
                       </span>
                       <span className="block text-[12.5px] text-[var(--text-muted)]">
                         {student.grade} · Section {student.section} · Attendance{" "}
-                        {student.attendance}%
+                        {student.attendance}%{student.usn ? ` · ${student.usn}` : ""}
                       </span>
                     </span>
                     <ChevronRight
@@ -1117,55 +1481,274 @@ function CommandPaletteBody({
             </div>
           )}
 
+          {/* 3. Staff */}
+          {results.staff.length > 0 && (
+            <div className="command-group">
+              <p className="command-heading">Staff &amp; Educators</p>
+              {results.staff.map(member => {
+                const idx = flat.findIndex(f => f.key === `st-${member.id}`);
+                return (
+                  <button
+                    key={`st-${member.id}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    {member.photo_url ? (
+                      <img
+                        className="avatar avatar-sm"
+                        src={member.photo_url}
+                        alt=""
+                      />
+                    ) : (
+                      <span
+                        className={`avatar avatar-sm ${avatarTones[member.tone]}`}
+                      >
+                        {member.initials}
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate font-medium text-[var(--text-secondary)]">
+                        {member.name}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">
+                        {member.role} · {member.department}
+                        {member.usn ? ` · ${member.usn}` : ""}
+                      </span>
+                    </span>
+                    <ChevronRight
+                      size={15}
+                      className="text-[var(--text-muted)]"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 4. Classes & Classrooms */}
+          {results.classes.length > 0 && (
+            <div className="command-group">
+              <p className="command-heading">Classes &amp; Attendance</p>
+              {results.classes.map(cls => {
+                const idx = flat.findIndex(f => f.key === `cls-${cls.id}`);
+                return (
+                  <button
+                    key={`cls-${cls.id}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    <span className="command-icon">
+                      <ClipboardCheck size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block font-medium text-[var(--text-secondary)]">
+                        {cls.label}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">
+                        {cls.total} pupils · {cls.value}% attendance
+                        {cls.teacher ? ` · Teacher: ${cls.teacher}` : ""}
+                      </span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 5. Fees & Invoices */}
+          {results.invoices.length > 0 && (
+            <div className="command-group">
+              <p className="command-heading">Fees &amp; Invoices</p>
+              {results.invoices.map(inv => {
+                const idx = flat.findIndex(f => f.key === `inv-${inv.id}`);
+                return (
+                  <button
+                    key={`inv-${inv.id}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    <span className="command-icon">
+                      <IndianRupee size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block font-medium text-[var(--text-secondary)]">
+                        Invoice · {inv.student}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">
+                        ₹{inv.amount.toLocaleString("en-IN")} · {inv.status}
+                        {inv.due_date ? ` · Due ${inv.due_date}` : ""}
+                      </span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 6. Exams & Subjects */}
+          {(results.exams.length > 0 || results.subjects.length > 0) && (
+            <div className="command-group">
+              <p className="command-heading">Examinations &amp; Subjects</p>
+              {results.exams.map(exam => {
+                const idx = flat.findIndex(f => f.key === `ex-${exam.id}`);
+                return (
+                  <button
+                    key={`ex-${exam.id}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    <span className="command-icon">
+                      <FileText size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block font-medium text-[var(--text-secondary)]">
+                        {exam.name} – {exam.subject}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">
+                        {exam.grade} · {exam.date} · {exam.status}
+                      </span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                );
+              })}
+              {results.subjects.map(sub => {
+                const idx = flat.findIndex(f => f.key === `sub-${sub.id}`);
+                return (
+                  <button
+                    key={`sub-${sub.id}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    <span className="command-icon">
+                      <BookOpen size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block font-medium text-[var(--text-secondary)]">
+                        Subject: {sub.name}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">
+                        Classes {sub.classes} · Teacher: {sub.teacher}
+                      </span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 7. Announcements */}
+          {results.announcements.length > 0 && (
+            <div className="command-group">
+              <p className="command-heading">Announcements</p>
+              {results.announcements.map(a => {
+                const idx = flat.findIndex(f => f.key === `ann-${a.id}`);
+                return (
+                  <button
+                    key={`ann-${a.id}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    <span className="command-icon">
+                      <Bell size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate font-medium text-[var(--text-secondary)]">
+                        {a.title}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">
+                        For {a.audience} · {a.date}
+                      </span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 8. Library Books */}
+          {results.libraryBooks.length > 0 && (
+            <div className="command-group">
+              <p className="command-heading">Library Books</p>
+              {results.libraryBooks.map(b => {
+                const idx = flat.findIndex(f => f.key === `lib-${b.id}`);
+                return (
+                  <button
+                    key={`lib-${b.id}`}
+                    className={`command-item ${idx === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={flat[idx]?.run}
+                  >
+                    <span className="command-icon">
+                      <BookMarked size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      <span className="block truncate font-medium text-[var(--text-secondary)]">
+                        {b.title}
+                      </span>
+                      <span className="block text-[12.5px] text-[var(--text-muted)]">
+                        by {b.author} · {b.category} · {b.status}
+                      </span>
+                    </span>
+                    <span className="command-shortcut">↵</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="command-group">
             <p className="command-heading">
               {query
-                ? "Quick actions"
+                ? "Quick actions & Assistant"
                 : hasAnswer
                   ? "Ask something else"
                   : "Ask the assistant"}
             </p>
             {query ? (
-              // When there is a query, show only the explicit "ask" button so the
-              // keyboard user Always knows which row sends the question.
+              // When there is a query, show only matching commands plus the AI ask button
               <>
-                {results.cmds
-                  .filter(item =>
-                    `${item.label} ${item.detail}`
-                      .toLowerCase()
-                      .includes(query.toLowerCase())
-                  )
-                  .map(item => {
-                    const idx = flat.findIndex(
-                      f => f.key === `c-${item.label}`
-                    );
-                    return (
-                      <button
-                        key={item.label}
-                        className={`command-item ${idx === active ? "active" : ""}`}
-                        onMouseEnter={() => setActive(idx)}
-                        onClick={flat[idx].run}
-                      >
-                        <span className="command-icon">
-                          <item.icon size={16} />
+                {results.cmds.map(item => {
+                  const idx = flat.findIndex(
+                    f => f.key === `c-${item.label}`
+                  );
+                  return (
+                    <button
+                      key={item.label}
+                      className={`command-item ${idx === active ? "active" : ""}`}
+                      onMouseEnter={() => setActive(idx)}
+                      onClick={flat[idx]?.run}
+                    >
+                      <span className="command-icon">
+                        <item.icon size={16} />
+                      </span>
+                      <span className="min-w-0 flex-1 text-left">
+                        <span className="block font-medium text-[var(--text-secondary)]">
+                          {item.label}
                         </span>
-                        <span className="min-w-0 flex-1 text-left">
-                          <span className="block font-medium text-[var(--text-secondary)]">
-                            {item.label}
-                          </span>
-                          <span className="block text-[12.5px] text-[var(--text-muted)]">
-                            {item.detail}
-                          </span>
+                        <span className="block text-[12.5px] text-[var(--text-muted)]">
+                          {item.detail}
                         </span>
-                        {item.view ? (
-                          <span className="command-shortcut">↵</span>
-                        ) : (
-                          <Sparkles size={13} className="text-[var(--brand)]" />
-                        )}
-                      </button>
-                    );
-                  })}
-                {query.trim().length >= 3 && (
+                      </span>
+                      {item.view ? (
+                        <span className="command-shortcut">↵</span>
+                      ) : (
+                        <Sparkles size={13} className="text-[var(--brand)]" />
+                      )}
+                    </button>
+                  );
+                })}
+                {query.trim().length >= 2 && (
                   <button
                     className={`command-item ${active === flat.length - 1 ? "active" : ""}`}
                     onMouseEnter={() => setActive(flat.length - 1)}
@@ -1223,7 +1806,7 @@ function CommandPaletteBody({
                       key={item.label}
                       className={`command-item ${idx === active ? "active" : ""}`}
                       onMouseEnter={() => setActive(idx)}
-                      onClick={flat[idx].run}
+                      onClick={flat[idx]?.run}
                     >
                       <span className="command-icon">
                         <item.icon size={16} />
@@ -1248,8 +1831,8 @@ function CommandPaletteBody({
             )}
           </div>
 
-          {results.people.length === 0 &&
-            results.cmds.length === 0 &&
+          {query &&
+            flat.length === 0 &&
             !hasAnswer && (
               <div className="empty-state py-12">
                 <Search size={22} />
@@ -2551,14 +3134,25 @@ function SettingToggle({
 function StaffView({
   onBack,
   onNavigate,
+  openStaffId,
+  onStaffOpened,
 }: {
   onBack: () => void;
   onNavigate?: (view: string) => void;
+  openStaffId?: string | null;
+  onStaffOpened?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All staff");
   const [showDialog, setShowDialog] = useState(false);
   const [selected, setSelected] = useState<RowId | null>(null);
+
+  useEffect(() => {
+    if (openStaffId) {
+      setSelected(openStaffId);
+      onStaffOpened?.();
+    }
+  }, [openStaffId, onStaffOpened]);
   const {
     rows: staff,
     loading: staffViewLoading,
@@ -5476,6 +6070,8 @@ export default function Home() {
    * Passing the id here lets the directory open that profile directly.
    */
   const pendingStudentRef = useRef<RowId | null>(null);
+  const pendingStaffRef = useRef<RowId | null>(null);
+  const [staffKey, setStaffKey] = useState(0);
 
   // A role that resolves late, or a deep link to a screen this role cannot
   // open, lands on Overview rather than rendering a view it should not see.
@@ -5549,7 +6145,11 @@ export default function Home() {
     return groups;
   }, [visibleNavGroups, allowedScreenSet]);
 
-  const navigate = (view: string, studentId?: RowId) => {
+  const navigate = (
+    view: string,
+    entityId?: RowId,
+    entityType?: "student" | "staff"
+  ) => {
     if (!allowedScreenSet.has(view)) {
       toast.error(
         `${roleLabel(currentUser?.id, currentUser?.role)}s cannot open ${view}.`,
@@ -5557,8 +6157,15 @@ export default function Home() {
       );
       return;
     }
-    pendingStudentRef.current = studentId ?? null;
-    if (studentId != null) setStudentsKey(k => k + 1);
+    if (view === "Students" || entityType === "student") {
+      pendingStudentRef.current = entityId ?? null;
+      if (entityId != null) setStudentsKey(k => k + 1);
+    } else if (view === "Staff" || entityType === "staff") {
+      pendingStaffRef.current = entityId ?? null;
+      if (entityId != null) setStaffKey(k => k + 1);
+    } else {
+      pendingStudentRef.current = entityId ?? null;
+    }
     setActiveView(view);
     setMobileNav(false);
     smoothScrollTo(0);
@@ -5608,8 +6215,11 @@ export default function Home() {
     if (activeView === "Students") {
       return (
         <StudentDirectory
-          openStudentId={null}
-          onStudentOpened={() => {}}
+          key={studentsKey}
+          openStudentId={pendingStudentRef.current ? String(pendingStudentRef.current) : null}
+          onStudentOpened={() => {
+            pendingStudentRef.current = null;
+          }}
         />
       );
     }
@@ -5632,6 +6242,11 @@ export default function Home() {
     if (activeView === "Staff")
       return (
         <StaffView
+          key={staffKey}
+          openStaffId={pendingStaffRef.current ? String(pendingStaffRef.current) : null}
+          onStaffOpened={() => {
+            pendingStaffRef.current = null;
+          }}
           onBack={() => navigate("Overview")}
           onNavigate={navigate}
         />
