@@ -67,5 +67,8 @@
       "destination": "/:path*",
       "permanent": true
     }
+  ],
+  "regions": [
+    "bom1"
   ]
 }

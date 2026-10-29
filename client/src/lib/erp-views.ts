@@ -1293,10 +1293,23 @@ async function loadPeople(): Promise<PeopleRow[]> {
     const name = String(s.name ?? profile?.full_name ?? "Staff Member");
     const email = String(s.email ?? profile?.email ?? "");
     const des = String(s.designation ?? "");
-    const isAdm =
-      /principal|vice principal|admin|leadership|coordinator|director/i.test(des) ||
-      profile?.role === "admin";
-    const role = isAdm ? "admin" : "teacher";
+    const isPrincipal = /principal/i.test(des) && !/vice/i.test(des);
+    const isAdministrativeStaff =
+      /vice\s*principal|coordinator|director|manager|office|librarian|admin/i.test(des) ||
+      /leadership|library|administration|office/i.test(String(s.department ?? "")) ||
+      (profile?.role === "admin" && !isPrincipal) ||
+      profile?.role === "staff";
+
+    let role = "teacher";
+    let access = "Teacher";
+    if (isPrincipal) {
+      role = "admin";
+      access = "Principal (Admin)";
+    } else if (isAdministrativeStaff && !/teacher/i.test(des)) {
+      role = "staff";
+      access = "Administrative Staff";
+    }
+
     const tone = toneFor(id);
     const username = String(
       (profile as { username?: string })?.username ||
@@ -1304,7 +1317,9 @@ async function loadPeople(): Promise<PeopleRow[]> {
       email.split("@")[0] ||
       name.toLowerCase().replace(/[^a-z0-9]/g, ".")
     );
-    const department = String(s.department ?? (isAdm ? "Administration" : "Academics"));
+    const department = String(
+      s.department ?? (isPrincipal ? "School Leadership" : role === "staff" ? "Administration" : "Academics")
+    );
 
     out.push({
       id,
@@ -1315,7 +1330,7 @@ async function loadPeople(): Promise<PeopleRow[]> {
       department,
       designation: des,
       role,
-      access: isAdm ? "Administrator" : "Teacher",
+      access,
       tone,
       protected: false,
     });
@@ -1330,7 +1345,9 @@ async function loadPeople(): Promise<PeopleRow[]> {
 
     const name = String(p.full_name ?? String(p.email ?? "").split("@")[0] ?? "Staff");
     const email = String(p.email ?? "");
-    const role = p.role === "admin" || p.role === "super_admin" ? "admin" : "teacher";
+    const isSuper = isSuperAdminId(pId) || String(p.email ?? "").toLowerCase().includes("kaizxark");
+    const role = p.role === "teacher" ? "teacher" : "staff";
+    const access = isSuper ? "Super Admin" : role === "teacher" ? "Teacher" : "Administrative Staff";
     const tone = toneFor(pId);
     const username = String((p as { username?: string })?.username || email.split("@")[0] || "user");
 
@@ -1340,12 +1357,12 @@ async function loadPeople(): Promise<PeopleRow[]> {
       initials: initialsOf(name.split(" ")[0] ?? "", name.split(" ").slice(1).join(" ")),
       email,
       username,
-      department: role === "admin" ? "Administration" : "Academics",
-      designation: role === "admin" ? "Administrator" : "Faculty Teacher",
+      department: "Administration",
+      designation: isSuper ? "Super Administrator" : "Administrative Staff",
       role,
-      access: role === "admin" ? "Administrator" : "Teacher",
+      access,
       tone,
-      protected: isSuperAdminId(pId),
+      protected: isSuper,
     });
   }
 

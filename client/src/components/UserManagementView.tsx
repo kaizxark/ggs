@@ -161,9 +161,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
   const [revealed, setRevealed] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
 
-  // Staff Tab: Only 2 types of staff: Teacher & Administrator
+  // Staff Tab: Principal is the only Admin, others are Teacher or Administrative Staff
   const [staffQuery, setStaffQuery] = useState("");
-  const [staffRoleFilter, setStaffRoleFilter] = useState<"all" | "teacher" | "admin">("all");
+  const [staffRoleFilter, setStaffRoleFilter] = useState<
+    "all" | "teacher" | "staff" | "principal"
+  >("all");
 
   // Student Tab: Strictly Students with School Division filters
   const [studentQuery, setStudentQuery] = useState("");
@@ -171,11 +173,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
     "all" | "primary" | "middle" | "high" | "missing"
   >("all");
 
-  // Invite Modal State: Only Teacher & Administrator
+  // Invite Modal State: Only Teacher & Administrative Staff (Principal is already appointed)
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState<"teacher" | "admin">("teacher");
+  const [inviteRole, setInviteRole] = useState<"teacher" | "staff">("teacher");
   const [teacherSubject, setTeacherSubject] = useState<string>("Mathematics");
   const [assignedGrades, setAssignedGrades] = useState<string[]>(["Grade 9", "Grade 10"]);
   const [classTeacherOf, setClassTeacherOf] = useState<string>("none");
@@ -198,9 +200,9 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
     password: string;
   } | null>(null);
 
-  // Edit Role & Scope Modal State: Only Teacher & Administrator
+  // Edit Role & Scope Modal State
   const [editingPerson, setEditingPerson] = useState<PeopleRow | null>(null);
-  const [editRole, setEditRole] = useState<"teacher" | "admin">("teacher");
+  const [editRole, setEditRole] = useState<"teacher" | "staff" | "admin">("teacher");
   const [editSubject, setEditSubject] = useState("Mathematics");
   const [editGrades, setEditGrades] = useState<string[]>([]);
   const [editClassTeacher, setEditClassTeacher] = useState<string>("none");
@@ -370,12 +372,21 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
   const copyStaffSlip = (person: PeopleRow, staffAcc?: PortalAccountRow) => {
     const username = staffAcc?.username || person.username;
     const password = staffAcc?.password || "Demo@123456";
-    const roleLabel = person.role === "admin" ? "ADMINISTRATOR" : "TEACHER";
+    const isPrincipal =
+      (/principal/i.test(person.designation ?? "") && !/vice/i.test(person.designation ?? "")) ||
+      person.role === "admin";
+    const roleLabel = isPrincipal
+      ? "PRINCIPAL (ADMIN)"
+      : person.role === "staff" || person.access === "Administrative Staff"
+      ? "ADMINISTRATIVE STAFF"
+      : "TEACHER";
     const scope =
       person.designation ||
       staffAcc?.detail ||
-      (person.role === "admin"
-        ? "Administrator · School Management & Operations"
+      (isPrincipal
+        ? "Principal · Overall School Administration"
+        : person.role === "staff"
+        ? "Administrative Staff · Operations & Records"
         : "Teacher · Classroom Teaching & Academics");
 
     const slip = [
@@ -384,7 +395,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       `======================================`,
       `Staff Member: ${person.name}`,
       `Staff Role: ${roleLabel}`,
-      `Department: ${person.department || (person.role === "admin" ? "Administration" : "Academics")}`,
+      `Department: ${person.department || (isPrincipal ? "School Leadership" : person.role === "staff" ? "Administration" : "Academics")}`,
       `Assigned Scope: ${scope}`,
       `Portal Login URL: https://ggs-erp.vercel.app/login`,
       `Username / USN: ${username}`,
@@ -424,8 +435,8 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       } else {
         computedDesignation =
           adminModules.length > 0
-            ? `Administrator · ${adminModules.join(", ")}`
-            : "Administrator · Full Modules Access";
+            ? `Administrative Staff · ${adminModules.join(", ")}`
+            : "Administrative Staff · Operations & Records";
       }
 
       const res = await fetch("/api/invite", {
@@ -444,7 +455,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
           subject: inviteRole === "teacher" ? teacherSubject : undefined,
           assignedClasses: inviteRole === "teacher" ? assignedGrades : undefined,
           classTeacherOf: inviteRole === "teacher" ? classTeacherOf : undefined,
-          adminModules: inviteRole === "admin" ? adminModules : undefined,
+          adminModules: inviteRole === "staff" ? adminModules : undefined,
           organisationId: me.orgId,
         }),
       });
@@ -455,7 +466,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       setIssuedSlip({
         name: inviteName.trim(),
         email: String(result.email ?? inviteEmail.trim()),
-        role: inviteRole === "admin" ? "Administrator" : "Teacher",
+        role: inviteRole === "staff" ? "Administrative Staff" : "Teacher",
         department: inviteRole === "teacher" ? "Academics" : "Administration",
         designation: computedDesignation,
         username: String(result.username ?? inviteEmail.split("@")[0]),
@@ -476,10 +487,13 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
   const openEditModal = (person: PeopleRow) => {
     setEditingPerson(person);
-    const isAdm = person.role === "admin";
-    setEditRole(isAdm ? "admin" : "teacher");
+    const isPrincipal =
+      (/principal/i.test(person.designation ?? "") && !/vice/i.test(person.designation ?? "")) ||
+      person.role === "admin";
+    const isAdmStaff = person.role === "staff" || person.access === "Administrative Staff";
+    setEditRole(isPrincipal ? "admin" : isAdmStaff ? "staff" : "teacher");
     const des = person.designation || "";
-    if (!isAdm) {
+    if (!isPrincipal && !isAdmStaff) {
       const subjMatch = COMMON_SUBJECTS.find(s => des.includes(s));
       setEditSubject(subjMatch || "Mathematics");
       const gradesFound = ALL_GRADES.filter(g =>
@@ -498,9 +512,16 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
     if (!editingPerson) return;
     setSavingRole(true);
     try {
+      const isPrincipal =
+        (/principal/i.test(editingPerson.designation ?? "") &&
+          !/vice/i.test(editingPerson.designation ?? "")) ||
+        editingPerson.role === "admin";
+
+      const targetRole = isPrincipal ? "admin" : editRole === "teacher" ? "teacher" : "staff";
+
       const { error: profileError } = await supabase
         .from("profiles")
-        .update({ role: editRole })
+        .update({ role: targetRole })
         .eq("id", editingPerson.id);
       if (profileError) throw profileError;
 
@@ -515,18 +536,24 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
           parts.push(`Class Teacher ${editClassTeacher.replace(/^Grade\s*/i, "")}`);
         }
         newDes = parts.join(" · ");
+      } else if (isPrincipal) {
+        newDes = editingPerson.designation || "Principal";
       } else {
         newDes =
           editModules.length > 0
-            ? `Administrator · ${editModules.join(", ")}`
-            : "Administrator · Full Access";
+            ? `Administrative Staff · ${editModules.join(", ")}`
+            : "Administrative Staff · Operations & Records";
       }
 
       await supabase
         .from("staff")
         .update({
           designation: newDes,
-          department: editRole === "teacher" ? "Academics" : "Administration",
+          department: isPrincipal
+            ? "School Leadership"
+            : editRole === "teacher"
+            ? "Academics"
+            : "Administration",
         })
         .eq("email", editingPerson.email);
 
@@ -543,13 +570,19 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
   /* ---------------------------- Filtered Views ---------------------------- */
 
-  // Staff Table Filter: Only Teacher & Administrator
+  // Staff Table Filter: Principal (Admin), Administrative Staff, Teachers
   const filteredStaff = useMemo(() => {
     const q = staffQuery.trim().toLowerCase();
     return nonSuperAdminStaff.filter(p => {
-      const isAdm = p.role === "admin";
-      if (staffRoleFilter === "admin" && !isAdm) return false;
-      if (staffRoleFilter === "teacher" && isAdm) return false;
+      const isPrincipal =
+        (/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) ||
+        p.role === "admin";
+      const isAdmStaff = p.role === "staff" || p.access === "Administrative Staff";
+      const isTeacher = p.role === "teacher" || (!isPrincipal && !isAdmStaff);
+
+      if (staffRoleFilter === "principal" && !isPrincipal) return false;
+      if (staffRoleFilter === "staff" && !isAdmStaff) return false;
+      if (staffRoleFilter === "teacher" && !isTeacher) return false;
       if (!q) return true;
 
       const staffAcc =
@@ -604,8 +637,24 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
   const studentPager = usePagination(filteredStudents, 10);
 
-  const adminCount = nonSuperAdminStaff.filter(p => p.role === "admin").length;
-  const teacherCount = nonSuperAdminStaff.filter(p => p.role !== "admin").length;
+  const principalCount = nonSuperAdminStaff.filter(
+    p =>
+      (/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) ||
+      p.role === "admin"
+  ).length;
+  const adminStaffCount = nonSuperAdminStaff.filter(
+    p =>
+      !(
+        (/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) ||
+        p.role === "admin"
+      ) && (p.role === "staff" || p.access === "Administrative Staff")
+  ).length;
+  const teacherCount = nonSuperAdminStaff.filter(
+    p =>
+      p.role === "teacher" ||
+      (!((/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) || p.role === "admin") &&
+        !(p.role === "staff" || p.access === "Administrative Staff"))
+  ).length;
 
   return (
     <div className="page-stack space-y-8 pb-12">
@@ -653,27 +702,47 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
       {/* Top Metric Cards with Generous Spacing */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Metric 1: Administrators */}
+        {/* Metric 1: Principal (Admin) */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-              Administrators
+              School Principal
             </span>
-            <span className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
-              <ShieldCheck size={20} />
+            <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
+              <Shield size={20} />
             </span>
           </div>
           <div className="my-3">
             <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
-              {adminCount}
+              {principalCount}
             </div>
             <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Admissions, finance & school module administration
+              Dr. Meera Iyer · Sole school administrator & authority
             </p>
           </div>
         </div>
 
-        {/* Metric 2: Teachers */}
+        {/* Metric 2: Administrative Staff */}
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+              Administrative Staff
+            </span>
+            <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
+              <Building2 size={20} />
+            </span>
+          </div>
+          <div className="my-3">
+            <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+              {adminStaffCount}
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+              Vice Principal, exam coordination & school operations
+            </p>
+          </div>
+        </div>
+
+        {/* Metric 3: Teachers */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
@@ -688,7 +757,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               {teacherCount}
             </div>
             <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Assigned classes, subjects & homeroom attendance
+              Classroom teachers across all grades & subjects
             </p>
           </div>
         </div>
@@ -810,22 +879,23 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {/* Roles: All / Teachers / Administrators */}
-              <div className="segmented-control h-11 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
+              {/* Roles: All / Teachers / Administrative Staff / Principal */}
+              <div className="segmented-control h-11 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1 overflow-x-auto no-scrollbar">
                 {[
                   { key: "all", label: `All (${nonSuperAdminStaff.length})` },
                   { key: "teacher", label: `Teachers (${teacherCount})` },
-                  { key: "admin", label: `Admins (${adminCount})` },
+                  { key: "staff", label: `Administrative Staff (${adminStaffCount})` },
+                  { key: "principal", label: `Principal (${principalCount})` },
                 ].map(tab => (
                   <button
                     key={tab.key}
-                    className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                       staffRoleFilter === tab.key
                         ? "bg-[var(--border-accent)] text-[var(--text-primary)] font-bold shadow-sm"
                         : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                     }`}
                     onClick={() =>
-                      setStaffRoleFilter(tab.key as "all" | "teacher" | "admin")
+                      setStaffRoleFilter(tab.key as "all" | "teacher" | "staff" | "principal")
                     }
                   >
                     {tab.label}
@@ -896,7 +966,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                   </tr>
                 ) : (
                   staffPager.pageRows.map(person => {
-                    const isAdm = person.role === "admin";
+                    const isPrincipal =
+                      (/principal/i.test(person.designation ?? "") &&
+                        !/vice/i.test(person.designation ?? "")) ||
+                      person.role === "admin";
+                    const isAdmStaff = person.role === "staff" || person.access === "Administrative Staff";
                     const staffAcc =
                       staffAccountsMap.get(person.id) ||
                       staffAccountsMap.get(person.email.toLowerCase()) ||
@@ -909,8 +983,10 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                     const scopeText =
                       person.designation ||
                       staffAcc?.detail ||
-                      (isAdm
-                        ? "Administrator · Full Modules Access"
+                      (isPrincipal
+                        ? "Principal · School Head & Overall Administration"
+                        : isAdmStaff
+                        ? "Administrative Staff · Operations & Records"
                         : "Teacher · Classroom Academics");
 
                     return (
@@ -937,22 +1013,24 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                           </div>
                         </td>
 
-                        {/* Role: Teacher or Administrator */}
+                        {/* Role: Principal (Admin), Administrative Staff, or Teacher */}
                         <td className="py-4.5 px-6">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                              isAdm
-                                ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                                : "bg-teal-500/10 text-teal-400 border-teal-500/20"
-                            }`}
-                          >
-                            {isAdm ? (
-                              <ShieldCheck size={13} className="text-blue-400" />
-                            ) : (
+                          {isPrincipal ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-purple-500/10 text-purple-400 border-purple-500/25">
+                              <Shield size={13} className="text-purple-400" />
+                              <span>Principal (Admin)</span>
+                            </span>
+                          ) : isAdmStaff ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-sky-500/10 text-sky-400 border-sky-500/25">
+                              <Building2 size={13} className="text-sky-400" />
+                              <span>Administrative Staff</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-teal-500/10 text-teal-400 border-teal-500/20">
                               <BookOpen size={13} className="text-teal-400" />
-                            )}
-                            <span>{isAdm ? "Administrator" : "Teacher"}</span>
-                          </span>
+                              <span>Teacher</span>
+                            </span>
+                          )}
                         </td>
 
                         {/* Assigned Scope & Classes */}
@@ -965,7 +1043,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                               {scopeText}
                             </span>
                             <span className="text-[11px] text-[var(--text-muted)] block truncate">
-                              Dept: {person.department || (isAdm ? "Administration" : "Academics")}
+                              Dept: {person.department || (isPrincipal ? "School Leadership" : isAdmStaff ? "Administration" : "Academics")}
                             </span>
                           </div>
                         </td>
@@ -1369,26 +1447,26 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         </div>
                       </label>
 
-                      {/* Administrator Card */}
+                      {/* Administrative Staff Card */}
                       <label
                         className={`flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${
-                          inviteRole === "admin"
-                            ? "border-blue-500 bg-blue-500/10 shadow-md text-[var(--text-primary)]"
+                          inviteRole === "staff"
+                            ? "border-sky-500 bg-sky-500/10 shadow-md text-[var(--text-primary)]"
                             : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-strong)] text-[var(--text-secondary)]"
                         }`}
                       >
                         <input
                           type="radio"
                           name="inviteRole"
-                          value="admin"
-                          checked={inviteRole === "admin"}
-                          onChange={() => setInviteRole("admin")}
+                          value="staff"
+                          checked={inviteRole === "staff"}
+                          onChange={() => setInviteRole("staff")}
                           className="mt-1"
                         />
                         <div className="space-y-1">
                           <strong className="block text-base font-bold flex items-center gap-2">
-                            <ShieldCheck size={17} className="text-blue-400" />
-                            Administrator
+                            <Building2 size={17} className="text-sky-400" />
+                            Administrative Staff
                           </strong>
                           <span className="text-xs text-[var(--text-muted)] block leading-relaxed">
                             Access to school operations: Admissions, Finance, Staff directory, Academics & Timetables.
@@ -1539,15 +1617,15 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                     </div>
                   )}
 
-                  {/* DYNAMIC SCOPE: ADMINISTRATOR MODULES */}
-                  {inviteRole === "admin" && (
-                    <div className="p-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 space-y-4">
-                      <div className="flex items-center gap-2.5 text-sm font-bold text-blue-400 pb-2 border-b border-blue-500/20">
-                        <ShieldCheck size={17} />
-                        <span>Administrator Delegated Modules & Permissions</span>
+                  {/* DYNAMIC SCOPE: ADMINISTRATIVE STAFF MODULES */}
+                  {inviteRole === "staff" && (
+                    <div className="p-6 rounded-2xl border border-sky-500/20 bg-sky-500/5 space-y-4">
+                      <div className="flex items-center gap-2.5 text-sm font-bold text-sky-400 pb-2 border-b border-sky-500/20">
+                        <Building2 size={17} />
+                        <span>Administrative Staff Delegated Modules & Permissions</span>
                       </div>
                       <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                        Select which school administrative functions this administrator will oversee:
+                        Select which school administrative functions this staff member will oversee (Principal holds overall authority):
                       </p>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
@@ -1763,34 +1841,49 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Select Staff Role
                 </label>
-                <div className="grid grid-cols-2 gap-3.5">
-                  {[
-                    { id: "teacher", label: "Teacher", icon: BookOpen },
-                    { id: "admin", label: "Administrator", icon: ShieldCheck },
-                  ].map(r => {
-                    const Icon = r.icon;
-                    return (
-                      <label
-                        key={r.id}
-                        className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer text-xs font-bold transition-all ${
-                          editRole === r.id
-                            ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--text-primary)] shadow-sm"
-                            : "border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="editRole"
-                          value={r.id}
-                          checked={editRole === r.id}
-                          onChange={() => setEditRole(r.id as "teacher" | "admin")}
-                        />
-                        <Icon size={16} className="text-[var(--brand)]" />
-                        <span>{r.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
+                {/principal/i.test(editingPerson.designation ?? "") &&
+                !/vice/i.test(editingPerson.designation ?? "") ? (
+                  <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center gap-3">
+                    <Shield size={20} className="text-purple-400 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-[var(--text-primary)]">
+                        School Principal (Admin)
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Dr. Meera Iyer holds the primary school leadership and overall administrative authority.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3.5">
+                    {[
+                      { id: "teacher", label: "Teacher", icon: BookOpen },
+                      { id: "staff", label: "Administrative Staff", icon: Building2 },
+                    ].map(r => {
+                      const Icon = r.icon;
+                      return (
+                        <label
+                          key={r.id}
+                          className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer text-xs font-bold transition-all ${
+                            editRole === r.id
+                              ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--text-primary)] shadow-sm"
+                              : "border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="editRole"
+                            value={r.id}
+                            checked={editRole === r.id}
+                            onChange={() => setEditRole(r.id as "teacher" | "staff")}
+                          />
+                          <Icon size={16} className="text-[var(--brand)]" />
+                          <span>{r.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Dynamic Edit: Teacher Scope */}
@@ -1871,11 +1964,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 </div>
               )}
 
-              {/* Dynamic Edit: Admin Modules */}
-              {editRole === "admin" && (
-                <div className="p-5 rounded-2xl border border-blue-500/20 bg-blue-500/5 space-y-3">
-                  <label className="text-xs font-bold uppercase tracking-wider text-blue-400 block">
-                    Administrator Modules
+              {/* Dynamic Edit: Administrative Modules */}
+              {(editRole === "admin" || editRole === "staff") && (
+                <div className="p-5 rounded-2xl border border-sky-500/20 bg-sky-500/5 space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-sky-400 block">
+                    Administrative Modules & Operations
                   </label>
                   <div className="grid grid-cols-2 gap-2.5">
                     {ADMIN_MODULES_LIST.map(mod => {
