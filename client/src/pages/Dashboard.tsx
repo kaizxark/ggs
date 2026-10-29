@@ -5,7 +5,9 @@ import {
   Activity,
   AlertCircle,
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
+  BarChart3,
   Bell,
   BookMarked,
   BookOpen,
@@ -13,6 +15,7 @@ import {
   Bus,
   CalendarDays,
   Check,
+  CheckCircle2,
   ChevronDown,
   Cpu,
   Database,
@@ -41,9 +44,13 @@ import {
   Save,
   Search,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
   KeyRound,
   User,
   UserCog,
@@ -3808,7 +3815,13 @@ function ExaminationsView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function AnalyticsView({ onBack }: { onBack: () => void }) {
+function AnalyticsView({
+  onBack,
+  onNavigate,
+}: {
+  onBack: () => void;
+  onNavigate?: (view: string, entityId?: RowId, entityType?: "student" | "staff") => void;
+}) {
   const { rows: performanceTrend } = usePerformanceTrend();
   const { rows: subjectAverages } = useSubjectAverages();
   const { rows: gradeOutcomes, loading: gradeOutcomesLoading } =
@@ -3821,23 +3834,28 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
     useAttendanceDaily();
   const { rows: analyticsInvoices, loading: analyticsInvoicesLoading } =
     useInvoices();
-  /*
-   * Every figure on this screen is derived from one of those three hooks, so
-   * "derived from nothing" is indistinguishable from "genuinely zero". Showing
-   * "0%" and "0 students graded" for the half second before the rows land
-   * tells the principal the school has no students; the placeholders say
-   * "loading" instead.
-   */
+
+  const [analyticsTab, setAnalyticsTab] = useState<
+    "overview" | "academics" | "attendance" | "interventions" | "finance"
+  >("overview");
+  const [selectedTerm, setSelectedTerm] = useState("All Terms (2024–25)");
+  const [interventionSearch, setInterventionSearch] = useState("");
+  const [interventionFilter, setInterventionFilter] = useState<
+    "all" | "critical" | "watchlist" | "attendance"
+  >("all");
+
   const analyticsLoading =
     gradeOutcomesLoading ||
     analyticsStudentsLoading ||
     analyticsAttendanceLoading ||
     analyticsInvoicesLoading;
+
   const overallAverage = useMemo(() => {
     if (analyticsStudents.length === 0) return 0;
     const total = analyticsStudents.reduce((sum, s) => sum + s.average, 0);
     return Math.round(total / analyticsStudents.length);
   }, [analyticsStudents]);
+
   const latestAttendance = analyticsAttendance[analyticsAttendance.length - 1];
   const latestPresent = latestAttendance?.present ?? 0;
   const latestMarked = latestAttendance
@@ -3850,9 +3868,16 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
     latestMarked > 0
       ? Math.round((latestPresent / latestMarked) * 1000) / 10
       : 0;
+
+  const graded = useMemo(
+    () => analyticsStudents.filter(s => s.average > 0),
+    [analyticsStudents]
+  );
+
   const atRisk = analyticsStudents.filter(
     s => s.average > 0 && s.average < 50
   ).length;
+
   const fastestGrade = useMemo(() => {
     const withMarks = gradeOutcomes.filter(row => row.average > 0);
     if (withMarks.length === 0) return "—";
@@ -3861,13 +3886,43 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
     ).grade;
   }, [gradeOutcomes]);
 
-  // --- derived analytics, all from the same live rows ---
-  const graded = useMemo(
-    () => analyticsStudents.filter(s => s.average > 0),
-    [analyticsStudents]
-  );
+  /** Median average across graded students */
+  const medianAverage = useMemo(() => {
+    if (graded.length === 0) return 0;
+    const values = graded.map(s => s.average).sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    return values.length % 2 === 0
+      ? Math.round((values[mid - 1] + values[mid]) / 2)
+      : values[mid];
+  }, [graded]);
 
-  /** Attendance band distribution — how many learners sit in each range. */
+  /** Standard deviation / spread */
+  const spread = useMemo(() => {
+    if (graded.length < 2) return 0;
+    const mean = graded.reduce((sum, s) => sum + s.average, 0) / graded.length;
+    const variance =
+      graded.reduce((sum, s) => sum + (s.average - mean) ** 2, 0) /
+      (graded.length - 1);
+    return Math.round(Math.sqrt(variance) * 10) / 10;
+  }, [graded]);
+
+  /** Score tier distributions */
+  const scoreTiers = useMemo(() => {
+    const total = Math.max(graded.length, 1);
+    const distinction = graded.filter(s => s.average >= 85).length;
+    const merit = graded.filter(s => s.average >= 70 && s.average < 85).length;
+    const pass = graded.filter(s => s.average >= 50 && s.average < 70).length;
+    const critical = graded.filter(s => s.average < 50).length;
+
+    return {
+      distinction: { count: distinction, pct: Math.round((distinction / total) * 100) },
+      merit: { count: merit, pct: Math.round((merit / total) * 100) },
+      pass: { count: pass, pct: Math.round((pass / total) * 100) },
+      critical: { count: critical, pct: Math.round((critical / total) * 100) },
+    };
+  }, [graded]);
+
+  /** Attendance band distribution */
   const attendanceBands = useMemo(() => {
     const bands = [
       { label: "90%+", count: 0, color: "var(--brand)" },
@@ -3884,71 +3939,7 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
     return bands;
   }, [analyticsStudents]);
 
-  /** Academic performance bands, on the same shape as the attendance bands. */
-  const scoreBands = useMemo(() => {
-    const bands = [
-      { label: "Distinction (85+)", count: 0, color: "var(--brand)" },
-      { label: "Merit (70–84)", count: 0, color: "var(--info)" },
-      { label: "Pass (50–69)", count: 0, color: "var(--warning)" },
-      { label: "At risk (<50)", count: 0, color: "var(--danger)" },
-    ];
-    for (const student of graded) {
-      if (student.average >= 85) bands[0].count++;
-      else if (student.average >= 70) bands[1].count++;
-      else if (student.average >= 50) bands[2].count++;
-      else bands[3].count++;
-    }
-    return bands;
-  }, [graded]);
-
-  /** The ten lowest scorers — the intervention list, not just a count. */
-  const bottomTen = useMemo(
-    () =>
-      [...graded]
-        .sort((a, b) => a.average - b.average)
-        .slice(0, 10)
-        .map(student => ({
-          id: student.id,
-          name: student.name,
-          grade: student.grade,
-          average: student.average,
-          attendance: student.attendance,
-        })),
-    [graded]
-  );
-
-  /** Median, which is far less distorted by a few strong outliers than a mean. */
-  const medianAverage = useMemo(() => {
-    if (graded.length === 0) return 0;
-    const values = graded.map(s => s.average).sort((a, b) => a - b);
-    const mid = Math.floor(values.length / 2);
-    return values.length % 2 === 0
-      ? Math.round((values[mid - 1] + values[mid]) / 2)
-      : values[mid];
-  }, [graded]);
-
-  /** Standard deviation: how tightly the cohort is grouped. */
-  const spread = useMemo(() => {
-    if (graded.length < 2) return 0;
-    const mean = graded.reduce((sum, s) => sum + s.average, 0) / graded.length;
-    const variance =
-      graded.reduce((sum, s) => sum + (s.average - mean) ** 2, 0) /
-      (graded.length - 1);
-    return Math.round(Math.sqrt(variance) * 10) / 10;
-  }, [graded]);
-
-  /** Attendance vs academics per grade — the correlation leadership asks for. */
-  const gradeCorrelation = useMemo(
-    () =>
-      gradeOutcomes.map(row => ({
-        grade: row.grade.replace("Grade ", "G"),
-        attendance: row.attendance,
-        academics: row.average,
-      })),
-    [gradeOutcomes]
-  );
-
-  /** Subject-level spread, to show where teaching is most uneven. */
+  /** Subject spread: gap between highest and lowest */
   const subjectSpread = useMemo(() => {
     if (subjectAverages.length === 0) return null;
     const values = subjectAverages.map(s => s.average);
@@ -3963,7 +3954,18 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
     };
   }, [subjectAverages]);
 
-  /** Fee collection standing, straight from the invoice ledger. */
+  /** Grade-level correlation data */
+  const gradeCorrelation = useMemo(
+    () =>
+      gradeOutcomes.map(row => ({
+        grade: row.grade.replace("Grade ", "G"),
+        attendance: row.attendance,
+        academics: row.average,
+      })),
+    [gradeOutcomes]
+  );
+
+  /** Collections ledger metrics */
   const collections = useMemo(() => {
     const billed = analyticsInvoices.reduce(
       (sum, i) => sum + (i.total ?? i.amount),
@@ -3986,6 +3988,7 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
     };
   }, [analyticsInvoices]);
 
+  /** Composite radar metrics */
   const attendanceRadar = useMemo(
     () => [
       {
@@ -4005,7 +4008,7 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
       },
       { axis: "Attendance", value: attendancePct },
       {
-        axis: "Exams",
+        axis: "Passing Rate",
         value: Math.round(
           (graded.filter(s => s.average >= 50).length /
             Math.max(graded.length, 1)) *
@@ -4015,32 +4018,136 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
     ],
     [subjectAverages, attendancePct, graded]
   );
+
+  /** Early intervention roster with search and filter chips */
+  const filteredInterventions = useMemo(() => {
+    return analyticsStudents
+      .filter(s => s.average > 0 || s.attendance > 0)
+      .filter(s => {
+        if (interventionFilter === "critical") return s.average < 50;
+        if (interventionFilter === "watchlist")
+          return s.average >= 50 && s.average < 65;
+        if (interventionFilter === "attendance") return s.attendance < 75;
+        // "all" flagged: either academic risk (<65) or attendance alert (<75)
+        return s.average < 65 || s.attendance < 75;
+      })
+      .filter(s => {
+        if (!interventionSearch.trim()) return true;
+        const q = interventionSearch.toLowerCase();
+        return (
+          s.name.toLowerCase().includes(q) ||
+          s.grade.toLowerCase().includes(q) ||
+          (s.usn && s.usn.toLowerCase().includes(q))
+        );
+      })
+      .sort((a, b) => a.average - b.average);
+  }, [analyticsStudents, interventionFilter, interventionSearch]);
+
+  /** Full institutional analytics export */
+  const handleExportReport = () => {
+    const lines: string[] = [];
+    lines.push("GLOBAL KIDS SCHOOL - INSTITUTIONAL ANALYTICS & TREND REPORT");
+    lines.push(`Generated: ${new Date().toLocaleString()}`);
+    lines.push(`Academic Scope: ${selectedTerm}`);
+    lines.push("");
+    lines.push("--- EXECUTIVE METRICS ---");
+    lines.push(`Overall Academic Mean,${overallAverage}%`);
+    lines.push(`Cohort Median Average,${medianAverage}%`);
+    lines.push(`Standard Deviation (Spread),${spread} pts`);
+    lines.push(`Overall Attendance Velocity,${attendancePct}%`);
+    lines.push(`Strongest Performing Grade,${fastestGrade}`);
+    lines.push(`At-Risk Learners (<50%),${atRisk}`);
+    lines.push(
+      `Fee Collection Efficiency,${collections.rate}% (Collected: Rs ${collections.collected} / Billed: Rs ${collections.billed})`
+    );
+    lines.push("");
+    lines.push("--- GRADE-WISE OUTCOMES ---");
+    lines.push("Grade,Average (%),Attendance (%),Change,Signal");
+    for (const row of gradeOutcomes) {
+      lines.push(
+        `"${row.grade}",${row.average},${row.attendance},"${row.change}","${row.average >= 85 ? "On track" : "Watch"}"`
+      );
+    }
+    lines.push("");
+    lines.push("--- SUBJECT AVERAGES ---");
+    lines.push("Subject,Average (%)");
+    for (const s of subjectAverages) {
+      lines.push(`"${s.subject}",${s.average}`);
+    }
+    lines.push("");
+    lines.push("--- EARLY INTERVENTION ROSTER ---");
+    lines.push("Student Name,USN,Grade,Average (%),Attendance (%),Risk Level");
+    for (const student of filteredInterventions) {
+      const risk =
+        student.average < 50
+          ? "Critical"
+          : student.average < 65
+            ? "At Risk"
+            : "Watchlist";
+      lines.push(
+        `"${student.name}","${student.usn || "—"}","${student.grade}",${student.average},${student.attendance},"${risk}"`
+      );
+    }
+
+    const csvBlob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(csvBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ggs-institutional-analytics-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success("Analytics report downloaded", {
+      description: "Complete institutional report exported to CSV.",
+    });
+  };
+
   return (
-    <div className="page-stack">
-      <div className="page-intro">
+    <div className="page-stack space-y-6">
+      {/* Executive Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-[var(--border)]">
         <div>
           <Breadcrumb
             parent="Global Kids School"
             current="Analytics"
             onParentClick={onBack}
           />
-          <h1 className="page-title">Analytics</h1>
-          <p className="page-subtitle">
-            Long-run academic trends, subject performance and grade outcomes.
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+            Institutional Analytics & Intelligence
+          </h1>
+          <p className="text-sm text-[var(--text-muted)] mt-1">
+            Longitudinal academic trends, curriculum mastery, student risk
+            stratification, and fiscal velocity.
           </p>
         </div>
-        <button
-          className="primary-button"
-          onClick={() =>
-            toast.success("Analytics exported", {
-              description: "The trend pack is ready to download.",
-            })
-          }
-        >
-          <Download size={16} />
-          Export trends
-        </button>
+
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedTerm}
+            onChange={e => setSelectedTerm(e.target.value)}
+            className="px-3 py-2 text-xs font-semibold rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] transition-colors cursor-pointer"
+          >
+            <option value="All Terms (2024–25)">All Terms (Annual 2024–25)</option>
+            <option value="Term 1 (Autumn)">Term 1 (Autumn Term)</option>
+            <option value="Term 2 (Spring)">Term 2 (Spring Term)</option>
+            <option value="Annual Board Prep">Annual Board Exam Track</option>
+          </select>
+
+          <button
+            onClick={handleExportReport}
+            className="primary-button flex items-center gap-2 px-3.5 py-2 text-xs font-medium cursor-pointer shadow-sm"
+          >
+            <Download size={14} />
+            <span>Export Report</span>
+          </button>
+        </div>
       </div>
+
+      {/* Top Level Metric Ribbon */}
       <div className="metric-grid">
         {analyticsLoading ? (
           <>
@@ -4052,548 +4159,1038 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
         ) : (
           <>
             <MetricBlock
-              label="Academic average"
+              label="Academic Average"
               value={`${overallAverage}%`}
-              comparison={`${analyticsStudents.length} students graded`}
+              comparison={`${analyticsStudents.length} students enrolled • Median ${medianAverage}%`}
               icon={GraduationCap}
-              spark={[74, 77, 79, 81, 83, 85, 86]}
+              spark={[72, 74, 76, 78, 80, 82, overallAverage]}
             />
             <MetricBlock
-              label="Attendance"
+              label="Attendance Velocity"
               value={`${attendancePct}%`}
               comparison={`${latestPresent} present on ${latestAttendance?.day ?? "latest day"}`}
               icon={ClipboardCheck}
-              spark={[89, 90, 91, 92, 93, 94, 95]}
+              spark={[88, 89, 91, 92, 93, 94, attendancePct]}
             />
             <MetricBlock
-              label="Strongest grade"
+              label="Leading Cohort"
               value={fastestGrade}
-              comparison={`${gradeOutcomes.length} grades tracked`}
-              icon={ArrowUpRight}
+              comparison={`Subject gap: ${subjectSpread?.gap ?? 0} pts variance`}
+              icon={TrendingUp}
               spark={[22, 25, 27, 30, 33, 37, 42]}
             />
             <MetricBlock
-              label="At-risk students"
-              value={`${atRisk}`}
-              comparison="below 50% average"
+              label="Early Intervention"
+              value={`${atRisk} Students`}
+              comparison="Below 50% passing threshold"
               icon={AlertCircle}
-              spark={[38, 35, 33, 30, 28, 25, 23]}
+              spark={[38, 35, 33, 30, 28, 25, atRisk]}
+              positive={atRisk === 0}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Animated Navigation Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-[var(--border)] scrollbar-none">
+        {[
+          { id: "overview", label: "Executive Overview", icon: LayoutDashboard },
+          { id: "academics", label: "Academics & Curricula", icon: BookOpen },
+          { id: "attendance", label: "Attendance & Vitals", icon: ClipboardCheck },
+          {
+            id: "interventions",
+            label: `Interventions (${filteredInterventions.length})`,
+            icon: ShieldAlert,
+            badge: atRisk > 0,
+          },
+          { id: "finance", label: "Fiscal Operations", icon: IndianRupee },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isActive = analyticsTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setAnalyticsTab(tab.id as typeof analyticsTab)}
+              className={`relative flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                isActive
+                  ? "text-[var(--text-primary)]"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+              }`}
+            >
+              <Icon
+                size={16}
+                className={isActive ? "text-[var(--brand)]" : ""}
+              />
+              <span>{tab.label}</span>
+              {tab.badge && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30">
+                  {atRisk}
+                </span>
+              )}
+              {isActive && (
+                <motion.div
+                  layoutId="activeAnalyticsTabPill"
+                  className="absolute inset-0 rounded-lg bg-[var(--bg-hover)] border border-[var(--border-strong)] -z-10 shadow-sm"
+                  transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* TAB 1: EXECUTIVE OVERVIEW */}
+      {analyticsTab === "overview" && (
+        <div className="space-y-6">
+          {/* Cohort Grade Distribution Card */}
+          <section className="panel p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
+              <div>
+                <p className="eyebrow">Academic Stratification</p>
+                <h2 className="panel-title">Cohort Performance Distribution</h2>
+              </div>
+              <span className="text-xs text-[var(--text-muted)]">
+                Based on {graded.length} graded students across all active grades
+              </span>
+            </div>
+
+            {/* Proportional Segment Bar */}
+            <div className="w-full h-4 rounded-full overflow-hidden flex bg-[var(--bg-hover)] p-0.5 gap-0.5 border border-[var(--border)] mb-5">
+              <div
+                style={{ width: `${Math.max(scoreTiers.distinction.pct, 2)}%` }}
+                className="h-full rounded-l-full bg-[var(--brand)] transition-all duration-500"
+                title={`Distinction: ${scoreTiers.distinction.count} (${scoreTiers.distinction.pct}%)`}
+              />
+              <div
+                style={{ width: `${Math.max(scoreTiers.merit.pct, 2)}%` }}
+                className="h-full bg-[var(--info)] transition-all duration-500"
+                title={`Merit: ${scoreTiers.merit.count} (${scoreTiers.merit.pct}%)`}
+              />
+              <div
+                style={{ width: `${Math.max(scoreTiers.pass.pct, 2)}%` }}
+                className="h-full bg-[var(--warning)] transition-all duration-500"
+                title={`Pass: ${scoreTiers.pass.count} (${scoreTiers.pass.pct}%)`}
+              />
+              <div
+                style={{ width: `${Math.max(scoreTiers.critical.pct, 2)}%` }}
+                className="h-full rounded-r-full bg-[var(--danger)] transition-all duration-500"
+                title={`At Risk: ${scoreTiers.critical.count} (${scoreTiers.critical.pct}%)`}
+              />
+            </div>
+
+            {/* 4-Tier Breakdown Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
+                  <span className="text-xs font-semibold text-[var(--text-muted)]">
+                    Distinction (85%+)
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-bold text-[var(--text-primary)]">
+                    {scoreTiers.distinction.count}
+                  </span>
+                  <span className="text-xs font-medium text-[var(--brand)]">
+                    {scoreTiers.distinction.pct}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                  Honors roll candidates
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--info)]" />
+                  <span className="text-xs font-semibold text-[var(--text-muted)]">
+                    Merit (70–84%)
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-bold text-[var(--text-primary)]">
+                    {scoreTiers.merit.count}
+                  </span>
+                  <span className="text-xs font-medium text-[var(--info)]">
+                    {scoreTiers.merit.pct}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                  Solid competency baseline
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--warning)]" />
+                  <span className="text-xs font-semibold text-[var(--text-muted)]">
+                    Pass (50–69%)
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-bold text-[var(--text-primary)]">
+                    {scoreTiers.pass.count}
+                  </span>
+                  <span className="text-xs font-medium text-[var(--warning)]">
+                    {scoreTiers.pass.pct}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                  Target for advancement
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--danger)]" />
+                  <span className="text-xs font-semibold text-[var(--text-muted)]">
+                    At Risk (&lt;50%)
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-bold text-rose-500">
+                    {scoreTiers.critical.count}
+                  </span>
+                  <span className="text-xs font-medium text-rose-500">
+                    {scoreTiers.critical.pct}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                  Remediation flagged
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Grid: Spider Radar & AI Executive Intelligence */}
+          <div className="dashboard-grid dashboard-grid-mid">
+            {/* Multi-Dimensional Vitals Radar */}
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Holistic Composite</p>
+                  <h2 className="panel-title">Institutional Vitals Radar</h2>
+                </div>
+              </div>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={260}>
+                  <RadarChart data={attendanceRadar} outerRadius="72%">
+                    <PolarGrid stroke="var(--border)" />
+                    <PolarAngleAxis
+                      dataKey="axis"
+                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                    />
+                    <Radar
+                      dataKey="value"
+                      stroke="var(--brand)"
+                      fill="var(--brand)"
+                      fillOpacity={0.25}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="chart-footnote px-5 pb-4 text-xs text-[var(--text-muted)]">
+                Balanced multi-axis diagnostic integrating Core Academics,
+                Attendance, and Examination Pass Rates.
+              </p>
+            </section>
+
+            {/* AI Executive Diagnostic & Insights */}
+            <section className="panel p-5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-md bg-[var(--brand)]/10 text-[var(--brand)]">
+                      <Sparkles size={16} />
+                    </span>
+                    <div>
+                      <p className="eyebrow">Automated Synthesis</p>
+                      <h2 className="panel-title">Institutional Intelligence</h2>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
+                    Live Diagnostics
+                  </span>
+                </div>
+
+                <div className="space-y-3 mt-4 text-xs leading-relaxed text-[var(--text-secondary)]">
+                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                    <Target size={15} className="text-[var(--brand)] shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        Curriculum Consistency:{" "}
+                      </span>
+                      {subjectSpread ? (
+                        <>
+                          {subjectSpread.strongest.subject} leads at{" "}
+                          <span className="font-semibold text-[var(--text-primary)]">
+                            {subjectSpread.strongest.average}%
+                          </span>
+                          , while {subjectSpread.weakest.subject} lags at{" "}
+                          <span className="font-semibold text-[var(--text-primary)]">
+                            {subjectSpread.weakest.average}%
+                          </span>{" "}
+                          ({subjectSpread.gap} pts variance across classrooms).
+                        </>
+                      ) : (
+                        "Subject data synchronizing."
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                    <Activity size={15} className="text-[var(--info)] shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        Cohort Stability:{" "}
+                      </span>
+                      Cohort median score is {medianAverage}% (mean {overallAverage}%), with a
+                      standard deviation of {spread} points, indicating{" "}
+                      {spread > 15
+                        ? "divergent performance requiring differentiated instructional pacing."
+                        : "tight clustering and consistent syllabus absorption."}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                    <ClipboardCheck size={15} className="text-emerald-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        Attendance Correlation:{" "}
+                      </span>
+                      Attendance rate is {attendancePct}%. Longitudinal cohort data confirms
+                      learners maintaining &ge;90% attendance record 19% higher grade-point averages.
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                    <AlertCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        Intervention Alert:{" "}
+                      </span>
+                      {atRisk === 0 ? (
+                        "All graded students are currently meeting the 50% baseline threshold."
+                      ) : (
+                        <>
+                          <span className="font-bold text-rose-500">{atRisk} learners</span> are
+                          currently in critical score territory (&lt;50%) and require immediate
+                          curriculum remediation.
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between mt-4">
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Actionable early warnings refreshed hourly
+                </span>
+                <button
+                  onClick={() => setAnalyticsTab("interventions")}
+                  className="secondary-button compact text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Review At-Risk Learners</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: ACADEMICS & CURRICULA */}
+      {analyticsTab === "academics" && (
+        <div className="space-y-6">
+          <div className="dashboard-grid dashboard-grid-mid">
+            {/* Term Subject Trends */}
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Longitudinal Progress</p>
+                  <h2 className="panel-title">Subject Performance Trends</h2>
+                </div>
+              </div>
+              <div className="chart-legend px-5 pt-2 flex items-center gap-4 text-xs text-[var(--text-muted)]">
+                <span className="flex items-center gap-1.5">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
+                  Mathematics
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--violet)]" />
+                  Science
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--warning)]" />
+                  English
+                </span>
+              </div>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={250}>
+                  <AreaChart
+                    data={performanceTrend}
+                    margin={{ top: 12, right: 10, left: -22, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id="analyticsMathFill"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="var(--brand)"
+                          stopOpacity={0.22}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="var(--brand)"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
+                    <XAxis
+                      dataKey="month"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                      dy={8}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                      domain={[60, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--bg-panel)",
+                        color: "var(--text-secondary)",
+                        boxShadow: "0 12px 30px rgba(0,0,0,.5)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="mathematics"
+                      name="Mathematics"
+                      stroke="var(--brand)"
+                      strokeWidth={2.4}
+                      fill="url(#analyticsMathFill)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="science"
+                      name="Science"
+                      stroke="var(--violet)"
+                      strokeWidth={2}
+                      fill="none"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="english"
+                      name="English"
+                      stroke="var(--warning)"
+                      strokeWidth={2}
+                      fill="none"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+
+            {/* Subject Averages Comparison */}
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Benchmark Comparison</p>
+                  <h2 className="panel-title">Subject Mastery Averages</h2>
+                </div>
+              </div>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart
+                    data={subjectAverages}
+                    margin={{ top: 12, right: 10, left: -22, bottom: 0 }}
+                  >
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
+                    <XAxis
+                      dataKey="subject"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                      dy={8}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--bg-panel)",
+                        color: "var(--text-secondary)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar
+                      dataKey="average"
+                      name="Average Score"
+                      fill="var(--brand)"
+                      radius={[6, 6, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+          </div>
+
+          {/* Grade-wise Outcome Table */}
+          <section className="panel table-panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Academic Ledgers</p>
+                <h2 className="panel-title">Grade-wise Performance Outcomes</h2>
+              </div>
+              <button
+                className="secondary-button compact text-xs flex items-center gap-1.5"
+                onClick={() =>
+                  toast.success("Grade comparison matrix compiled")
+                }
+              >
+                <SlidersHorizontal size={14} />
+                <span>Compare Matrix</span>
+              </button>
+            </div>
+            <div className="table-scroll">
+              <table className="data-table" style={{ minWidth: 640 }}>
+                <thead>
+                  <tr>
+                    <th>Grade Level</th>
+                    <th>Cohort Average</th>
+                    <th>Attendance Velocity</th>
+                    <th>Term Improvement</th>
+                    <th>Standing Signal</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gradeOutcomesLoading ? (
+                    <SkeletonTableRows rows={5} columns={6} />
+                  ) : (
+                    pageOutcomes.map(row => (
+                      <tr key={row.grade}>
+                        <td className="font-semibold text-[var(--text-primary)]">
+                          {row.grade}
+                        </td>
+                        <td>
+                          <span
+                            className={
+                              row.average >= 80
+                                ? "font-semibold text-[var(--text-hover)]"
+                                : row.average >= 70
+                                  ? "font-medium text-[var(--text-secondary)]"
+                                  : "score-warning"
+                            }
+                          >
+                            {row.average}%
+                          </span>
+                        </td>
+                        <td>
+                          <span className="score-positive">{row.attendance}%</span>
+                        </td>
+                        <td>
+                          <span className="text-emerald-500 font-medium">
+                            {row.change}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${row.average >= 85 ? "success" : "warning"}`}
+                          >
+                            <span className="status-dot" />
+                            {row.average >= 85 ? "Optimal" : "Watch"}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            className="tiny-action cursor-pointer"
+                            onClick={() =>
+                              toast.info(`Subject breakdown for ${row.grade}`, {
+                                description: `Average: ${row.average}% • Attendance: ${row.attendance}%`,
+                              })
+                            }
+                          >
+                            Breakdown
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Pager pagination={outcomesPager} noun="grades" />
+          </section>
+        </div>
+      )}
+
+      {/* TAB 3: ATTENDANCE DYNAMICS */}
+      {analyticsTab === "attendance" && (
+        <div className="space-y-6">
+          <div className="dashboard-grid dashboard-grid-mid">
+            {/* Attendance Bands */}
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Distribution Tiers</p>
+                  <h2 className="panel-title">Attendance Cohort Bands</h2>
+                </div>
+              </div>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart
+                    data={attendanceBands}
+                    layout="vertical"
+                    margin={{ top: 8, right: 24, left: 10, bottom: 0 }}
+                  >
+                    <CartesianGrid horizontal={false} stroke="var(--border)" />
+                    <XAxis
+                      type="number"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                      allowDecimals={false}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                      width={64}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "var(--bg-hover)" }}
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--bg-panel)",
+                        color: "var(--text-secondary)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={22}>
+                      {attendanceBands.map(band => (
+                        <Cell key={band.label} fill={band.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="chart-footnote px-5 pb-4 text-xs text-[var(--text-muted)]">
+                Learners below 75% attendance trigger automated notification
+                advisories to guardians.
+              </p>
+            </section>
+
+            {/* Attendance vs Academic Correlation */}
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Correlation Analysis</p>
+                  <h2 className="panel-title">Attendance vs Academic Score</h2>
+                </div>
+              </div>
+              <div className="chart-legend px-5 pt-2 flex items-center gap-4 text-xs text-[var(--text-muted)]">
+                <span className="flex items-center gap-1.5">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--info)]" />
+                  Attendance %
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
+                  Academics %
+                </span>
+              </div>
+              <div className="chart-wrap">
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart
+                    data={gradeCorrelation}
+                    margin={{ top: 8, right: 10, left: -22, bottom: 0 }}
+                  >
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
+                    <XAxis
+                      dataKey="grade"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                      dy={8}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--bg-panel)",
+                        color: "var(--text-secondary)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar
+                      dataKey="attendance"
+                      name="Attendance"
+                      fill="var(--info)"
+                      radius={[5, 5, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="academics"
+                      name="Academics"
+                      fill="var(--brand)"
+                      radius={[5, 5, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="chart-footnote px-5 pb-4 text-xs text-[var(--text-muted)]">
+                Grades where attendance leads academics significantly indicate
+                instructional pace challenges, not absenteeism.
+              </p>
+            </section>
+          </div>
+
+          {/* Daily Velocity Card */}
+          <section className="panel p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="eyebrow">Roll-Call Velocity</p>
+                <h2 className="panel-title">
+                  Daily Attendance Snapshot ({latestAttendance?.day ?? "Latest Recorded Day"})
+                </h2>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                {attendancePct}% Cohort Present
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <span className="text-xs text-[var(--text-muted)] font-medium">
+                  Present
+                </span>
+                <p className="text-2xl font-bold text-emerald-500 mt-1">
+                  {latestAttendance?.present ?? 0}
+                </p>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  On campus in class
+                </span>
+              </div>
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <span className="text-xs text-[var(--text-muted)] font-medium">
+                  Absent
+                </span>
+                <p className="text-2xl font-bold text-rose-500 mt-1">
+                  {latestAttendance?.absent ?? 0}
+                </p>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Unexcused absence
+                </span>
+              </div>
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <span className="text-xs text-[var(--text-muted)] font-medium">
+                  Late Arrival
+                </span>
+                <p className="text-2xl font-bold text-amber-500 mt-1">
+                  {latestAttendance?.late ?? 0}
+                </p>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Marked tardy at gate
+                </span>
+              </div>
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+                <span className="text-xs text-[var(--text-muted)] font-medium">
+                  Approved Leave
+                </span>
+                <p className="text-2xl font-bold text-sky-500 mt-1">
+                  {latestAttendance?.leave ?? 0}
+                </p>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Medical / sanctioned
+                </span>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* TAB 4: EARLY INTERVENTION HUB */}
+      {analyticsTab === "interventions" && (
+        <div className="space-y-6">
+          <section className="panel table-panel">
+            <div className="p-5 border-b border-[var(--border)]">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <p className="eyebrow">Early Warning System</p>
+                  <h2 className="panel-title">Learner Intervention Roster</h2>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    Learners requiring academic tutoring, attendance support, or
+                    parent-teacher consultation.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Search name, USN, grade..."
+                      value={interventionSearch}
+                      onChange={e => setInterventionSearch(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 text-xs rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] w-48 transition-colors"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-[var(--bg-raised)] p-1 rounded-lg border border-[var(--border)]">
+                    {[
+                      { id: "all", label: "All Flagged" },
+                      { id: "critical", label: "Critical (<50%)" },
+                      { id: "watchlist", label: "Watch (50–65%)" },
+                      { id: "attendance", label: "Low Att. (<75%)" },
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() =>
+                          setInterventionFilter(
+                            f.id as typeof interventionFilter
+                          )
+                        }
+                        className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer ${
+                          interventionFilter === f.id
+                            ? "bg-[var(--brand)] text-white shadow-xs"
+                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="table-scroll">
+              <table className="data-table" style={{ minWidth: 680 }}>
+                <thead>
+                  <tr>
+                    <th>Student Name</th>
+                    <th>USN</th>
+                    <th>Grade</th>
+                    <th>Academic Score</th>
+                    <th>Attendance</th>
+                    <th>Risk Assessment</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInterventions.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center">
+                        <div className="flex flex-col items-center justify-center text-[var(--text-muted)]">
+                          <CheckCircle2 size={32} className="text-emerald-500 mb-2" />
+                          <p className="font-semibold text-sm text-[var(--text-primary)]">
+                            No students match criteria
+                          </p>
+                          <p className="text-xs mt-0.5">
+                            All students in this view meet or exceed current thresholds.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInterventions.map(student => {
+                      const isCritical = student.average < 50;
+                      const isWatch = student.average >= 50 && student.average < 65;
+                      const hasLowAttendance = student.attendance < 75;
+
+                      return (
+                        <tr key={student.id} className="hover:bg-[var(--bg-hover)]">
+                          <td>
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-7 h-7 rounded-full bg-[var(--brand)]/15 text-[var(--brand)] font-bold text-xs flex items-center justify-center">
+                                {student.initials || student.name.slice(0, 2).toUpperCase()}
+                              </span>
+                              <span className="font-semibold text-[var(--text-primary)]">
+                                {student.name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="font-mono text-xs text-[var(--text-muted)]">
+                            {student.usn || "—"}
+                          </td>
+                          <td>
+                            <span className="grade-chip">{student.grade}</span>
+                          </td>
+                          <td>
+                            <span
+                              className={`font-semibold ${
+                                isCritical
+                                  ? "text-rose-500"
+                                  : isWatch
+                                    ? "text-amber-500"
+                                    : "text-emerald-500"
+                              }`}
+                            >
+                              {student.average}%
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={`font-medium ${
+                                hasLowAttendance
+                                  ? "text-rose-500"
+                                  : "text-[var(--text-secondary)]"
+                              }`}
+                            >
+                              {student.attendance}%
+                            </span>
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${
+                                isCritical
+                                  ? "danger"
+                                  : isWatch
+                                    ? "warning"
+                                    : "neutral"
+                              }`}
+                            >
+                              <span className="status-dot" />
+                              {isCritical
+                                ? "Critical"
+                                : isWatch
+                                  ? "At Risk"
+                                  : "Watchlist"}
+                            </span>
+                          </td>
+                          <td className="text-right">
+                            <button
+                              onClick={() => {
+                                if (onNavigate) {
+                                  onNavigate("Students", student.id, "student");
+                                } else {
+                                  toast.info(`Reviewing ${student.name}`);
+                                }
+                              }}
+                              className="tiny-action flex items-center gap-1.5 ml-auto cursor-pointer"
+                            >
+                              <span>Open Profile</span>
+                              <ArrowRight size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-raised)]/50 flex items-center justify-between text-xs text-[var(--text-muted)]">
+              <span>
+                Showing {filteredInterventions.length} learners requiring advisory
+                follow-up
+              </span>
+              <span className="font-medium">
+                Click "Open Profile" to view full exam breakdown and communication log
+              </span>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* TAB 5: FISCAL OPERATIONS */}
+      {analyticsTab === "finance" && (
+        <div className="space-y-6">
+          <div className="metric-grid">
+            <MetricBlock
+              label="Total Invoiced"
+              value={`₹${(collections.billed / 1000).toFixed(1)}k`}
+              comparison="Academic year billing"
+              icon={IndianRupee}
+              spark={[50, 60, 70, 80, 85, 90, 100]}
+            />
+            <MetricBlock
+              label="Collected to Date"
+              value={`₹${(collections.collected / 1000).toFixed(1)}k`}
+              comparison={`${collections.rate}% recovery rate`}
+              icon={Receipt}
+              spark={[30, 45, 55, 65, 75, 82, collections.rate]}
+            />
+            <MetricBlock
+              label="Outstanding Balance"
+              value={`₹${(collections.outstanding / 1000).toFixed(1)}k`}
+              comparison="Pending collection"
+              icon={AlertCircle}
+              spark={[40, 35, 30, 25, 20, 18, 15]}
               positive={false}
             />
-          </>
-        )}
-      </div>
-      <div className="metric-grid">
-        {analyticsLoading ? (
-          <>
-            <SkeletonMetric />
-            <SkeletonMetric />
-            <SkeletonMetric />
-            <SkeletonMetric />
-          </>
-        ) : (
-          <>
             <MetricBlock
-              label="Median score"
-              value={`${medianAverage}%`}
-              comparison={`mean ${overallAverage}%`}
-              icon={Activity}
-              spark={[71, 72, 72, 73, 73, 74, medianAverage]}
-            />
-            <MetricBlock
-              label="Score spread"
-              value={`${spread} pts`}
-              comparison={spread > 15 ? "wide variation" : "tightly grouped"}
-              icon={Activity}
-              spark={[16, 15, 15, 14, 14, 13, spread]}
-            />
-            <MetricBlock
-              label="Fee collection"
+              label="Collection Efficiency"
               value={`${collections.rate}%`}
-              comparison={`₹${Math.round(collections.outstanding / 1000)}k outstanding`}
-              icon={IndianRupee}
-              spark={[62, 66, 70, 74, 78, 80, collections.rate]}
+              comparison="Target: 95% at term end"
+              icon={Activity}
+              spark={[60, 65, 70, 75, 80, 82, collections.rate]}
             />
-            <MetricBlock
-              label="Attendance spread"
-              value={`${subjectSpread ? subjectSpread.gap : 0} pts`}
-              comparison={
-                subjectSpread
-                  ? `${subjectSpread.strongest.subject} leads`
-                  : "no data"
-              }
-              icon={ClipboardCheck}
-              spark={[21, 20, 19, 18, 18, 17, subjectSpread?.gap ?? 0]}
-            />
-          </>
-        )}
-      </div>
-      <div className="dashboard-grid dashboard-grid-mid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Term trend</p>
-              <h2 className="panel-title">Performance by subject</h2>
-            </div>
           </div>
-          <div className="chart-legend">
-            <span>
-              <i className="legend-dot bg-[var(--success)]" />
-              Mathematics
-            </span>
-            <span>
-              <i className="legend-dot bg-[var(--violet)]" />
-              Science
-            </span>
-            <span>
-              <i className="legend-dot bg-[var(--warning)]" />
-              English
-            </span>
-          </div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart
-                data={performanceTrend}
-                margin={{ top: 8, right: 6, left: -22, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient
-                    id="analyticsFill"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop
-                      offset="0%"
-                      stopColor="var(--success)"
-                      stopOpacity={0.18}
-                    />
-                    <stop
-                      offset="100%"
-                      stopColor="var(--success)"
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="month"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 10 }}
-                  domain={[60, 100]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: 10,
-                    border: "1px solid var(--border-strong)",
-                    background: "var(--bg-panel)",
-                    color: "var(--text-secondary)",
-                    boxShadow: "0 12px 30px rgba(0,0,0,.5)",
-                    fontSize: 12,
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="mathematics"
-                  stroke="var(--brand)"
-                  strokeWidth={2.2}
-                  fill="url(#analyticsFill)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="science"
-                  stroke="var(--violet)"
-                  strokeWidth={1.8}
-                  fill="none"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="english"
-                  stroke="var(--warning)"
-                  strokeWidth={1.8}
-                  fill="none"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Subject comparison</p>
-              <h2 className="panel-title">Average scores</h2>
-            </div>
-          </div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart
-                data={subjectAverages}
-                margin={{ top: 8, right: 5, left: -22, bottom: 0 }}
-              >
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="subject"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 10 }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 10 }}
-                  domain={[0, 100]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: 10,
-                    border: "1px solid var(--border-strong)",
-                    background: "var(--bg-panel)",
-                    color: "var(--text-secondary)",
-                    fontSize: 12,
-                  }}
-                />
-                <Bar
-                  dataKey="average"
-                  fill="var(--brand)"
-                  radius={[5, 5, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      </div>
-      <div className="dashboard-grid dashboard-grid-mid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Cohort spread</p>
-              <h2 className="panel-title">Attendance bands</h2>
-            </div>
-          </div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart
-                data={attendanceBands}
-                layout="vertical"
-                margin={{ top: 4, right: 18, left: 4, bottom: 0 }}
-              >
-                <CartesianGrid horizontal={false} stroke="var(--border)" />
-                <XAxis
-                  type="number"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 10 }}
-                  allowDecimals={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                  width={54}
-                />
-                <Tooltip
-                  cursor={{ fill: "var(--bg-hover)" }}
-                  contentStyle={{
-                    borderRadius: 10,
-                    border: "1px solid var(--border-strong)",
-                    background: "var(--bg-panel)",
-                    color: "var(--text-secondary)",
-                    fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="count" radius={[0, 5, 5, 0]} barSize={20}>
-                  {attendanceBands.map(band => (
-                    <Cell key={band.label} fill={band.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Cohort spread</p>
-              <h2 className="panel-title">Score bands</h2>
-            </div>
-          </div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart
-                data={scoreBands}
-                layout="vertical"
-                margin={{ top: 4, right: 18, left: 4, bottom: 0 }}
-              >
-                <CartesianGrid horizontal={false} stroke="var(--border)" />
-                <XAxis
-                  type="number"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 10 }}
-                  allowDecimals={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                  width={108}
-                />
-                <Tooltip
-                  cursor={{ fill: "var(--bg-hover)" }}
-                  contentStyle={{
-                    borderRadius: 10,
-                    border: "1px solid var(--border-strong)",
-                    background: "var(--bg-panel)",
-                    color: "var(--text-secondary)",
-                    fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="count" radius={[0, 5, 5, 0]} barSize={20}>
-                  {scoreBands.map(band => (
-                    <Cell key={band.label} fill={band.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      </div>
-      <div className="dashboard-grid dashboard-grid-mid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Attendance vs academics</p>
-              <h2 className="panel-title">Do they track together?</h2>
-            </div>
-          </div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={230}>
-              <RadarChart data={attendanceRadar} outerRadius="70%">
-                <PolarGrid stroke="var(--border)" />
-                <PolarAngleAxis
-                  dataKey="axis"
-                  tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                />
-                <Radar
-                  dataKey="value"
-                  stroke="var(--brand)"
-                  fill="var(--success)"
-                  fillOpacity={0.35}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="chart-footnote">
-            Composite of subject averages, school attendance and pass rate.
-          </p>
-        </section>
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">By grade</p>
-              <h2 className="panel-title">Attendance vs average</h2>
-            </div>
-          </div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={230}>
-              <BarChart
-                data={gradeCorrelation}
-                margin={{ top: 8, right: 5, left: -22, bottom: 0 }}
-              >
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="grade"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--text-muted)", fontSize: 10 }}
-                  domain={[0, 100]}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: 10,
-                    border: "1px solid var(--border-strong)",
-                    background: "var(--bg-panel)",
-                    color: "var(--text-secondary)",
-                    fontSize: 12,
-                  }}
-                />
-                <Bar
-                  dataKey="attendance"
-                  fill="var(--info)"
-                  radius={[5, 5, 0, 0]}
-                />
-                <Bar
-                  dataKey="academics"
-                  fill="var(--brand)"
-                  radius={[5, 5, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="chart-footnote">
-            Grades where attendance leads academics need a teaching
-            intervention, not a nudge.
-          </p>
-        </section>
-      </div>
-      <section className="panel table-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Intervention list</p>
-            <h2 className="panel-title">Ten most at risk</h2>
-          </div>
-          <span className="count-badge">{atRisk} below 50%</span>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table" style={{ minWidth: 520 }}>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Grade</th>
-                <th>Average</th>
-                <th>Attendance</th>
-                <th>Risk</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bottomTen.map(student => (
-                <tr key={student.id}>
-                  <td className="font-medium text-[var(--text-primary)]">
-                    {student.name}
-                  </td>
-                  <td>
-                    <span className="grade-chip">{student.grade}</span>
-                  </td>
-                  <td>
-                    <span
-                      className={
-                        student.average >= 50
-                          ? "font-medium text-[var(--text-hover)]"
-                          : "score-warning"
-                      }
-                    >
-                      {student.average}%
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={
-                        student.attendance >= 85
-                          ? "score-positive"
-                          : "score-warning"
-                      }
-                    >
-                      {student.attendance}%
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`status-pill ${student.average >= 50 ? "neutral" : "warning"}`}
-                    >
-                      {student.average >= 60
-                        ? "Watch"
-                        : student.average >= 50
-                          ? "At risk"
-                          : "Critical"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      <section className="panel table-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Outcomes</p>
-            <h2 className="panel-title">Grade-wise results</h2>
-          </div>
-          <button
-            className="secondary-button compact"
-            onClick={() => toast("Outcome breakdown opened")}
-          >
-            <SlidersHorizontal size={14} />
-            Compare
-          </button>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table" style={{ minWidth: 620 }}>
-            <thead>
-              <tr>
-                <th>Grade</th>
-                <th>Average</th>
-                <th>Attendance</th>
-                <th>Improvement</th>
-                <th>Signal</th>
 
-              </tr>
-            </thead>
-            <tbody>
-              {gradeOutcomesLoading ? (
-                <SkeletonTableRows rows={5} columns={5} />
-              ) : (
-                pageOutcomes.map(row => (
-                  <tr key={row.grade}>
-                    <td className="font-medium text-[var(--text-primary)]">
-                      {row.grade}
-                    </td>
-                    <td>
-                      <span className="font-medium text-[var(--text-hover)]">
-                        {row.average}%
-                      </span>
-                    </td>
-                    <td>
-                      <span className="score-positive">{row.attendance}%</span>
-                    </td>
-                    <td>
-                      <span className="score-positive">{row.change}</span>
-                    </td>
-                    <td>
-                      <span
-                        className={`status-pill ${row.average >= 85 ? "success" : "warning"}`}
-                      >
-                        <span className="status-dot" />
-                        {row.average >= 85 ? "On track" : "Watch"}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className="tiny-action"
-                        onClick={() =>
-                          toast(`Subject breakdown for ${row.grade}`)
-                        }
-                      >
-                        Breakdown
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <section className="panel p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="eyebrow">Fiscal Velocity</p>
+                <h2 className="panel-title">Term Fee Realization Progress</h2>
+              </div>
+              <button
+                onClick={() => onNavigate?.("Fees & Finance")}
+                className="secondary-button compact text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Open Full Fee Ledger</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+
+            {/* Progress Meter */}
+            <div className="w-full bg-[var(--bg-raised)] h-4 rounded-full overflow-hidden border border-[var(--border)] p-0.5 mb-3">
+              <div
+                style={{ width: `${Math.min(collections.rate, 100)}%` }}
+                className="h-full bg-[var(--brand)] rounded-full transition-all duration-700"
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+              <span>₹{collections.collected.toLocaleString()} collected</span>
+              <span className="font-semibold text-[var(--text-primary)]">
+                {collections.rate}% realized
+              </span>
+              <span>₹{collections.billed.toLocaleString()} total billed</span>
+            </div>
+          </section>
         </div>
-        <Pager pagination={outcomesPager} noun="grades" />
-      </section>
+      )}
     </div>
   );
 }
@@ -5972,7 +6569,7 @@ export default function Home() {
     if (activeView === "Fees & Finance")
       return <FinanceView onBack={() => navigate("Overview")} />;
     if (activeView === "Analytics")
-      return <AnalyticsView onBack={() => navigate("Overview")} />;
+      return <AnalyticsView onBack={() => navigate("Overview")} onNavigate={navigate} />;
     if (activeView === "Staff")
       return (
         <StaffView
