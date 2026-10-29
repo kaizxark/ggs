@@ -3865,7 +3865,7 @@ function AnalyticsView({
     useInvoices();
 
   const [analyticsTab, setAnalyticsTab] = useState<
-    "overview" | "staff" | "academics" | "attendance" | "finance"
+    "overview" | "staff" | "academics" | "attendance"
   >("overview");
   const [selectedTerm, setSelectedTerm] = useState("All Terms (2024–25)");
   const [staffSearch, setStaffSearch] = useState("");
@@ -4399,30 +4399,28 @@ function AnalyticsView({
               className="h-full flex flex-col justify-between"
             />
             <MetricBlock
-              label="Fee Realization"
-              value={`${collections.rate}%`}
-              comparison={`${formatInr(collections.collected, true)} collected • ${analyticsInvoices.length} invoices`}
-              icon={IndianRupee}
-              spark={[58, 64, 70, 75, 78, 82, collections.rate]}
+              label="Faculty Strength"
+              value={`${staffStats.total} Members`}
+              comparison={`${staffStats.teachers} Teachers • ${staffStats.studentTeacherRatio}:1 Ratio`}
+              icon={Users}
+              spark={[92, 94, 91, 95, 96, 94, staffStats.staffAttendanceAvg]}
               className="h-full flex flex-col justify-between"
             />
           </>
         )}
       </div>
 
-      {/* Animated Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-[var(--border)] scrollbar-none">
+      {/* Redesigned Sliding Segment Navigation Tabs */}
+      <div className="flex items-center p-1.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-xs gap-1.5 w-fit max-w-full overflow-x-auto scrollbar-none">
         {[
           { id: "overview", label: "Executive Overview", icon: LayoutDashboard },
           {
             id: "staff",
             label: `Staff & Faculty (${staffStats.total})`,
             icon: Users,
-            badge: false,
           },
           { id: "academics", label: "Academics & Curricula", icon: BookOpen },
           { id: "attendance", label: "Attendance & Vitals", icon: ClipboardCheck },
-          { id: "finance", label: "Fiscal Operations", icon: IndianRupee },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = analyticsTab === tab.id;
@@ -4430,29 +4428,21 @@ function AnalyticsView({
             <button
               key={tab.id}
               onClick={() => setAnalyticsTab(tab.id as typeof analyticsTab)}
-              className={`relative flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+              className={`relative flex items-center gap-2 px-4 py-2 text-xs md:text-sm font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap select-none ${
                 isActive
-                  ? "text-[var(--text-primary)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
+                  ? "text-white shadow-xs"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
               }`}
             >
-              <Icon
-                size={16}
-                className={isActive ? "text-[var(--brand)]" : ""}
-              />
-              <span>{tab.label}</span>
-              {tab.badge && (
-                <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30">
-                  {atRisk}
-                </span>
-              )}
               {isActive && (
                 <motion.div
-                  layoutId="activeAnalyticsTabPill"
-                  className="absolute inset-0 rounded-lg bg-[var(--bg-hover)] border border-[var(--border-strong)] -z-10 shadow-sm"
+                  layoutId="activeAnalyticsMainTab"
+                  className="absolute inset-0 bg-[var(--brand)] rounded-xl shadow-md -z-10"
                   transition={{ type: "spring", stiffness: 450, damping: 35 }}
                 />
               )}
+              <Icon size={16} className="relative z-10" />
+              <span className="relative z-10">{tab.label}</span>
             </button>
           );
         })}
@@ -4943,25 +4933,35 @@ function AnalyticsView({
                     />
                   </div>
 
-                  <div className="flex items-center gap-1 bg-[var(--bg-raised)] p-1 rounded-lg border border-[var(--border)]">
+                  <div className="flex items-center p-1 bg-[var(--bg-base)] border border-[var(--border)]/70 rounded-xl gap-1">
                     {[
-                      { id: "all", label: "All (10)" },
-                      { id: "teacher", label: "Teachers (7)" },
-                      { id: "admin", label: "Admin Staff (2)" },
+                      { id: "all", label: `All (${staffMembers.length})` },
+                      { id: "teacher", label: `Teachers (${staffStats.teachers})` },
+                      { id: "admin", label: `Admin (${staffStats.administrative})` },
                       { id: "principal", label: "Principal (1)" },
-                    ].map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => setStaffFilter(f.id as typeof staffFilter)}
-                        className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer ${
-                          staffFilter === f.id
-                            ? "bg-[var(--brand)] text-white shadow-xs"
-                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
+                    ].map(f => {
+                      const isActive = staffFilter === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={() => setStaffFilter(f.id as typeof staffFilter)}
+                          className={`relative px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer select-none ${
+                            isActive
+                              ? "text-[var(--text-primary)]"
+                              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                          }`}
+                        >
+                          {isActive && (
+                            <motion.div
+                              layoutId="activeAnalyticsStaffFilterPill"
+                              className="absolute inset-0 bg-[var(--border-accent)] rounded-lg shadow-sm border border-[var(--border)]/60 -z-10"
+                              transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                            />
+                          )}
+                          <span className="relative z-10">{f.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -5519,162 +5519,7 @@ function AnalyticsView({
         </div>
       )}
 
-      {/* TAB 5: FISCAL OPERATIONS (INDIAN RUPEE STANDARDS & EQUAL-HEIGHT PAIRS) */}
-      {analyticsTab === "finance" && (
-        <div className="space-y-6">
-          {/* Top 4 Metric Ribbon (Calculated in Indian Rupees with Lakh / Crore formatting) */}
-          <div className="metric-grid items-stretch">
-            <MetricBlock
-              label="Total Invoiced"
-              value={formatInr(collections.billed, true)}
-              comparison={`${formatInr(collections.billed)} total billing`}
-              icon={IndianRupee}
-              spark={[50, 60, 70, 80, 85, 90, 100]}
-              className="h-full flex flex-col justify-between"
-            />
-            <MetricBlock
-              label="Collected to Date"
-              value={formatInr(collections.collected, true)}
-              comparison={`${collections.rate}% fee realization`}
-              icon={Receipt}
-              spark={[30, 45, 55, 65, 75, 82, collections.rate]}
-              className="h-full flex flex-col justify-between"
-            />
-            <MetricBlock
-              label="Outstanding Balance"
-              value={formatInr(collections.outstanding, true)}
-              comparison={`${formatInr(collections.outstanding)} pending collection`}
-              icon={AlertCircle}
-              spark={[40, 35, 30, 25, 20, 18, 15]}
-              positive={false}
-              className="h-full flex flex-col justify-between"
-            />
-            <MetricBlock
-              label="Collection Efficiency"
-              value={`${collections.rate}%`}
-              comparison="Target: 95% at term end"
-              icon={Activity}
-              spark={[60, 65, 70, 75, 80, 82, collections.rate]}
-              className="h-full flex flex-col justify-between"
-            />
-          </div>
 
-          {/* Paired Symmetrical Row: Realization Gauge vs Fee Allocation Portfolio */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-            {/* Left: Term Fee Realization Progress */}
-            <section className="panel p-5 flex flex-col justify-between h-full">
-              <div>
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div>
-                    <p className="eyebrow">Fiscal Velocity</p>
-                    <h2 className="panel-title">Term Fee Realization Progress</h2>
-                  </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                    {collections.rate}% Realized
-                  </span>
-                </div>
-
-                {/* Progress Meter */}
-                <div className="w-full bg-[var(--bg-raised)] h-4 rounded-full overflow-hidden border border-[var(--border)] p-0.5 mb-3">
-                  <div
-                    style={{ width: `${Math.min(collections.rate, 100)}%` }}
-                    className="h-full bg-[var(--brand)] rounded-full transition-all duration-700"
-                  />
-                </div>
-                <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-5">
-                  <span className="font-medium text-emerald-500">{formatInr(collections.collected)} collected</span>
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {formatInr(collections.outstanding)} outstanding
-                  </span>
-                  <span>{formatInr(collections.billed)} total billed</span>
-                </div>
-
-                <div className="space-y-2.5 text-xs text-[var(--text-secondary)]">
-                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
-                    <span className="text-[var(--text-muted)]">Indian Currency Format</span>
-                    <span className="font-semibold text-[var(--text-primary)]">INR (₹) Lakh / Crore System</span>
-                  </div>
-                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
-                    <span className="text-[var(--text-muted)]">Recovery Target Gap</span>
-                    <span className="font-semibold text-amber-500">
-                      {Math.max(95 - collections.rate, 0)}% to reach 95% target
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between mt-4">
-                <span className="text-xs text-[var(--text-muted)]">
-                  Audited from live invoices ledger
-                </span>
-                <button
-                  onClick={() => onNavigate?.("Fees & Finance")}
-                  className="secondary-button compact text-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>Open Full Fee Ledger</span>
-                  <ArrowRight size={13} />
-                </button>
-              </div>
-            </section>
-
-            {/* Right: Fee Allocation & Category Breakdown */}
-            <section className="panel p-5 flex flex-col justify-between h-full">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="eyebrow">Revenue Portfolio</p>
-                    <h2 className="panel-title">Institutional Fee Composition</h2>
-                  </div>
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
-                    4 Head Categories
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
-                    <span className="text-xs text-[var(--text-muted)] font-medium">Tuition Fees</span>
-                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
-                      {formatInr(collections.billed * 0.7, true)}
-                    </p>
-                    <span className="text-[11px] text-[var(--brand)] font-medium mt-1">70% of total revenue</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
-                    <span className="text-xs text-[var(--text-muted)] font-medium">Transport & Fleet</span>
-                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
-                      {formatInr(collections.billed * 0.15, true)}
-                    </p>
-                    <span className="text-[11px] text-[var(--info)] font-medium mt-1">15% bus services</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
-                    <span className="text-xs text-[var(--text-muted)] font-medium">Lab & Examination</span>
-                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
-                      {formatInr(collections.billed * 0.1, true)}
-                    </p>
-                    <span className="text-[11px] text-amber-500 font-medium mt-1">10% academic labs</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
-                    <span className="text-xs text-[var(--text-muted)] font-medium">Activities & Sports</span>
-                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
-                      {formatInr(collections.billed * 0.05, true)}
-                    </p>
-                    <span className="text-[11px] text-emerald-500 font-medium mt-1">5% extracurricular</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between mt-auto text-xs text-[var(--text-muted)]">
-                <span>All amounts calculated in Indian Rupees (INR)</span>
-                <span className="font-semibold text-[var(--text-primary)]">
-                  Total {formatInr(collections.billed, true)}
-                </span>
-              </div>
-            </section>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
