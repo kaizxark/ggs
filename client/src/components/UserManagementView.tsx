@@ -776,7 +776,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               {summary?.pupils ?? studentAccounts.length ?? students.length}
             </div>
             <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Pupil USN sign-in slips generated across grades
+              Pupil USN active logins across grades
             </p>
           </div>
         </div>
@@ -946,7 +946,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                   <th style={{ minWidth: 110 }} className="py-4 px-6 text-left">
                     Status
                   </th>
-                  <th style={{ minWidth: 170 }} className="py-4 px-6 text-right">
+                  <th style={{ minWidth: 130 }} className="py-4 px-6 text-right">
                     Actions
                   </th>
                 </tr>
@@ -1104,16 +1104,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
                         {/* Actions */}
                         <td className="py-4.5 px-6 text-right">
-                          <div className="flex items-center justify-end gap-2.5">
-                            <button
-                              className="secondary-button compact h-8 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5"
-                              onClick={() => copyStaffSlip(person, staffAcc)}
-                              title="Copy formatted login slip for this staff member"
-                            >
-                              <Copy size={12} />
-                              <span>Slip</span>
-                            </button>
-
+                          <div className="flex items-center justify-end">
                             <button
                               className="secondary-button compact h-8 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5"
                               onClick={() => openEditModal(person)}
@@ -1147,10 +1138,10 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 Student Portals
               </p>
               <h2 className="text-lg sm:text-xl font-extrabold text-[var(--text-primary)] tracking-tight">
-                Student Portal Credentials & Access Slips
+                Student Portal Credentials
               </h2>
               <p className="text-xs text-[var(--text-muted)]">
-                Pupil USN sign-in handles, date-of-birth passwords, and copyable parent slips.
+                Pupil USN sign-in handles, date-of-birth passwords, and login credentials.
               </p>
             </div>
           </div>
@@ -1242,17 +1233,14 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                   <th style={{ minWidth: 130 }} className="py-4 px-6 text-left">
                     Issued Date
                   </th>
-                  <th style={{ minWidth: 140 }} className="py-4 px-6 text-right">
-                    Slip
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {accountsLoading ? (
-                  <SkeletonTableRows rows={6} columns={6} />
+                  <SkeletonTableRows rows={6} columns={5} />
                 ) : filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center">
+                    <td colSpan={5} className="py-16 text-center">
                       <div className="empty-state max-w-sm mx-auto space-y-2">
                         <GraduationCap size={32} className="mx-auto text-[var(--text-muted)]" />
                         <p className="text-sm font-bold text-[var(--text-primary)]">
@@ -1343,17 +1331,6 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                           {row.issuedAt
                             ? new Date(row.issuedAt).toLocaleDateString()
                             : "Auto (DOB)"}
-                        </td>
-
-                        <td className="py-4.5 px-6 text-right">
-                          <button
-                            className="secondary-button compact h-8 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 ml-auto"
-                            onClick={() => copyStudentSlip(row)}
-                            title="Copy formatted login slip for parents"
-                          >
-                            <Copy size={12} />
-                            <span>Slip</span>
-                          </button>
                         </td>
                       </tr>
                     );
