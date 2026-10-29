@@ -762,7 +762,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        {/* Metric 3: Students */}
+        {/* Metric 4: Students */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
@@ -778,26 +778,6 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
             </div>
             <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
               Pupil USN sign-in slips generated across grades
-            </p>
-          </div>
-        </div>
-
-        {/* Metric 4: Login URL */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-              Portal Sign-in
-            </span>
-            <span className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
-              <KeyRound size={20} />
-            </span>
-          </div>
-          <div className="my-3">
-            <div className="text-xl font-mono font-bold text-[var(--brand)] truncate">
-              /login
-            </div>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Two-factor OTP verified access for all roles
             </p>
           </div>
         </div>
