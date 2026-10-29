@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { motion } from "framer-motion";
 import {
   Activity,
   AlertCircle,
@@ -8,10 +9,13 @@ import {
   Bell,
   BookMarked,
   BookOpen,
+  Building2,
   Bus,
   CalendarDays,
   Check,
   ChevronDown,
+  Cpu,
+  Database,
   FolderOpen,
   ChevronRight,
   ClipboardCheck,
@@ -21,6 +25,7 @@ import {
   FileBarChart,
   FileText,
   Filter,
+  Globe,
   GraduationCap,
   IndianRupee,
   LayoutDashboard,
@@ -32,12 +37,15 @@ import {
   MoreHorizontal,
   Plus,
   Receipt,
+  RefreshCw,
+  Save,
   Search,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   KeyRound,
+  User,
   UserCog,
   Users,
   X,
@@ -137,8 +145,7 @@ import {
 import { Pager, usePagination } from "../components/ErpPagination";
 import { Breadcrumb } from "../components/Breadcrumb";
 import { StudentDocumentsPanel } from "../components/StudentDocuments";
-import { DocumentsView } from "../components/DocumentsView";
-import CredentialsView from "../components/CredentialsView";
+import { UserManagementView } from "../components/UserManagementView";
 import PupilOverview from "../components/PupilOverview";
 import { PupilMobileDashboard } from "../components/PupilMobileDashboard";
 import {
@@ -377,7 +384,6 @@ const navGroups = [
     items: [
       { label: "Overview", icon: LayoutDashboard },
       { label: "Students", icon: GraduationCap },
-      { label: "Documents", icon: FolderOpen },
       { label: "Staff", icon: Users },
       { label: "Academics", icon: BookOpen },
     ],
@@ -388,6 +394,13 @@ const navGroups = [
       { label: "Attendance", icon: ClipboardCheck },
       { label: "Examinations", icon: FileText },
       { label: "Fees & Finance", icon: IndianRupee },
+    ],
+  },
+  {
+    label: "Intelligence",
+    items: [
+      { label: "Analytics", icon: Activity },
+      { label: "Reports", icon: FileBarChart },
     ],
   },
 ];
@@ -646,13 +659,6 @@ function CommandPaletteBody({
         keywords: ["students", "directory", "pupils", "enrollment", "roll call", "roster", "children", "kids"],
       },
       {
-        view: "Documents",
-        label: "Documents",
-        detail: "Student document checklist, verified certificates & missing paperwork",
-        icon: FolderOpen,
-        keywords: ["documents", "records", "verification", "files", "certificates", "uploads", "paperwork"],
-      },
-      {
         view: "Staff",
         label: "Staff",
         detail: "Educators, coordinators, administration team & departments",
@@ -704,16 +710,23 @@ function CommandPaletteBody({
       {
         view: "User management",
         label: "User management",
-        detail: "Staff access, role assignments, invites & security permissions",
+        detail: "Staff access, role assignments, invites & student portal logins",
         icon: UserCog,
-        keywords: ["user management", "users", "permissions", "roles", "access", "invites", "security", "privileges"],
-      },
-      {
-        view: "Account logins",
-        label: "Account logins",
-        detail: "Student and staff portal credentials, usernames & login passwords",
-        icon: KeyRound,
-        keywords: ["account logins", "credentials", "passwords", "login portal", "student logins", "staff logins", "auth"],
+        keywords: [
+          "user management",
+          "users",
+          "permissions",
+          "roles",
+          "access",
+          "invites",
+          "security",
+          "privileges",
+          "account logins",
+          "credentials",
+          "passwords",
+          "student logins",
+          "usn",
+        ],
       },
       {
         view: "Settings",
@@ -2875,7 +2888,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <th>Due date</th>
                 <th>Amount</th>
                 <th>Status</th>
-
+                <th className="text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -3348,7 +3361,7 @@ function StaffView({
           onClose={() => setSelected(null)}
           onUpdated={() => void reloadStaff()}
           onOpenAccountLogins={
-            onNavigate ? () => onNavigate("Account logins") : undefined
+            onNavigate ? () => onNavigate("User management") : undefined
           }
         />
       )}
@@ -3379,6 +3392,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
   const weekPager = usePagination(week);
   const pageWeek = weekPager.pageRows;
   const { rows: subjects } = useSubjects();
+  const { rows: staffMembers } = useStaff();
   return (
     <div className="page-stack">
       <div className="page-intro">
@@ -3409,22 +3423,22 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
       <div className="metric-grid">
         <MetricBlock
           label="Subjects offered"
-          value="14"
-          comparison="Across 7 grades"
+          value={String(subjects.length || 14)}
+          comparison="Curriculum core"
           icon={BookOpen}
           spark={[10, 11, 11, 12, 13, 13, 14]}
         />
         <MetricBlock
-          label="Periods today"
-          value="32"
-          comparison="6 periods × 5 grades"
+          label="Periods scheduled"
+          value={String(week.length || 32)}
+          comparison={`For ${days[dayIndex]}`}
           icon={Clock3}
           spark={[26, 28, 27, 30, 29, 31, 32]}
         />
         <MetricBlock
           label="Teaching staff"
-          value="46"
-          comparison="2 on leave today"
+          value={String(staffMembers.length || 46)}
+          comparison="Active educators"
           icon={Users}
           spark={[42, 43, 44, 43, 45, 46, 46]}
         />
@@ -4585,15 +4599,25 @@ function AnalyticsView({ onBack }: { onBack: () => void }) {
 }
 
 /**
- * "Your account" settings panel.
+ * Settings & Preferences Hub
  *
- * Lets the signed-in user edit their own display name, their login username
- * (the local part of the sign-in email, which is what the school thinks of as
- * their username) and their password, without touching the school-wide
- * workspace settings. Also hosts the AI assistant provider config for super admins.
+ * Organized into dedicated, cohesive categories:
+ *  1. Account & Security (Display name, Username, Password update)
+ *  2. School Workspace (School Name, Campus, Address, Phone, Term)
+ *  3. Academics & Alerts (Grading scale, Attendance threshold, Notification rules)
+ *  4. AI Assistant (Super admin provider configuration)
+ *  5. Data & Session (Export school configuration, Sign out, Factory reset)
  */
-function AccountSettingsPanel() {
+function SettingsView({ onBack }: { onBack: () => void }) {
   const currentUser = useCurrentUser();
+  const { settings, save } = useSettings();
+
+  // Navigation tab
+  const [activeTab, setActiveTab] = useState<
+    "account" | "workspace" | "academics" | "ai" | "system"
+  >("account");
+
+  // Account state
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -4601,13 +4625,29 @@ function AccountSettingsPanel() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+
+  // Super admin & AI state
   const [superAdmin, setSuperAdmin] = useState(false);
   const [aiConfig, setAiState] = useState<AiConfig>(getAiConfig);
   const [keySaved, setKeySaved] = useState(false);
   const [testingAi, setTestingAi] = useState(false);
   const [sharedReady, setSharedReady] = useState(false);
 
-  // Seed the form once the signed-in profile resolves.
+  // Workspace settings state
+  const [schoolName, setSchoolName] = useState(settings.schoolName);
+  const [campus, setCampus] = useState(settings.campus);
+  const [address, setAddress] = useState(settings.address);
+  const [phone, setPhone] = useState(settings.phone);
+  const [academicYear, setAcademicYear] = useState(settings.academicYear);
+  const [currentTerm, setCurrentTerm] = useState(settings.currentTerm);
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
+
+  // Academics settings state
+  const [gradeScale, setGradeScale] = useState(settings.gradeScale);
+  const [threshold, setThreshold] = useState(settings.threshold);
+  const [prefs, setPrefs] = useState(settings.prefs);
+  const [savingAcademics, setSavingAcademics] = useState(false);
+
   useEffect(() => {
     if (!currentUser) return;
     setFullName(currentUser.fullName);
@@ -4618,13 +4658,6 @@ function AccountSettingsPanel() {
     void isSuperAdmin().then(setSuperAdmin);
   }, []);
 
-  /**
-   * Seed the form from the shared configuration.
-   *
-   * The key itself is never sent back — the server only reports whether one is
-   * stored — so the field starts empty and the placeholder says so. Leaving it
-   * empty on save keeps the stored key rather than wiping it.
-   */
   useEffect(() => {
     void loadSharedAiSettings().then(shared => {
       if (!shared.providerId) return;
@@ -4632,58 +4665,38 @@ function AccountSettingsPanel() {
         providerId: shared.providerId,
         base: shared.base || getProvider(shared.providerId).base,
         model: shared.model || getProvider(shared.providerId).model,
-        // Blank means "keep the saved one", not "no key".
         key: current.key,
       }));
       setSharedReady(true);
     });
   }, []);
 
+  const toggle = (key: keyof typeof prefs) =>
+    setPrefs(current => ({ ...current, [key]: !current[key] }));
+
   const saveProfile = async () => {
     if (!currentUser) return;
     const name = fullName.trim();
-
     if (!name) {
       toast.warning("Display name cannot be empty");
       return;
     }
-
     setSavingProfile(true);
     try {
-      /*
-       * One write, not two.
-       *
-       * This used to save the display name and then the username separately. The
-       * username write targeted a column that did not exist, so it threw after
-       * the name had already been committed — which surfaced as "Could not save
-       * your profile" and made the whole panel look broken. A single statement
-       * is also atomic: it either lands completely or not at all.
-       *
-       * The display name is the only thing written here. The sign-in name and
-       * the password are credentials, and they go through the server route
-       * below, which keeps the school's own record of them in step.
-       */
       const { error } = await supabase
         .from("profiles")
         .update({ full_name: name })
         .eq("id", currentUser.id);
       if (error) throw error;
-
-      // Mirror the display name into auth metadata so anything reading the
-      // session rather than the profiles table still shows the new name.
       const { error: metaError } = await supabase.auth.updateUser({
         data: { full_name: name },
       });
       if (metaError) {
-        // The profile row is already correct, so this is not a failed save —
-        // say so plainly rather than reporting a failure that did not happen.
         toast.success("Profile updated", {
-          description:
-            "Saved, though the session name could not be refreshed. Reload to see it everywhere.",
+          description: "Saved, though session name could not be refreshed immediately.",
         });
         return;
       }
-
       toast.success("Profile updated", {
         description: "Your display name is saved.",
       });
@@ -4696,25 +4709,10 @@ function AccountSettingsPanel() {
     }
   };
 
-  /**
-   * Change the sign-in name, the password, or both.
-   *
-   * Both go through the server route rather than the browser. The browser can
-   * write its own profile row, but it cannot keep the school's record of the
-   * account in step — and that record is what the school owner reads back to
-   * somebody over the telephone. A pupil who changed their password behind the
-   * school's back left the owner reading a password that no longer worked.
-   *
-   * The current password is required, because a session that has been open for
-   * days is not evidence of anything: without it, anyone who walked up to an
-   * unattended browser could take the account over for good.
-   */
   const saveSignIn = async () => {
     if (!currentUser) return;
     const wanted = username.trim().toLowerCase();
-    const current = String(currentUser.username ?? "")
-      .trim()
-      .toLowerCase();
+    const current = String(currentUser.username ?? "").trim().toLowerCase();
     const nameChanged = wanted !== current;
 
     if (nameChanged && !wanted) {
@@ -4722,16 +4720,7 @@ function AccountSettingsPanel() {
       return;
     }
     if (nameChanged && !USERNAME_PATTERN.test(wanted) && !wanted.includes("@")) {
-      /*
-       * An address is allowed through here, because the school hands out one
-       * address for every pupil to sign in with, and an address holds an "@",
-       * which the username pattern refuses. The server decides what it will
-       * actually accept — it knows which name the school shares and which
-       * address the account already has — so this is a nudge, not the rule.
-       */
-      toast.warning(
-        "Usernames use letters, numbers, dots, dashes and underscores"
-      );
+      toast.warning("Usernames use letters, numbers, dots, dashes and underscores");
       return;
     }
     if (!currentPassword) {
@@ -4759,9 +4748,7 @@ function AccountSettingsPanel() {
         currentPassword
       );
       if (result.status !== "ok") {
-        toast.error("That could not be saved", {
-          description: result.message,
-        });
+        toast.error("That could not be saved", { description: result.message });
         return;
       }
       setCurrentPassword("");
@@ -4769,27 +4756,60 @@ function AccountSettingsPanel() {
       setConfirmPassword("");
       toast.success("Sign-in details updated", {
         description: nameChanged
-          ? `You can now sign in with “${wanted}”. Your email is unchanged.`
+          ? `You can now sign in with "${wanted}". Your email is unchanged.`
           : "Use your new password the next time you sign in.",
       });
     } catch (err) {
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Could not change your sign-in details."
+        err instanceof Error ? err.message : "Could not change your sign-in details."
       );
     } finally {
       setSavingPassword(false);
     }
   };
 
-  /**
-   * Edit one field of the provider config and mark the form dirty.
-   *
-   * Switching provider re-fills the base URL and model from the preset, except
-   * for "Custom" where both are left exactly as typed — the whole point of that
-   * option is a self-hosted endpoint nobody has hard-coded here.
-   */
+  const saveWorkspaceProfile = async () => {
+    setSavingWorkspace(true);
+    try {
+      const ok = await save({
+        ...settings,
+        schoolName,
+        campus,
+        address,
+        phone,
+        academicYear,
+        currentTerm,
+      });
+      if (ok) {
+        toast.success("Workspace profile saved", {
+          description: "School details and academic term updated.",
+        });
+      }
+    } finally {
+      setSavingWorkspace(false);
+    }
+  };
+
+  const saveAcademicRules = async () => {
+    setSavingAcademics(true);
+    try {
+      const ok = await save({
+        ...settings,
+        prefs,
+        academicYear,
+        gradeScale,
+        threshold,
+      });
+      if (ok) {
+        toast.success("Academic & alert policies saved", {
+          description: "Your configuration is live for all staff.",
+        });
+      }
+    } finally {
+      setSavingAcademics(false);
+    }
+  };
+
   const updateAiConfig = (patch: Partial<AiConfig>) => {
     setAiState(previous => ({ ...previous, ...patch }));
     setKeySaved(false);
@@ -4812,32 +4832,22 @@ function AccountSettingsPanel() {
     if (!isAiConfigured(aiConfig)) {
       const cleared = await clearSharedAiSettings();
       if (!cleared.ok) {
-        toast.error("Could not switch the assistant off", {
-          description: cleared.message,
-        });
+        toast.error("Could not switch the assistant off", { description: cleared.message });
         return;
       }
       setKeySaved(true);
-      toast.success("AI assistant switched off", {
-        description:
-          "Nobody can ask the assistant until it is configured again.",
-      });
+      toast.success("AI assistant switched off");
       return;
     }
-
     const result = await saveSharedAiSettings(aiConfig);
     if (!result.ok) {
-      toast.error("Could not save the AI configuration", {
-        description: result.message,
-      });
+      toast.error("Could not save the AI configuration", { description: result.message });
       return;
     }
-    // Also kept locally so this browser can override the shared settings while
-    // trying another provider out.
     setAiConfig(aiConfig);
     setKeySaved(true);
     toast.success("AI assistant saved for the whole school", {
-      description: `${getProvider(aiConfig.providerId).label} · ${aiConfig.model}. Every signed-in user can ask a question now.`,
+      description: `${getProvider(aiConfig.providerId).label} · ${aiConfig.model}. Available to all users.`,
     });
   };
 
@@ -4848,208 +4858,587 @@ function AccountSettingsPanel() {
     if (result.ok) {
       const provider = getProvider(aiConfig.providerId);
       const model = (result as { model?: string }).model ?? aiConfig.model;
-      toast.success("Connection works", {
-        description: `${provider.label} · ${model}. Every user can use the assistant with this.`,
+      toast.success("Connection verified", {
+        description: `${provider.label} · ${model}. Ready for queries.`,
       });
     } else {
-      toast.error("Could not reach that provider", {
-        description: result.message,
-      });
+      toast.error("Could not reach that provider", { description: result.message });
     }
   };
 
+  const alerts = [
+    {
+      key: "attendance" as const,
+      title: "Attendance Alerts",
+      detail: "Trigger notifications when a class attendance drops below threshold.",
+    },
+    {
+      key: "fees" as const,
+      title: "Fee Reminders",
+      detail: "Automated balance notifications for outstanding pupil tuition fees.",
+    },
+    {
+      key: "messages" as const,
+      title: "Parent Messages",
+      detail: "Alert staff on new incoming messages from students' guardians.",
+    },
+    {
+      key: "exams" as const,
+      title: "Exam Countdowns",
+      detail: "Timely reminders before test windows and examination schedules.",
+    },
+    {
+      key: "digest" as const,
+      title: "Weekly Leadership Digest",
+      detail: "A Monday briefing email for school administration and leadership.",
+    },
+  ];
+
+  const tabs: Array<{
+    id: "account" | "workspace" | "academics" | "ai" | "system";
+    label: string;
+    icon: LucideIcon;
+  }> = [
+    { id: "account", label: "My Account & Security", icon: ShieldCheck },
+    { id: "workspace", label: "School Workspace", icon: Building2 },
+    { id: "academics", label: "Academics & Alerts", icon: GraduationCap },
+  ];
+  if (superAdmin) {
+    tabs.push({ id: "ai", label: "AI Assistant", icon: Sparkles });
+  }
+  tabs.push({ id: "system", label: "Data & Session", icon: Database });
+
   return (
-    <>
-      <div className="dashboard-grid dashboard-grid-mid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Your account</p>
-              <h2 className="panel-title">Display name</h2>
-            </div>
-          </div>
-          <div className="px-5 pb-5 pt-4">
-            <div className="account-identity">
-              {currentUser?.avatarUrl ? (
-                <img
-                  className="avatar avatar-lg"
-                  src={currentUser.avatarUrl}
-                  alt=""
-                />
-              ) : (
-                <span className="avatar avatar-lg bg-[rgba(63,184,162,0.13)] text-[var(--brand)]">
-                  {initialsFor(currentUser?.fullName || "Admin")}
-                </span>
-              )}
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                  {currentUser?.fullName ?? "—"}
-                </p>
-                <p className="mt-1.5 truncate text-[12.5px] text-[var(--text-muted)]">
-                  {currentUser?.email} ·{" "}
-                  {roleLabel(currentUser?.id, currentUser?.role)}
-                </p>
+    <div className="page-stack max-w-5xl mx-auto space-y-8 pb-16">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pb-6 border-b border-[var(--border)]">
+        <div className="space-y-1.5">
+          <Breadcrumb
+            parent="Global Kids School"
+            current="Settings & Preferences"
+            onParentClick={onBack}
+          />
+          <h1 className="page-title text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
+            Settings & Preferences
+          </h1>
+          <p className="page-subtitle text-sm text-[var(--text-muted)] max-w-2xl leading-relaxed">
+            Manage your personal profile, credentials, school-wide workspace details, academic policies, and system preferences.
+          </p>
+        </div>
+      </div>
+
+      {/* Segmented Control Navigation with Smooth Horizontal Sliding Indicator */}
+      <div className="flex items-center gap-2 border-b border-[var(--border)] pb-4 overflow-x-auto no-scrollbar">
+        <div className="relative p-1 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border)] flex items-center gap-1">
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex items-center gap-2.5 px-4 py-2 text-xs font-semibold rounded-xl cursor-pointer whitespace-nowrap transition-colors duration-200 z-10 ${
+                  isActive
+                    ? "text-[var(--text-primary)] font-bold"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="activeSettingsTabPill"
+                    className="absolute inset-0 bg-[var(--border-accent)] rounded-xl shadow-sm border border-[var(--border)]/60 -z-10"
+                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                  />
+                )}
+                <Icon size={16} className={isActive ? "text-[var(--brand)]" : ""} />
+                <span className="relative z-10">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ==================================================================== */}
+      {/* TAB 1: Account & Security                                           */}
+      {/* ==================================================================== */}
+      {activeTab === "account" && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* Identity Header Card */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                {currentUser?.avatarUrl ? (
+                  <img
+                    className="avatar avatar-lg h-14 w-14 rounded-full border border-[var(--border)] shadow-sm object-cover"
+                    src={currentUser.avatarUrl}
+                    alt=""
+                  />
+                ) : (
+                  <span className="avatar avatar-lg h-14 w-14 rounded-full bg-[rgba(63,184,162,0.13)] text-[var(--brand)] border border-[var(--border)] flex items-center justify-center font-bold text-lg shadow-sm">
+                    {initialsFor(currentUser?.fullName || "Admin")}
+                  </span>
+                )}
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-lg font-extrabold text-[var(--text-primary)] truncate">
+                      {currentUser?.fullName ?? "—"}
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--brand-soft)] text-[var(--brand)] border border-[var(--brand)]/20">
+                      {roleLabel(currentUser?.id, currentUser?.role)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] font-mono truncate">
+                    {currentUser?.email}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="form-grid mt-5">
-              <label>
-                Display name
+
+            <div className="p-6 sm:p-7 space-y-5">
+              <div className="space-y-1.5 max-w-md">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Display Name
+                </label>
                 <input
                   value={fullName}
                   onChange={event => setFullName(event.target.value)}
-                  placeholder="e.g. Ehtesham"
+                  placeholder="e.g. Dr. Meera Iyer"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
                 />
-              </label>
+                <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                  The name visible on classroom attendance, evaluations, reports, and staff communications.
+                </p>
+              </div>
             </div>
-            <p className="mt-2 text-[12.5px] leading-5 text-[var(--text-muted)]">
-              The name the school sees on attendance, marks and messages. It has
-              nothing to do with signing in.
-            </p>
-            <div className="dialog-actions mt-4">
+
+            <div className="px-6 sm:px-7 py-4 bg-[var(--bg-raised)]/40 border-t border-[var(--border)] flex items-center justify-end">
               <button
-                className="primary-button"
+                className="primary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2"
                 onClick={() => void saveProfile()}
                 disabled={savingProfile}
               >
-                {savingProfile ? "Saving…" : "Save name"}
+                <Save size={15} />
+                <span>{savingProfile ? "Saving…" : "Save Display Name"}</span>
               </button>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Security</p>
-              <h2 className="panel-title">Sign-in name &amp; password</h2>
+          {/* Credentials & Password Card */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
+                  Authentication
+                </p>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                  Portal Sign-in ID & Password
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Manage the username and secret credentials used to access the Global Kids School portal.
+                </p>
+              </div>
+              <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
+                <Lock size={20} />
+              </span>
             </div>
-          </div>
-          <div className="px-5 pb-5 pt-4">
-            <div className="form-grid">
-              <label className="block">
-                Sign-in name
-                <input
-                  value={username}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  onChange={event => setUsername(event.target.value)}
-                  placeholder="e.g. ehtesham"
-                />
-              </label>
-              <label className="block">
-                Current password
-                <input
-                  type="password"
-                  value={currentPassword}
-                  autoComplete="current-password"
-                  onChange={event => setCurrentPassword(event.target.value)}
-                  placeholder="Confirm it is you"
-                />
-              </label>
-              <label className="block">
-                New password
-                <input
-                  type="password"
-                  value={newPassword}
-                  autoComplete="new-password"
-                  onChange={event => setNewPassword(event.target.value)}
-                  placeholder="At least 8 characters"
-                />
-              </label>
-              <label className="block">
-                Confirm new password
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  autoComplete="new-password"
-                  onChange={event => setConfirmPassword(event.target.value)}
-                  placeholder="Re-enter it"
-                />
-              </label>
+
+            <div className="p-6 sm:p-7 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                    Sign-in Handle / Username
+                  </label>
+                  <input
+                    value={username}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    onChange={event => setUsername(event.target.value)}
+                    placeholder="e.g. principal"
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] font-mono text-sm text-[var(--brand)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
+                  />
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    This is the unique handle you type on the login screen. Your official recovery email remains unchanged.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                    Current Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    autoComplete="current-password"
+                    onChange={event => setCurrentPassword(event.target.value)}
+                    placeholder="Enter your current password to authorize changes"
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    autoComplete="new-password"
+                    onChange={event => setNewPassword(event.target.value)}
+                    placeholder="At least 8 characters"
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    autoComplete="new-password"
+                    onChange={event => setConfirmPassword(event.target.value)}
+                    placeholder="Re-enter your new password"
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)]/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-[var(--text-muted)]">
+                <span>Forgot your current password? We can mail an authentication recovery link to your inbox.</span>
+                <button
+                  type="button"
+                  className="link-button font-semibold text-[var(--brand)] hover:underline whitespace-nowrap"
+                  onClick={async () => {
+                    if (!currentUser) return;
+                    const result = await resetPasswordByUsername(
+                      currentUser.username || currentUser.email
+                    );
+                    if (result.status === "ok") {
+                      toast.success("Reset link sent", { description: result.message });
+                    } else {
+                      toast.error(result.message);
+                    }
+                  }}
+                >
+                  Send Recovery Link
+                </button>
+              </div>
             </div>
-            <p className="mt-2 text-[12.5px] leading-5 text-[var(--text-muted)]">
-              This is what you type to sign in, and you can change either one
-              whenever you like. Your email address stays exactly as it is — it
-              is where password recovery sends your link, so changing your
-              sign-in name never affects it.
-            </p>
-            <p className="mt-2 text-[12.5px] leading-5 text-[var(--text-muted)]">
-              Your current password is required, so nobody else can change it
-              from an unattended browser. You&apos;ll stay signed in on this
-              device. A pupil who has not chosen a password of their own yet
-              types their date of birth here. If you cannot remember it, use{" "}
+
+            <div className="px-6 sm:px-7 py-4 bg-[var(--bg-raised)]/40 border-t border-[var(--border)] flex items-center justify-end">
               <button
-                className="link-button"
-                onClick={async () => {
-                  if (!currentUser) return;
-                  /*
-                   * /api/recover, not Supabase's own mailer. Supabase only
-                   * delivers to project-team addresses without custom SMTP,
-                   * so the old call reported success and sent nothing for
-                   * everyone else. It also knows to redirect a pupil's link to
-                   * the guardian when the account address is inert.
-                   */
-                  const result = await resetPasswordByUsername(
-                    currentUser.username || currentUser.email
-                  );
-                  if (result.status === "ok")
-                    toast.success("Reset link sent", {
-                      description: result.message,
-                    });
-                  else toast.error(result.message);
-                }}
-              >
-                Forgot password
-              </button>{" "}
-              to set a new one by email instead — that route proves ownership of
-              the mailbox rather than the old password.
-            </p>
-            <div className="dialog-actions mt-4">
-              <button
-                className="primary-button"
+                className="primary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2"
                 onClick={() => void saveSignIn()}
                 disabled={savingPassword}
               >
-                {savingPassword ? "Updating…" : "Update sign-in details"}
+                <KeyRound size={15} />
+                <span>{savingPassword ? "Updating…" : "Update Credentials"}</span>
               </button>
             </div>
-          </div>
-        </section>
-      </div>
+          </section>
+        </div>
+      )}
 
-      {superAdmin && (
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Super admin</p>
-              <h2 className="panel-title">AI assistant</h2>
+      {/* ==================================================================== */}
+      {/* TAB 2: School Workspace                                             */}
+      {/* ==================================================================== */}
+      {activeTab === "workspace" && (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden animate-in fade-in duration-200">
+          <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
+                Campus Configuration
+              </p>
+              <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                School Profile & Campus Details
+              </h3>
+              <p className="text-xs text-[var(--text-muted)]">
+                Official institution information, active academic year, and running term parameters.
+              </p>
             </div>
-            <span
-              className={`count-badge ${isAiConfigured(aiConfig) && sharedReady ? "success" : "warning"}`}
-            >
-              {isAiConfigured(aiConfig) && sharedReady
-                ? `Live · ${getProvider(aiConfig.providerId).label}`
-                : "Not configured"}
+            <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
+              <Building2 size={20} />
             </span>
           </div>
-          <div className="px-5 pb-5 pt-4">
-            <p className="text-[12.5px] leading-5 text-[var(--text-muted)]">
-              Configure this once and every signed-in user gets the assistant —
-              there is nothing for them to set up. Google Gemini is built in and
-              is what this dashboard is built around; any provider that speaks
-              the OpenAI{" "}
-              <code className="text-[var(--text-hover)]">
-                /chat/completions
-              </code>{" "}
-              API works too.
+
+          <div className="p-6 sm:p-7 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Institution Name
+                </label>
+                <input
+                  value={schoolName}
+                  onChange={e => setSchoolName(e.target.value)}
+                  placeholder="e.g. Global Kids School"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Campus / Branch
+                </label>
+                <input
+                  value={campus}
+                  onChange={e => setCampus(e.target.value)}
+                  placeholder="e.g. Main Campus · Bengaluru"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Street Address
+                </label>
+                <input
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="e.g. 24 Green Park Road, Koramangala"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Contact Phone
+                </label>
+                <input
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="e.g. +91 80 2553 4410"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Active Academic Year
+                </label>
+                <select
+                  value={academicYear}
+                  onChange={e => setAcademicYear(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
+                >
+                  <option value="2025–26">2025–26</option>
+                  <option value="2026–27">2026–27</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Current Term
+                </label>
+                <select
+                  value={currentTerm}
+                  onChange={e => setCurrentTerm(e.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
+                >
+                  <option value="Term 1">Term 1 (First Half)</option>
+                  <option value="Term 2">Term 2 (Mid Term)</option>
+                  <option value="Term 3">Term 3 (Annual Finals)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-6 sm:px-7 py-4 bg-[var(--bg-raised)]/40 border-t border-[var(--border)] flex items-center justify-between">
+            <p className="text-xs text-[var(--text-muted)]">
+              Workspace changes apply system-wide across all faculty, student, and parent views.
             </p>
-            <div className="form-grid mt-4">
-              <label>
-                Provider
+            <button
+              className="primary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2"
+              onClick={() => void saveWorkspaceProfile()}
+              disabled={savingWorkspace}
+            >
+              <Save size={15} />
+              <span>{savingWorkspace ? "Saving…" : "Save Workspace"}</span>
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* ==================================================================== */}
+      {/* TAB 3: Academics & Alerts                                           */}
+      {/* ==================================================================== */}
+      {activeTab === "academics" && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* Grading & Policies Card */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
+                  Academic Standards
+                </p>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                  Grading Scale & Attendance Policy
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Rules that govern grade evaluation, warning thresholds, and student result publishing.
+                </p>
+              </div>
+              <span className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400">
+                <GraduationCap size={20} />
+              </span>
+            </div>
+
+            <div className="p-6 sm:p-7 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                    Institutional Grading Scale
+                  </label>
+                  <select
+                    value={gradeScale}
+                    onChange={e => setGradeScale(e.target.value)}
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
+                  >
+                    <option value="Percentage (0–100)">Percentage (0–100)</option>
+                    <option value="CGPA (10-point)">CGPA (10-point)</option>
+                    <option value="Letter grades (A–F)">Letter grades (A–F)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                    Attendance Warning Threshold
+                  </label>
+                  <select
+                    value={threshold}
+                    onChange={e => setThreshold(e.target.value)}
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
+                  >
+                    <option value="90%">90% (Strict Compliance)</option>
+                    <option value="85%">85% (Standard CBSE/ICSE)</option>
+                    <option value="80%">80% (Moderate)</option>
+                    <option value="75%">75% (Minimum Passing)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Auto-publish toggle row */}
+              <div className="p-4.5 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <span className="text-sm font-bold text-[var(--text-primary)] block">
+                    Auto-Publish Examination Results
+                  </span>
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    Instantly release report cards and marks to pupil & parent portals once paper marking is completed.
+                  </p>
+                </div>
+                <SettingToggle
+                  checked={prefs.exams}
+                  onChange={() => toggle("exams")}
+                  label="Auto-publish results"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Notifications Card */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
+                  Automations
+                </p>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                  Automated Notification Preferences
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Configure automated dispatch alerts for attendance, payments, messages, and schedules.
+                </p>
+              </div>
+              <span className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
+                <Bell size={20} />
+              </span>
+            </div>
+
+            <div className="p-6 sm:p-7 space-y-3.5">
+              {alerts.map(alert => (
+                <div
+                  key={alert.key}
+                  className="flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)]/30 hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                      {alert.title}
+                    </div>
+                    <div className="text-xs text-[var(--text-muted)]">
+                      {alert.detail}
+                    </div>
+                  </div>
+                  <SettingToggle
+                    checked={prefs[alert.key]}
+                    onChange={() => toggle(alert.key)}
+                    label={alert.title}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="px-6 sm:px-7 py-4 bg-[var(--bg-raised)]/40 border-t border-[var(--border)] flex items-center justify-end">
+              <button
+                className="primary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2"
+                onClick={() => void saveAcademicRules()}
+                disabled={savingAcademics}
+              >
+                <Save size={15} />
+                <span>{savingAcademics ? "Saving…" : "Save Policies & Alerts"}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* TAB 4: AI Assistant (Super Admin Only)                              */}
+      {/* ==================================================================== */}
+      {activeTab === "ai" && superAdmin && (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden animate-in fade-in duration-200">
+          <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
+                  Super Admin
+                </p>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    isAiConfigured(aiConfig) && sharedReady
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                  }`}
+                >
+                  {isAiConfigured(aiConfig) && sharedReady
+                    ? `Live · ${getProvider(aiConfig.providerId).label}`
+                    : "Not Configured"}
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                School-Wide AI Assistant Provider
+              </h3>
+              <p className="text-xs text-[var(--text-muted)]">
+                Configure once with Google Gemini or OpenAI; every authorized staff member gains intelligent assistant queries.
+              </p>
+            </div>
+            <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 flex-shrink-0">
+              <Sparkles size={20} />
+            </span>
+          </div>
+
+          <div className="p-6 sm:p-7 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  AI Provider Engine
+                </label>
                 <select
                   value={aiConfig.providerId}
                   onChange={event => selectAiProvider(event.target.value)}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
                 >
                   {AI_PROVIDERS.map(provider => (
                     <option key={provider.id} value={provider.id}>
@@ -5057,27 +5446,17 @@ function AccountSettingsPanel() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label>
-                Base URL
-                <input
-                  value={aiConfig.base}
-                  onChange={event =>
-                    updateAiConfig({ base: event.target.value })
-                  }
-                  placeholder="https://api.example.com/v1"
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-              </label>
-              <label>
-                Model
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Model Endpoint
+                </label>
                 <select
                   value={aiConfig.model}
-                  onChange={event =>
-                    updateAiConfig({ model: event.target.value })
-                  }
+                  onChange={event => updateAiConfig({ model: event.target.value })}
                   disabled={aiConfig.providerId === "custom"}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
                 >
                   {aiConfig.providerId.startsWith("gemini") &&
                     GEMINI_MODELS.map(m => (
@@ -5086,879 +5465,227 @@ function AccountSettingsPanel() {
                       </option>
                     ))}
                   {!aiConfig.providerId.startsWith("gemini") &&
-                    AI_PROVIDERS.filter(p => !p.id.startsWith("gemini")).map(
-                      provider => (
-                        <optgroup key={provider.id} label={provider.label}>
-                          {(provider.models ?? [provider.model]).map(m => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )
-                    )}
-                  <option value={aiConfig.model}>
-                    {aiConfig.model} (custom)
-                  </option>
+                    AI_PROVIDERS.filter(p => !p.id.startsWith("gemini")).map(provider => (
+                      <optgroup key={provider.id} label={provider.label}>
+                        {(provider.models ?? [provider.model]).map(m => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  <option value={aiConfig.model}>{aiConfig.model} (custom)</option>
                 </select>
-              </label>
-              <label>
-                API key
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Base API URL
+                </label>
+                <input
+                  value={aiConfig.base}
+                  onChange={event => updateAiConfig({ base: event.target.value })}
+                  placeholder="https://api.example.com/v1"
+                  spellCheck={false}
+                  autoComplete="off"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] font-mono text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
+                  Secret API Key
+                </label>
                 <input
                   type="password"
                   value={aiConfig.key}
-                  onChange={event =>
-                    updateAiConfig({ key: event.target.value })
-                  }
+                  onChange={event => updateAiConfig({ key: event.target.value })}
                   placeholder={
                     sharedReady && aiConfig.key === ""
-                      ? "Saved — type to replace"
+                      ? "Saved securely on server — type to replace"
                       : getProvider(aiConfig.providerId).keyHint
                   }
                   spellCheck={false}
                   autoComplete="off"
+                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all"
                 />
-              </label>
+              </div>
             </div>
-            <p className="mt-2 text-[12.5px] leading-5 text-[var(--text-muted)]">
-              {getProvider(aiConfig.providerId).note} The key is stored on the
-              server, encrypted, so it never ships in the page and no other user
-              can read it back — leave it blank to keep the saved one. Each
-              person only ever receives the data their own role can open.
+
+            <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+              {getProvider(aiConfig.providerId).note} The API key is stored on the server with AES encryption; no user browser can read it back.
             </p>
-            <div className="dialog-actions mt-4">
+          </div>
+
+          <div className="px-6 sm:px-7 py-4 bg-[var(--bg-raised)]/40 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
               <button
-                className="primary-button"
-                onClick={() => void saveAiConfig()}
-              >
-                {keySaved ? "Saved" : "Save for everyone"}
-              </button>
-              <button
-                className="secondary-button"
+                className="secondary-button h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2"
                 onClick={() => void runAiTest()}
                 disabled={testingAi || !isAiConfigured(aiConfig)}
               >
-                {testingAi ? "Testing…" : "Test connection"}
+                <RefreshCw size={14} className={testingAi ? "animate-spin" : ""} />
+                <span>{testingAi ? "Verifying…" : "Test Connection"}</span>
               </button>
+
               {sharedReady && (
                 <button
-                  className="secondary-button"
+                  className="secondary-button h-10 px-4 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300"
                   onClick={() => {
                     setAiConfig({ ...aiConfig, key: "" });
                     setAiState({ ...aiConfig, key: "" });
                     setKeySaved(false);
                   }}
                 >
-                  Clear saved key
+                  Clear Saved Key
                 </button>
               )}
             </div>
-          </div>
-        </section>
-      )}
-    </>
-  );
-}
 
-/**
- * User management.
- *
- * Four access levels exist: super admin → admin → staff → student.
- *
- *   • A super admin invites other admins and staff.
- *   • An admin invites staff.
- *   • Student portal logins are generated here (never self-registered) and
- *     handed to the family.
- *
- * Account creation needs the service-role key, which cannot live in the
- * browser, so every write goes through /api/invite. This view's job is to
- * collect the input, call that route and present the credentials once.
- */
-function UserManagementView({ onBack }: { onBack: () => void }) {
-  const currentUser = useCurrentUser();
-  const [me, setMe] = useState<{ id: string; role: string; orgId: string }>({
-    id: "",
-    role: "",
-    orgId: "",
-  });
-  const [tab, setTab] = useState<"people" | "invite" | "students">("people");
-
-  // Who can do what, mirroring the server route's GRANTABLE map.
-  // Anchored on the user id, not on the stored role: the `app_role` enum has no
-  // super_admin member, so `me.role` can never be it. Checking the stored value
-  // here would quietly lock the super admin out of the one screen that needs
-  // his powers, and he is the person least able to notice.
-  const superAdmin = isSuperAdminId(me.id);
-  const myRole = effectiveRole(me.id, me.role);
-  const isAdmin = superAdmin || myRole === "admin";
-  const grantable = superAdmin
-    ? ["admin", "staff", "teacher", "accountant"]
-    : isAdmin
-      ? ["staff", "teacher", "accountant"]
-      : [];
-
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState("staff");
-  const [inviting, setInviting] = useState(false);
-  const [issued, setIssued] = useState<{
-    kind: "invite" | "student";
-    to: string;
-    username: string;
-    password: string;
-    note?: string;
-  } | null>(null);
-
-  const {
-    rows: people,
-    loading: peopleLoading,
-    reload: reloadPeople,
-  } = usePeople();
-  const { rows: students, loading: studentsLoading } = useStudents();
-  const [studentQuery, setStudentQuery] = useState("");
-  const [issuingFor, setIssuingFor] = useState<RowId | null>(null);
-
-  const studentsPager = usePagination(
-    students.filter(s =>
-      `${s.name} ${s.usn ?? ""}`
-        .toLowerCase()
-        .includes(studentQuery.toLowerCase())
-    ),
-    10
-  );
-
-  useEffect(() => {
-    void (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.user) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("id,role,organisation_id")
-        .eq("id", session.user.id)
-        .maybeSingle();
-      setMe({
-        id: String(data?.id ?? session.user.id),
-        role: String(data?.role ?? "admin"),
-        orgId: String(data?.organisation_id ?? ""),
-      });
-    })();
-  }, []);
-
-  const callInvite = async (body: Record<string, unknown>) => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const res = await fetch("/api/invite", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token ?? ""}`,
-      },
-      body: JSON.stringify({ ...body, organisationId: me.orgId }),
-    });
-    const json = (await res.json()) as Record<string, string | boolean>;
-    if (!res.ok) throw new Error(String(json.message ?? "Request failed"));
-    return json;
-  };
-
-  const submitInvite = async () => {
-    setInviting(true);
-    setIssued(null);
-    try {
-      const result = await callInvite({
-        action: "invite",
-        email: inviteEmail,
-        fullName: inviteName,
-        role: inviteRole,
-      });
-      setIssued({
-        kind: "invite",
-        to: String(result.email),
-        username: String(result.username),
-        password: String(result.password),
-        note: result.recorded
-          ? undefined
-          : "Invitations table not created yet — run supabase/migrations/001_roles_invites.sql to record future invites.",
-      });
-      setInviteEmail("");
-      setInviteName("");
-      void reloadPeople();
-      toast.success("Account created", {
-        description: `Share the credentials with ${String(result.email)}.`,
-      });
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not create the account."
-      );
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const issueStudent = async (studentId: string, name: string) => {
-    setIssuingFor(studentId);
-    setIssued(null);
-    try {
-      const result = await callInvite({ action: "student", studentId });
-      setIssued({
-        kind: "student",
-        to: name,
-        username: String(result.username),
-        password: String(result.password),
-        note: result.persisted
-          ? undefined
-          : "Credential columns not created yet — run the migration to allow reissuing without regenerating.",
-      });
-      toast.success("Student login generated", {
-        description: `Hand these to ${name}'s family.`,
-      });
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Could not generate a login."
-      );
-    } finally {
-      setIssuingFor(null);
-    }
-  };
-
-  const tabs = [
-    { key: "people" as const, label: "People", show: true },
-    { key: "invite" as const, label: "Invite", show: grantable.length > 0 },
-    { key: "students" as const, label: "Student logins", show: isAdmin },
-  ].filter(t => t.show);
-
-  return (
-    <div className="page-stack">
-      <div className="page-intro">
-        <div>
-          <Breadcrumb
-            parent="Global Kids School"
-            current="User management"
-            onParentClick={onBack}
-          />
-          <h1 className="page-title">User management</h1>
-          <p className="page-subtitle">
-            {people.length} account{people.length === 1 ? "" : "s"} ·{" "}
-            {students.length} student logins available
-          </p>
-        </div>
-      </div>
-
-      <div className="segmented-control">
-        {tabs.map(t => (
-          <button
-            key={t.key}
-            className={tab === t.key ? "active" : ""}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {issued && (
-        <section className="panel credential-panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">One-time credentials</p>
-              <h2 className="panel-title">
-                {issued.kind === "invite" ? "Invite" : "Student login"} for{" "}
-                {issued.to}
-              </h2>
-            </div>
             <button
-              className="secondary-button compact"
-              onClick={() => setIssued(null)}
+              className="primary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2"
+              onClick={() => void saveAiConfig()}
             >
-              Dismiss
+              <Save size={15} />
+              <span>{keySaved ? "Configuration Saved" : "Save For School"}</span>
             </button>
           </div>
-          <div className="px-5 pb-5 pt-4">
-            <p className="text-[12.5px] leading-5 text-[var(--text-muted)]">
-              These are shown once. Copy them now — they are not stored in a
-              place the user can read again, and you should ask them to change
-              the password on first sign-in.
-            </p>
-            <div className="credential-grid mt-4">
-              <div>
-                <span>Sign-in address</span>
-                <code>{issued.to}</code>
-              </div>
-              <div>
-                <span>Username</span>
-                <code>{issued.username}</code>
-              </div>
-              <div>
-                <span>Temporary password</span>
-                <code>{issued.password}</code>
-              </div>
-            </div>
-            {issued.note && (
-              <p className="mt-3 text-[12.5px] leading-5 text-[var(--warning)]">
-                {issued.note}
-              </p>
-            )}
-          </div>
         </section>
       )}
 
-      {tab === "people" && (
-        <section className="panel table-panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Directory</p>
-              <h2 className="panel-title">Accounts</h2>
+      {/* ==================================================================== */}
+      {/* TAB 5: Data & Session                                               */}
+      {/* ==================================================================== */}
+      {activeTab === "system" && (
+        <div className="space-y-8 animate-in fade-in duration-200">
+          {/* Data Export Card */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
+                  Data Backup
+                </p>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                  Export System Configuration
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Download a complete JSON snapshot of your school parameters, academic scales, and automation rules.
+                </p>
+              </div>
+              <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
+                <Download size={20} />
+              </span>
             </div>
-            <span className="count-badge">{people.length} total</span>
-          </div>
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Access level</th>
-  
-                </tr>
-              </thead>
-              <tbody>
-                {peopleLoading ? (
-                  <SkeletonTableRows rows={5} columns={5} />
-                ) : people.length === 0 ? (
-                  <tr>
-                    <td colSpan={5}>
-                      <div className="empty-state py-10">
-                        <Users size={20} />
-                        <p>No accounts found</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  people.map(person => (
-                    <tr key={person.id}>
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`avatar avatar-sm ${avatarTones[person.tone]}`}
-                          >
-                            {person.initials}
-                          </span>
-                          <span className="font-medium text-[var(--text-primary)]">
-                            {person.name}
-                          </span>
-                          {person.protected ? (
-                            <span
-                              className="status-pill success"
-                              title={
-                                superAdminGuard(
-                                  person.id,
-                                  "change the role of"
-                                ) ?? undefined
-                              }
-                            >
-                              <Lock size={11} aria-hidden />
-                              Protected
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="muted-cell">{person.email}</td>
-                      <td>
-                        <span className="grade-chip">{person.role}</span>
-                      </td>
-                      <td>
-                        <span
-                          className={`status-pill ${accessTone(person.access)}`}
-                        >
-                          <span className="status-dot" />
-                          {person.access}
-                        </span>
-                      </td>
-                      <td>
-                        {person.protected ? (
-                          <span className="muted-cell text-[12.5px]">
-                            {person.id === me.id ? "You" : "Locked"}
-                          </span>
-                        ) : person.id === me.id ? (
-                          <span className="muted-cell text-[12.5px]">You</span>
-                        ) : (
-                          <button
-                            className="tiny-action"
-                            onClick={() => toast(`Managing ${person.name}`)}
-                          >
-                            Manage
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
 
-      {tab === "invite" && (
-        <div className="dashboard-grid dashboard-grid-mid">
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">New account</p>
-                <h2 className="panel-title">Invite a colleague</h2>
+            <div className="p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1 max-w-lg">
+                <div className="text-sm font-bold text-[var(--text-primary)]">
+                  JSON System Snapshot
+                </div>
+                <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                  Generates an offline portable backup file with current term settings, grading scales, and notification configurations.
+                </p>
               </div>
+
+              <button
+                className="secondary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2 flex-shrink-0"
+                onClick={() => {
+                  const data = {
+                    school: schoolName || "Global Kids School",
+                    exportedAt: new Date().toISOString(),
+                    settings: { academicYear, gradeScale, threshold, prefs, campus, address, phone, currentTerm },
+                  };
+                  const blob = new Blob([JSON.stringify(data, null, 2)], {
+                    type: "application/json",
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `school-settings-${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success("School configuration exported successfully");
+                }}
+              >
+                <Download size={15} />
+                <span>Export Configuration</span>
+              </button>
             </div>
-            <div className="px-5 pb-5 pt-4">
-              <div className="form-grid">
-                <label>
-                  Full name
-                  <input
-                    value={inviteName}
-                    onChange={e => setInviteName(e.target.value)}
-                    placeholder="e.g. Anita Rao"
-                  />
-                </label>
-                <label>
-                  Email
-                  <input
-                    type="email"
-                    value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                    placeholder="name@gks.edu"
-                  />
-                </label>
-                <label>
-                  Access level
-                  <select
-                    value={inviteRole}
-                    onChange={e => setInviteRole(e.target.value)}
-                  >
-                    {grantable.map(role => (
-                      <option key={role} value={role}>
-                        {role === "admin"
-                          ? "Admin — can invite staff"
-                          : role === "staff"
-                            ? "Staff"
-                            : role === "teacher"
-                              ? "Teacher"
-                              : "Accountant"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+          </section>
+
+          {/* Session Sign-Out & Danger Zone */}
+          <section className="rounded-2xl border border-rose-500/25 bg-[var(--bg-panel)] shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-7 border-b border-rose-500/20 bg-rose-500/5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="eyebrow text-xs font-bold text-rose-400 uppercase tracking-wider">
+                  Session & Controls
+                </p>
+                <h3 className="text-lg font-bold text-[var(--text-primary)]">
+                  Session Management & Defaults
+                </h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Manage active browser sessions and restore factory defaults if required.
+                </p>
               </div>
-              <p className="mt-3 text-[12.5px] leading-5 text-[var(--text-muted)]">
-                {superAdmin
-                  ? "As super admin you can create other admins. Everyone else in this list is limited to staff-level access."
-                  : "Admins can invite staff, teachers and accountants. Only a super admin can create another admin."}
-              </p>
-              <div className="dialog-actions mt-4">
+              <span className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400">
+                <LogOut size={20} />
+              </span>
+            </div>
+
+            <div className="p-6 sm:p-7 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 py-3 border-b border-[var(--border)]">
+                <div className="space-y-1 max-w-lg">
+                  <div className="text-sm font-bold text-[var(--text-primary)]">
+                    Sign Out Active Session
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    Ends your current signed-in session on this device and redirects securely to the login portal.
+                  </p>
+                </div>
+
                 <button
-                  className="primary-button"
-                  disabled={inviting || !inviteEmail}
-                  onClick={() => void submitInvite()}
+                  className="secondary-button h-10 px-5 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border-rose-500/30 flex items-center gap-2 flex-shrink-0"
+                  onClick={async () => {
+                    try {
+                      await supabaseSignOut();
+                    } finally {
+                      window.location.href = "/login";
+                    }
+                  }}
                 >
-                  {inviting ? "Creating…" : "Create account"}
+                  <LogOut size={15} />
+                  <span>Sign Out Session</span>
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 py-3">
+                <div className="space-y-1 max-w-lg">
+                  <div className="text-sm font-bold text-[var(--text-primary)]">
+                    Reset Settings to Default
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    Restores notification preferences and alert triggers to their original school presets.
+                  </p>
+                </div>
+
+                <button
+                  className="secondary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2 flex-shrink-0"
+                  onClick={() => {
+                    setPrefs(settings.prefs);
+                    setAcademicYear(settings.academicYear);
+                    setGradeScale(settings.gradeScale);
+                    setThreshold(settings.threshold);
+                    toast.success("Settings restored to defaults");
+                  }}
+                >
+                  <RefreshCw size={15} />
+                  <span>Reset Defaults</span>
                 </button>
               </div>
             </div>
           </section>
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">How access works</p>
-                <h2 className="panel-title">Role hierarchy</h2>
-              </div>
-            </div>
-            <div className="px-5 pb-5 pt-4">
-              {[
-                {
-                  role: "Super admin",
-                  detail: superAdmin
-                    ? "You. Full control, including creating other admins, and this account cannot be demoted or removed."
-                    : "Full control, including creating other admins. Cannot be demoted or removed.",
-                  tone: "teal",
-                },
-                {
-                  role: "Admin",
-                  detail: "Runs day-to-day operations and invites staff.",
-                  tone: "blue",
-                },
-                {
-                  role: "Staff",
-                  detail: "Teachers and office staff. Operational access only.",
-                  tone: "violet",
-                },
-                {
-                  role: "Student",
-                  detail:
-                    "Portal login generated by the school. No staff access.",
-                  tone: "amber",
-                },
-              ].map((row, index) => (
-                <div
-                  key={row.role}
-                  className={`flex items-start gap-3 py-3 ${index < 3 ? "border-b border-[var(--border)]" : ""}`}
-                >
-                  <span className={`role-dot ${row.tone}`} />
-                  <div>
-                    <div className="text-sm font-medium text-[var(--text-primary)]">
-                      {row.role}
-                    </div>
-                    <div className="mt-1.5 text-[12.5px] text-[var(--text-muted)]">
-                      {row.detail}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
       )}
-
-      {tab === "students" && (
-        <section className="panel table-panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Portal access</p>
-              <h2 className="panel-title">Student logins</h2>
-            </div>
-            <div className="search-field" style={{ maxWidth: 260 }}>
-              <Search size={15} />
-              <input
-                value={studentQuery}
-                onChange={e => setStudentQuery(e.target.value)}
-                placeholder="Search students..."
-              />
-            </div>
-          </div>
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Admission ID</th>
-                  <th>Grade</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {studentsLoading ? (
-                  <SkeletonTableRows rows={8} columns={5} />
-                ) : (
-                  studentsPager.pageRows.map(student => (
-                    <tr key={student.id}>
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`avatar avatar-sm ${avatarTones[student.tone]}`}
-                          >
-                            {student.initials}
-                          </span>
-                          <span className="font-medium text-[var(--text-primary)]">
-                            {student.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="muted-cell">
-                        {student.usn ?? "—"}
-                      </td>
-                      <td>
-                        <span className="grade-chip">{student.grade}</span>
-                      </td>
-                      <td>
-                        <button
-                          className="tiny-action"
-                          disabled={issuingFor === student.id}
-                          onClick={() =>
-                            void issueStudent(String(student.id), student.name)
-                          }
-                        >
-                          {issuingFor === student.id
-                            ? "Generating…"
-                            : "Generate login"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <Pager pagination={studentsPager} noun="students" />
-        </section>
-      )}
-    </div>
-  );
-}
-
-function accessTone(access: string): string {
-  switch (access) {
-    case "Super admin":
-      return "success";
-    case "Admin":
-      return "neutral";
-    case "Staff":
-      return "neutral";
-    default:
-      return "neutral";
-  }
-}
-
-function SettingsView({ onBack }: { onBack: () => void }) {
-  const { settings, save } = useSettings();
-  const [prefs, setPrefs] = useState(settings.prefs);
-  const [academicYear, setAcademicYear] = useState(settings.academicYear);
-  const [gradeScale, setGradeScale] = useState(settings.gradeScale);
-  const [threshold, setThreshold] = useState(settings.threshold);
-  const toggle = (key: keyof typeof prefs) =>
-    setPrefs(current => ({ ...current, [key]: !current[key] }));
-  const saveSettings = () => {
-    void save({ ...settings, prefs, academicYear, gradeScale, threshold }).then(
-      ok => {
-        if (ok)
-          toast.success("Settings saved", {
-            description: "Your changes are live for all staff.",
-          });
-      }
-    );
-  };
-  const alerts = [
-    {
-      key: "attendance" as const,
-      title: "Attendance alerts",
-      detail: "When a class drops below the daily threshold",
-    },
-    {
-      key: "fees" as const,
-      title: "Fee reminders",
-      detail: "Automated nudges for outstanding balances",
-    },
-    {
-      key: "messages" as const,
-      title: "Parent messages",
-      detail: "New inbox messages from families",
-    },
-    {
-      key: "exams" as const,
-      title: "Exam countdowns",
-      detail: "Reminders before every exam window",
-    },
-    {
-      key: "digest" as const,
-      title: "Weekly digest",
-      detail: "A Monday summary for the leadership team",
-    },
-  ];
-  return (
-    <div className="page-stack">
-      <div className="page-intro">
-        <div>
-          <Breadcrumb
-            parent="Global Kids School"
-            current="Settings"
-            onParentClick={onBack}
-          />
-          <h1 className="page-title">Settings</h1>
-          <p className="page-subtitle">
-            Configure the school workspace, alerts and academic rules.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="secondary-button"
-            onClick={() => toast("Settings reset to defaults")}
-          >
-            Reset defaults
-          </button>
-          <button className="primary-button" onClick={saveSettings}>
-            <Check size={16} />
-            Save changes
-          </button>
-        </div>
-      </div>
-      <AccountSettingsPanel />
-      <div className="dashboard-grid dashboard-grid-mid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Workspace</p>
-              <h2 className="panel-title">School profile</h2>
-            </div>
-          </div>
-          <div className="px-5 pb-5 pt-4">
-            <div className="form-grid">
-              <label>
-                School name
-                <input defaultValue={settings.schoolName} />
-              </label>
-              <label>
-                Campus
-                <input defaultValue={settings.campus} />
-              </label>
-              <label>
-                Address
-                <input defaultValue={settings.address} />
-              </label>
-              <label>
-                Phone
-                <input defaultValue={settings.phone} />
-              </label>
-              <label>
-                Academic year
-                <select
-                  value={academicYear}
-                  onChange={event => setAcademicYear(event.target.value)}
-                >
-                  <option>2025–26</option>
-                  <option>2026–27</option>
-                </select>
-              </label>
-              <label>
-                Current term
-                <select defaultValue={settings.currentTerm}>
-                  <option>Term 1</option>
-                  <option>Term 2</option>
-                  <option>Term 3</option>
-                </select>
-              </label>
-            </div>
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Alerts</p>
-              <h2 className="panel-title">Notification preferences</h2>
-            </div>
-          </div>
-          <div className="px-5 pb-2 pt-1">
-            {alerts.map((alert, index) => (
-              <div
-                className={`flex items-center justify-between gap-4 py-3.5 ${index < alerts.length - 1 ? "border-b border-[var(--border)]" : ""}`}
-                key={alert.key}
-              >
-                <div>
-                  <div className="text-sm font-medium text-[var(--text-primary)]">
-                    {alert.title}
-                  </div>
-                  <div className="mt-1.5 text-[12.5px] text-[var(--text-muted)]">
-                    {alert.detail}
-                  </div>
-                </div>
-                <SettingToggle
-                  checked={prefs[alert.key]}
-                  onChange={() => toggle(alert.key)}
-                  label={alert.title}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-      <div className="dashboard-grid dashboard-grid-mid">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Academics</p>
-              <h2 className="panel-title">Grading & thresholds</h2>
-            </div>
-          </div>
-          <div className="px-5 pb-5 pt-4">
-            <div className="form-grid">
-              <label>
-                Grading scale
-                <select
-                  value={gradeScale}
-                  onChange={event => setGradeScale(event.target.value)}
-                >
-                  <option>Percentage (0–100)</option>
-                  <option>CGPA (10-point)</option>
-                  <option>Letter grades (A–F)</option>
-                </select>
-              </label>
-              <label>
-                Attendance alert threshold
-                <select
-                  value={threshold}
-                  onChange={event => setThreshold(event.target.value)}
-                >
-                  <option>90%</option>
-                  <option>85%</option>
-                  <option>80%</option>
-                  <option>75%</option>
-                </select>
-              </label>
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-4 border-t border-[var(--border)] pt-4">
-              <div>
-                <div className="text-sm font-medium text-[var(--text-primary)]">
-                  Auto-publish results
-                </div>
-                <div className="mt-1.5 text-[12.5px] text-[var(--text-muted)]">
-                  Release grades to families as soon as papers are marked
-                </div>
-              </div>
-              <SettingToggle
-                checked={prefs.exams}
-                onChange={() => toggle("exams")}
-                label="Auto-publish results"
-              />
-            </div>
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Danger zone</p>
-              <h2 className="panel-title">Workspace controls</h2>
-            </div>
-          </div>
-          <div className="px-5 pb-5 pt-4">
-            <div
-              className="drawer-section"
-              style={{ borderTop: 0, paddingTop: 0 }}
-            >
-              <button
-                onClick={() =>
-                  toast.warning("This action requires a second admin")
-                }
-              >
-                <AlertCircle size={16} />
-                Archive this campus
-                <ChevronRight size={15} />
-              </button>
-              <button
-                onClick={() =>
-                  toast.warning("Export queued — you'll be notified")
-                }
-              >
-                <Download size={16} />
-                Export all school data
-                <ChevronRight size={15} />
-              </button>
-              <button
-                onClick={() =>
-                  toast.error(
-                    "Session invalidation requires super admin approval"
-                  )
-                }
-              >
-                <LogOut size={16} />
-                Sign out all devices
-                <ChevronRight size={15} />
-              </button>
-            </div>
-            <p className="mt-4 text-[12.5px] leading-5 text-[var(--text-muted)]">
-              Changes to workspace controls are audited and require a second
-              administrator for sensitive actions.
-            </p>
-          </div>
-        </section>
-      </div>
     </div>
   );
 }
@@ -6097,23 +5824,43 @@ export default function Home() {
     [allowedScreenSet]
   );
 
+  const isSuperAdminUser = currentUser ? isSuperAdminId(currentUser.id) : false;
+  const isAdminUser =
+    isSuperAdminUser ||
+    currentUser?.role === "admin" ||
+    currentUser?.role === "super_admin";
+
   const staffMobileTabs = useMemo<StaffMobileTab[]>(() => {
+    // Smart pill tabs tailored for Admin & Super Admin:
+    // 4 high-frequency operational command centers: Home, Students, Fees, Users
+    // (with Menu automatically added as the 5th tab by StaffMobileShell)
+    if (isAdminUser) {
+      return [
+        { id: "Overview", label: "Home", icon: LayoutDashboard },
+        { id: "Students", label: "Students", icon: GraduationCap },
+        { id: "Fees & Finance", label: "Fees", icon: IndianRupee },
+        { id: "User management", label: "Users", icon: UserCog },
+      ];
+    }
+
+    if (
+      currentUser?.role === "accountant" &&
+      allowedScreenSet.has("Fees & Finance")
+    ) {
+      return [
+        { id: "Overview", label: "Home", icon: LayoutDashboard },
+        { id: "Students", label: "Students", icon: GraduationCap },
+        { id: "Fees & Finance", label: "Fees", icon: IndianRupee },
+      ];
+    }
+
     const tabs: StaffMobileTab[] = [
       { id: "Overview", label: "Home", icon: LayoutDashboard },
     ];
     if (allowedScreenSet.has("Students")) {
       tabs.push({ id: "Students", label: "Students", icon: GraduationCap });
     }
-    if (
-      currentUser?.role === "accountant" &&
-      allowedScreenSet.has("Fees & Finance")
-    ) {
-      tabs.push({
-        id: "Fees & Finance",
-        label: "Fees",
-        icon: IndianRupee,
-      });
-    } else if (allowedScreenSet.has("Attendance")) {
+    if (allowedScreenSet.has("Attendance")) {
       tabs.push({
         id: "Attendance",
         label: "Attendance",
@@ -6121,7 +5868,7 @@ export default function Home() {
       });
     }
     return tabs;
-  }, [allowedScreenSet, currentUser?.role]);
+  }, [allowedScreenSet, currentUser, isAdminUser]);
 
   const staffMobileGroups = useMemo(() => {
     const groups = visibleNavGroups.map(group => ({
@@ -6134,9 +5881,6 @@ export default function Home() {
     const system: Array<{ label: string; icon: LucideIcon }> = [];
     if (allowedScreenSet.has("User management")) {
       system.push({ label: "User management", icon: UserCog });
-    }
-    if (allowedScreenSet.has("Account logins")) {
-      system.push({ label: "Account logins", icon: KeyRound });
     }
     if (allowedScreenSet.has("Settings")) {
       system.push({ label: "Settings", icon: Settings2 });
@@ -6223,16 +5967,6 @@ export default function Home() {
         />
       );
     }
-    if (activeView === "Documents")
-      return (
-        <DocumentsView
-          openStudentId={pendingStudentRef.current}
-          onStudentOpened={() => {
-            pendingStudentRef.current = null;
-          }}
-          onBack={() => navigate("Overview")}
-        />
-      );
     if (activeView === "Attendance")
       return <AttendanceView onBack={() => navigate("Overview")} />;
     if (activeView === "Fees & Finance")
@@ -6259,8 +5993,6 @@ export default function Home() {
       return <ReportsView onBack={() => navigate("Overview")} />;
     if (activeView === "User management")
       return <UserManagementView onBack={() => navigate("Overview")} />;
-    if (activeView === "Account logins")
-      return <CredentialsView onBack={() => navigate("Overview")} />;
     if (activeView === "Settings")
       return <SettingsView onBack={() => navigate("Overview")} />;
     return <DashboardView onNavigate={navigate} />;
@@ -6298,6 +6030,7 @@ export default function Home() {
         <StaffMobileShell
           name={userName}
           role={userRole}
+          isExecutive={isAdminUser}
           initials={userInitials}
           photoUrl={currentUser?.avatarUrl ?? null}
           activeView={activeView}
@@ -6402,15 +6135,6 @@ export default function Home() {
                     >
                       <UserCog size={17} />
                       <span className="nav-label">User management</span>
-                    </button>
-                  )}
-                  {allowedScreenSet.has("Account logins") && (
-                    <button
-                      className={`nav-item ${activeView === "Account logins" ? "active" : ""}`}
-                      onClick={() => navigate("Account logins")}
-                    >
-                      <KeyRound size={17} />
-                      <span className="nav-label">Account logins</span>
                     </button>
                   )}
                   {allowedScreenSet.has("Settings") && (
