@@ -833,8 +833,8 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       {/* ==================================================================== */}
       {activeTab === "staff" && (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
-          {/* Header & Controls Toolbar */}
-          <div className="p-6 sm:p-7 border-b border-[var(--border)] flex flex-col md:flex-row md:items-center md:justify-between gap-5 bg-[var(--bg-raised)]/30">
+          {/* Header Title Bar */}
+          <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-1">
               <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
                 Faculty Registry
@@ -846,11 +846,14 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 {nonSuperAdminStaff.length} members with portal usernames, credentials, and role assignments.
               </p>
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-3.5">
+          {/* Controls Toolbar in a Single Clean Straight Line */}
+          <div className="px-6 sm:px-7 py-3.5 border-b border-[var(--border)] bg-[var(--bg-panel)] flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-3 flex-shrink-0">
               {/* Search */}
-              <div className="search-field h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 min-w-[260px] sm:min-w-[290px]">
-                <Search size={15} className="text-[var(--text-muted)]" />
+              <div className="search-field h-10 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 w-60 sm:w-72">
+                <Search size={15} className="text-[var(--text-muted)] flex-shrink-0" />
                 <input
                   value={staffQuery}
                   onChange={e => setStaffQuery(e.target.value)}
@@ -859,17 +862,17 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {/* Roles: All / Teachers / Administrative Staff / Principal */}
-              <div className="segmented-control h-11 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1 overflow-x-auto no-scrollbar">
+              {/* Roles: All / Teachers / Admin Staff / Principal */}
+              <div className="segmented-control h-10 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
                 {[
                   { key: "all", label: `All (${nonSuperAdminStaff.length})` },
                   { key: "teacher", label: `Teachers (${teacherCount})` },
-                  { key: "staff", label: `Administrative Staff (${adminStaffCount})` },
+                  { key: "staff", label: `Admin Staff (${adminStaffCount})` },
                   { key: "principal", label: `Principal (${principalCount})` },
                 ].map(tab => (
                   <button
                     key={tab.key}
-                    className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                       staffRoleFilter === tab.key
                         ? "bg-[var(--border-accent)] text-[var(--text-primary)] font-bold shadow-sm"
                         : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
@@ -882,10 +885,12 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* Show / Hide Passwords */}
+            {/* Show / Hide Passwords */}
+            <div className="flex items-center flex-shrink-0">
               <button
-                className={`secondary-button h-11 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+                className={`secondary-button h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                   revealed
                     ? "border-amber-500/40 text-amber-400 bg-amber-500/10 shadow-sm"
                     : ""
@@ -1116,8 +1121,8 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       {/* ==================================================================== */}
       {activeTab === "students" && (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
-          {/* Header & Controls Toolbar */}
-          <div className="p-6 sm:p-7 border-b border-[var(--border)] flex flex-col md:flex-row md:items-center md:justify-between gap-5 bg-[var(--bg-raised)]/30">
+          {/* Header Title Bar */}
+          <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-1">
               <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
                 Student Portals
@@ -1129,11 +1134,14 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 Pupil USN sign-in handles, date-of-birth passwords, and copyable parent slips.
               </p>
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-3.5">
+          {/* Controls Toolbar in a Single Clean Straight Line */}
+          <div className="px-6 sm:px-7 py-3.5 border-b border-[var(--border)] bg-[var(--bg-panel)] flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-3 flex-shrink-0">
               {/* Search */}
-              <div className="search-field h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 min-w-[260px] sm:min-w-[290px]">
-                <Search size={15} className="text-[var(--text-muted)]" />
+              <div className="search-field h-10 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 w-60 sm:w-72">
+                <Search size={15} className="text-[var(--text-muted)] flex-shrink-0" />
                 <input
                   value={studentQuery}
                   onChange={e => setStudentQuery(e.target.value)}
@@ -1143,7 +1151,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               </div>
 
               {/* Intuitive School Division Filters */}
-              <div className="segmented-control h-11 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
+              <div className="segmented-control h-10 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
                 {[
                   { key: "all", label: "All Students" },
                   { key: "primary", label: "Primary (G1–5)" },
@@ -1153,7 +1161,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 ].map(tab => (
                   <button
                     key={tab.key}
-                    className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
                       studentFilter === tab.key
                         ? "bg-[var(--border-accent)] text-[var(--text-primary)] font-bold shadow-sm"
                         : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
@@ -1168,10 +1176,12 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* Toggle Password Masking */}
+            {/* Toggle Password Masking */}
+            <div className="flex items-center flex-shrink-0">
               <button
-                className={`secondary-button h-11 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all ${
+                className={`secondary-button h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                   revealed
                     ? "border-amber-500/40 text-amber-400 bg-amber-500/10 shadow-sm"
                     : ""
