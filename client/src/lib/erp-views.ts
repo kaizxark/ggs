@@ -1258,6 +1258,9 @@ export interface PeopleRow {
   name: string;
   initials: string;
   email: string;
+  username: string;
+  department: string;
+  designation?: string;
   role: string;
   access: string;
   tone: string;
@@ -1272,40 +1275,77 @@ const ACCESS_LABELS: Record<string, string> = ROLE_LABELS;
 
 async function loadPeople(): Promise<PeopleRow[]> {
   const [staffRows, profileRows] = await Promise.all([
-    fetchAll("staff", "id,full_name,email,role,department,employment_status,organisation_id"),
-    fetchAll("profiles", "id,full_name,email,role"),
+    fetchAll("staff", "id,usn,name,designation,department,email,active,profile_id").catch(() => []),
+    fetchAll("profiles", "id,full_name,email,role,username").catch(() => []),
   ]);
 
-  const seen = new Set<string>();
+  const profileById = new Map(profileRows.map(p => [String(p.id), p]));
+  const seenIds = new Set<string>();
   const out: PeopleRow[] = [];
 
-  for (const row of [...profileRows, ...staffRows]) {
-    const id = String(row.id);
-    const email = String(row.email ?? "");
-    // de-dupe on email: the same person appears in both tables
-    const key = email || id;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const name = String(row.full_name ?? email.split("@")[0] ?? "User");
-    const role = String(row.role ?? "staff");
+  // 1. Process all staff members in the school registry
+  for (const s of staffRows) {
+    const id = String(s.id);
+    seenIds.add(id);
+    const profile = profileById.get(String(s.profile_id ?? "")) || profileById.get(id);
+    if (profile) seenIds.add(String(profile.id));
+
+    const name = String(s.name ?? profile?.full_name ?? "Staff Member");
+    const email = String(s.email ?? profile?.email ?? "");
+    const des = String(s.designation ?? "");
+    const isAdm =
+      /principal|vice principal|admin|leadership|coordinator|director/i.test(des) ||
+      profile?.role === "admin";
+    const role = isAdm ? "admin" : "teacher";
     const tone = toneFor(id);
-    /*
-     * The super admin's access is derived from his id, not from the stored
-     * role. `app_role` cannot hold "super_admin" yet, so the raw column reads
-     * "admin" and the user list would otherwise present him as one of several
-     * admins he outranks.
-     */
-    const effective = effectiveRole(id, role);
-    const protectedRow = isSuperAdminId(id);
+    const username = String(
+      (profile as { username?: string })?.username ||
+      s.usn ||
+      email.split("@")[0] ||
+      name.toLowerCase().replace(/[^a-z0-9]/g, ".")
+    );
+    const department = String(s.department ?? (isAdm ? "Administration" : "Academics"));
+
     out.push({
       id,
       name,
       initials: initialsOf(name.split(" ")[0] ?? "", name.split(" ").slice(1).join(" ")),
       email,
-      role: effective,
-      access: ROLE_LABELS[effective] ?? effective,
+      username,
+      department,
+      designation: des,
+      role,
+      access: isAdm ? "Administrator" : "Teacher",
       tone,
-      protected: protectedRow,
+      protected: false,
+    });
+  }
+
+  // 2. Include any extra admin/staff profiles not in staff table (excluding students/parents)
+  for (const p of profileRows) {
+    const pId = String(p.id);
+    if (seenIds.has(pId)) continue;
+    seenIds.add(pId);
+    if (p.role === "student" || p.role === "parent") continue;
+
+    const name = String(p.full_name ?? String(p.email ?? "").split("@")[0] ?? "Staff");
+    const email = String(p.email ?? "");
+    const role = p.role === "admin" || p.role === "super_admin" ? "admin" : "teacher";
+    const tone = toneFor(pId);
+    const username = String((p as { username?: string })?.username || email.split("@")[0] || "user");
+
+    out.push({
+      id: pId,
+      name,
+      initials: initialsOf(name.split(" ")[0] ?? "", name.split(" ").slice(1).join(" ")),
+      email,
+      username,
+      department: role === "admin" ? "Administration" : "Academics",
+      designation: role === "admin" ? "Administrator" : "Faculty Teacher",
+      role,
+      access: role === "admin" ? "Administrator" : "Teacher",
+      tone,
+      protected: isSuperAdminId(pId),
     });
   }
 

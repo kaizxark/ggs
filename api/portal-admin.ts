@@ -29,7 +29,7 @@
 export const config = { runtime: "nodejs" };
 
 import { resolveCaller, SERVICE_KEY, SUPABASE_URL } from "../shared/ai-auth.js";
-import { isSuperAdminId } from "../shared/super-admin.js";
+import { isSuperAdminId, SUPER_ADMIN_ID } from "../shared/super-admin.js";
 import { isValidUsername } from "../shared/username-lookup.js";
 import {
   ddmmDate,
@@ -296,7 +296,7 @@ async function allAccounts(req: Request): Promise<Response> {
       ),
       readJson<Json>(
         await rest(
-          `staff?select=id,name,email,designation,employee_code,joined_on,profile_id&organisation_id=eq.${org}&order=name.asc&limit=1000`
+          `staff?select=id,name,email,designation,usn,joined_on,profile_id&organisation_id=eq.${org}&order=name.asc&limit=1000`
         )
       ),
       /*
@@ -359,7 +359,7 @@ async function allAccounts(req: Request): Promise<Response> {
       kind: "staff" as const,
       recordId: id,
       name: String(person.name ?? ""),
-      detail: String(person.employee_code ?? person.designation ?? ""),
+      detail: String(person.usn ?? person.designation ?? ""),
       // A recorded password wins over the derived one, so a member of staff who
       // has chosen their own is reported as they actually are.
       username: String(
@@ -372,7 +372,14 @@ async function allAccounts(req: Request): Promise<Response> {
     };
   });
 
-  const rows = [...pupilAccounts, ...staffAccounts];
+  const safeStaffAccounts = staffAccounts.filter(person => {
+    const isSuper =
+      person.recordId === SUPER_ADMIN_ID ||
+      person.username.toLowerCase() === "kaizxark";
+    return !isSuper;
+  });
+
+  const rows = [...pupilAccounts, ...safeStaffAccounts];
 
   /*
    * Written before the response is sent, and its failure does not suppress the
