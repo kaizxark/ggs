@@ -147,6 +147,23 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
   const myRole = effectiveRole(me.id, me.role);
   const isAdmin = superAdmin || myRole === "admin";
 
+  const isSuperAdminUser =
+    isSuperAdminId(currentUser?.id ?? me.id) ||
+    currentUser?.username?.toLowerCase() === "kaizxark" ||
+    currentUser?.email?.toLowerCase().includes("kaizxark");
+
+  const isPrincipalUser =
+    !isSuperAdminUser &&
+    (currentUser?.role === "admin" ||
+      currentUser?.role === "principal" ||
+      currentUser?.username?.toLowerCase() === "principal" ||
+      /meera/i.test(currentUser?.email ?? ""));
+
+  const isAdministrativeStaffUser =
+    !isSuperAdminUser &&
+    !isPrincipalUser &&
+    (currentUser?.role === "staff" || me.role === "staff");
+
   /* ---------------------------- Data ---------------------------- */
 
   const {
@@ -332,16 +349,51 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
     return map;
   }, [students]);
 
-  // Clean list of staff excluding super admin
-  const nonSuperAdminStaff = useMemo(() => {
-    return people.filter(
-      p =>
-        !isSuperAdminId(p.id) &&
-        p.role !== "super_admin" &&
-        p.username?.toLowerCase() !== "kaizxark" &&
-        !p.email?.toLowerCase().includes("kaizxark")
-    );
-  }, [people]);
+  // Staff list filtered according to role visibility permissions:
+  // - Principal can view all administrative staff & teachers, but NOT himself/herself
+  // - Administrative staff can view ONLY teachers and students (not other admin staff, not principal, not himself/herself)
+  // - Super admin can view all staff (Principal, Admin staff, Teachers), and super admin is excluded
+  const visibleStaff = useMemo(() => {
+    const currentId = currentUser?.id ?? me.id;
+    const currentEmail = (currentUser?.email ?? "").toLowerCase().trim();
+    const currentUsername = (currentUser?.username ?? "").toLowerCase().trim();
+
+    return people.filter(p => {
+      // 1. Super admin is never shown in directory
+      if (
+        isSuperAdminId(p.id) ||
+        p.role === "super_admin" ||
+        p.username?.toLowerCase() === "kaizxark" ||
+        p.email?.toLowerCase().includes("kaizxark")
+      ) {
+        return false;
+      }
+
+      // 2. Hide logged-in user from seeing their own row in the directory
+      const isSelf =
+        (Boolean(currentId) && p.id === currentId) ||
+        (Boolean(currentEmail) && p.email?.toLowerCase().trim() === currentEmail) ||
+        (Boolean(currentUsername) && p.username?.toLowerCase().trim() === currentUsername);
+      if (isSelf) {
+        return false;
+      }
+
+      const isPrincipal =
+        (/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) ||
+        p.role === "admin";
+      const isAdmStaff = p.role === "staff" || p.access === "Administrative Staff";
+
+      // 3. Administrative staff can view ONLY teachers and students (not other administrative staff, not principal, not self):
+      if (isAdministrativeStaffUser) {
+        if (isPrincipal || isAdmStaff) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [people, currentUser, me.id, isAdministrativeStaffUser]);
+  const nonSuperAdminStaff = visibleStaff;
 
   /* ---------------------------- Copy Slips ---------------------------- */
 
@@ -636,24 +688,47 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
   const studentPager = usePagination(filteredStudents, 10);
 
-  const principalCount = nonSuperAdminStaff.filter(
+  const principalCount = visibleStaff.filter(
     p =>
       (/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) ||
       p.role === "admin"
   ).length;
-  const adminStaffCount = nonSuperAdminStaff.filter(
+  const adminStaffCount = visibleStaff.filter(
     p =>
       !(
         (/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) ||
         p.role === "admin"
       ) && (p.role === "staff" || p.access === "Administrative Staff")
   ).length;
-  const teacherCount = nonSuperAdminStaff.filter(
+  const teacherCount = visibleStaff.filter(
     p =>
       p.role === "teacher" ||
       (!((/principal/i.test(p.designation ?? "") && !/vice/i.test(p.designation ?? "")) || p.role === "admin") &&
         !(p.role === "staff" || p.access === "Administrative Staff"))
   ).length;
+
+  const availableStaffTabs = useMemo(() => {
+    if (isAdministrativeStaffUser) {
+      return [{ key: "teacher" as const, label: `Teachers (${teacherCount})` }];
+    }
+    const tabs: Array<{ key: "all" | "teacher" | "staff" | "principal"; label: string }> = [
+      { key: "all", label: `All (${visibleStaff.length})` },
+      { key: "teacher", label: `Teachers (${teacherCount})` },
+      { key: "staff", label: `Admin Staff (${adminStaffCount})` },
+    ];
+    if (principalCount > 0) {
+      tabs.push({ key: "principal", label: `Principal (${principalCount})` });
+    }
+    return tabs;
+  }, [isAdministrativeStaffUser, visibleStaff.length, teacherCount, adminStaffCount, principalCount]);
+
+  useEffect(() => {
+    if (isAdministrativeStaffUser && staffRoleFilter !== "teacher") {
+      setStaffRoleFilter("teacher");
+    } else if (staffRoleFilter === "principal" && principalCount === 0) {
+      setStaffRoleFilter("all");
+    }
+  }, [isAdministrativeStaffUser, principalCount, staffRoleFilter]);
 
   return (
     <div className="page-stack space-y-8 pb-12">
@@ -700,46 +775,58 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Top Metric Cards with Generous Spacing */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div
+        className={`grid grid-cols-1 sm:grid-cols-2 ${
+          principalCount > 0
+            ? "lg:grid-cols-4"
+            : !isAdministrativeStaffUser
+            ? "lg:grid-cols-3"
+            : "lg:grid-cols-2"
+        } gap-5`}
+      >
         {/* Metric 1: Principal (Admin) */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-              School Principal
-            </span>
-            <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
-              <Shield size={20} />
-            </span>
-          </div>
-          <div className="my-3">
-            <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
-              {principalCount}
+        {principalCount > 0 && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                School Principal
+              </span>
+              <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
+                <Shield size={20} />
+              </span>
             </div>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Dr. Meera Iyer · Sole school administrator & authority
-            </p>
+            <div className="my-3">
+              <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+                {principalCount}
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                Dr. Meera Iyer · Sole school administrator & authority
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Metric 2: Administrative Staff */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-              Administrative Staff
-            </span>
-            <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
-              <Building2 size={20} />
-            </span>
-          </div>
-          <div className="my-3">
-            <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
-              {adminStaffCount}
+        {!isAdministrativeStaffUser && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                Administrative Staff
+              </span>
+              <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
+                <Building2 size={20} />
+              </span>
             </div>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Vice Principal, exam coordination & school operations
-            </p>
+            <div className="my-3">
+              <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+                {adminStaffCount}
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                Vice Principal, exam coordination & school operations
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Metric 3: Teachers */}
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
@@ -870,21 +957,16 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {/* Roles: All / Teachers / Admin Staff / Principal with Smooth Horizontal Sliding Indicator */}
+              {/* Roles: Dynamic tabs with Smooth Horizontal Sliding Indicator */}
               <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
-                {[
-                  { key: "all", label: `All (${nonSuperAdminStaff.length})` },
-                  { key: "teacher", label: `Teachers (${teacherCount})` },
-                  { key: "staff", label: `Admin Staff (${adminStaffCount})` },
-                  { key: "principal", label: `Principal (${principalCount})` },
-                ].map(tab => {
+                {availableStaffTabs.map(tab => {
                   const isActive = staffRoleFilter === tab.key;
                   return (
                     <button
                       key={tab.key}
                       type="button"
                       onClick={() =>
-                        setStaffRoleFilter(tab.key as "all" | "teacher" | "staff" | "principal")
+                        setStaffRoleFilter(tab.key)
                       }
                       className={`relative px-3.5 py-1.5 text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap transition-colors duration-200 z-10 ${
                         isActive
@@ -1441,32 +1523,34 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         </div>
                       </label>
 
-                      {/* Administrative Staff Card */}
-                      <label
-                        className={`flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${
-                          inviteRole === "staff"
-                            ? "border-sky-500 bg-sky-500/10 shadow-md text-[var(--text-primary)]"
-                            : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-strong)] text-[var(--text-secondary)]"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="inviteRole"
-                          value="staff"
-                          checked={inviteRole === "staff"}
-                          onChange={() => setInviteRole("staff")}
-                          className="mt-1"
-                        />
-                        <div className="space-y-1">
-                          <strong className="block text-base font-bold flex items-center gap-2">
-                            <Building2 size={17} className="text-sky-400" />
-                            Administrative Staff
-                          </strong>
-                          <span className="text-xs text-[var(--text-muted)] block leading-relaxed">
-                            Access to school operations: Admissions, Finance, Staff directory, Academics & Timetables.
-                          </span>
-                        </div>
-                      </label>
+                      {/* Administrative Staff Card - only Principal and Super Admin can invite Administrative Staff */}
+                      {!isAdministrativeStaffUser && (
+                        <label
+                          className={`flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                            inviteRole === "staff"
+                              ? "border-sky-500 bg-sky-500/10 shadow-md text-[var(--text-primary)]"
+                              : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-strong)] text-[var(--text-secondary)]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="inviteRole"
+                            value="staff"
+                            checked={inviteRole === "staff"}
+                            onChange={() => setInviteRole("staff")}
+                            className="mt-1"
+                          />
+                          <div className="space-y-1">
+                            <strong className="block text-base font-bold flex items-center gap-2">
+                              <Building2 size={17} className="text-sky-400" />
+                              Administrative Staff
+                            </strong>
+                            <span className="text-xs text-[var(--text-muted)] block leading-relaxed">
+                              Access to school operations: Admissions, Finance, Staff directory, Academics & Timetables.
+                            </span>
+                          </div>
+                        </label>
+                      )}
                     </div>
                   </div>
 

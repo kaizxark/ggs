@@ -246,9 +246,18 @@ async function allAccounts(req: Request): Promise<Response> {
 
   const caller = await resolveCaller(req);
   if (!caller) return fail("You must be signed in.", 401, "unauthenticated");
-  if (!isSuperAdminId(caller.id)) {
+
+  const isSuper = isSuperAdminId(caller.id) || caller.superAdmin;
+  const isPrincipal =
+    !isSuper &&
+    (caller.role === "admin" ||
+      caller.role === "principal" ||
+      /meera/i.test(caller.email));
+  const isStaff = !isSuper && !isPrincipal && caller.role === "staff";
+
+  if (!isSuper && !isPrincipal && !isStaff) {
     return fail(
-      "Only the school owner can see account credentials.",
+      "Only the school owner, principal, or administrative staff can see account credentials.",
       403,
       "forbidden"
     );
@@ -373,10 +382,32 @@ async function allAccounts(req: Request): Promise<Response> {
   });
 
   const safeStaffAccounts = staffAccounts.filter(person => {
-    const isSuper =
+    const isSuperTarget =
       person.recordId === SUPER_ADMIN_ID ||
       person.username.toLowerCase() === "kaizxark";
-    return !isSuper;
+    if (isSuperTarget) return false;
+
+    // A person cannot view their own credentials in the directory:
+    const isSelf =
+      person.recordId === caller.id ||
+      person.email.toLowerCase() === caller.email.toLowerCase() ||
+      person.username.toLowerCase() === caller.email.split("@")[0].toLowerCase();
+    if (isSelf) return false;
+
+    // Administrative staff can view ONLY teachers and students (not other admin staff, not principal, not themselves)
+    if (isStaff) {
+      const staffPerson = staff.find(s => String(s.id) === person.recordId);
+      const designation = String(staffPerson?.designation ?? "");
+      const isPrinc =
+        (/principal/i.test(designation) && !/vice/i.test(designation)) ||
+        staffPerson?.role === "admin";
+      const isAdmStaff =
+        staffPerson?.role === "staff" ||
+        /librarian|coordinator|administrator|bursar|clerk/i.test(designation);
+      if (isPrinc || isAdmStaff) return false;
+    }
+
+    return true;
   });
 
   const rows = [...pupilAccounts, ...safeStaffAccounts];
