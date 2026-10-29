@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import {
   AlertCircle,
   BookOpen,
@@ -170,7 +171,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
   // Student Tab: Strictly Students with School Division filters
   const [studentQuery, setStudentQuery] = useState("");
   const [studentFilter, setStudentFilter] = useState<
-    "all" | "primary" | "middle" | "high" | "missing"
+    "all" | "primary" | "middle" | "high"
   >("all");
 
   // Invite Modal State: Only Teacher & Administrative Staff (Principal is already appointed)
@@ -620,8 +621,6 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
         if (gradeNum === null || gradeNum < 6 || gradeNum > 8) return false;
       } else if (studentFilter === "high") {
         if (gradeNum === null || gradeNum < 9 || gradeNum > 12) return false;
-      } else if (studentFilter === "missing") {
-        if (row.username && row.password && !row.derived) return false;
       }
 
       if (!q) return true;
@@ -783,49 +782,58 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
-      {/* Tab Switcher - Spacious Pill Style */}
+      {/* Tab Switcher - Spacious Pill Style with Smooth Horizontal Gliding Toggle */}
       <div className="flex items-center gap-3 border-b border-[var(--border)] pb-4 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveTab("staff")}
-          className={`flex items-center gap-3 px-6 py-3.5 rounded-xl font-semibold text-sm transition-all shadow-sm cursor-pointer ${
-            activeTab === "staff"
-              ? "bg-[var(--brand)] text-white shadow-md font-bold"
-              : "bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]"
-          }`}
-        >
-          <Users size={18} />
-          <span>Staff & Faculty Accounts</span>
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-mono font-semibold ${
-              activeTab === "staff"
-                ? "bg-white/20 text-white"
-                : "bg-[var(--bg-raised)] text-[var(--text-muted)]"
-            }`}
-          >
-            {nonSuperAdminStaff.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("students")}
-          className={`flex items-center gap-3 px-6 py-3.5 rounded-xl font-semibold text-sm transition-all shadow-sm cursor-pointer ${
-            activeTab === "students"
-              ? "bg-[var(--brand)] text-white shadow-md font-bold"
-              : "bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]"
-          }`}
-        >
-          <GraduationCap size={18} />
-          <span>Student Portal Logins</span>
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-mono font-semibold ${
-              activeTab === "students"
-                ? "bg-white/20 text-white"
-                : "bg-[var(--bg-raised)] text-[var(--text-muted)]"
-            }`}
-          >
-            {studentAccounts.length || students.length}
-          </span>
-        </button>
+        <div className="relative p-1 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border)] flex items-center gap-1">
+          {[
+            {
+              id: "staff",
+              label: "Staff & Faculty Accounts",
+              count: nonSuperAdminStaff.length,
+              icon: Users,
+            },
+            {
+              id: "students",
+              label: "Student Portal Logins",
+              count: studentAccounts.length || students.length,
+              icon: GraduationCap,
+            },
+          ].map(tab => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as "staff" | "students")}
+                className={`relative flex items-center gap-3 px-6 py-3.5 rounded-xl font-semibold text-sm cursor-pointer z-10 transition-colors duration-200 ${
+                  isActive
+                    ? "text-white font-bold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="activeUserManagementMainTab"
+                    className="absolute inset-0 bg-[var(--brand)] rounded-xl shadow-md -z-10"
+                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                  />
+                )}
+                <Icon size={18} className="relative z-10" />
+                <span className="relative z-10">{tab.label}</span>
+                <span
+                  className={`relative z-10 rounded-full px-2.5 py-0.5 text-xs font-mono font-semibold transition-colors ${
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-[var(--bg-raised)] text-[var(--text-muted)]"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ==================================================================== */}
@@ -862,28 +870,39 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {/* Roles: All / Teachers / Admin Staff / Principal */}
-              <div className="segmented-control h-10 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
+              {/* Roles: All / Teachers / Admin Staff / Principal with Smooth Horizontal Sliding Indicator */}
+              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
                 {[
                   { key: "all", label: `All (${nonSuperAdminStaff.length})` },
                   { key: "teacher", label: `Teachers (${teacherCount})` },
                   { key: "staff", label: `Admin Staff (${adminStaffCount})` },
                   { key: "principal", label: `Principal (${principalCount})` },
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                      staffRoleFilter === tab.key
-                        ? "bg-[var(--border-accent)] text-[var(--text-primary)] font-bold shadow-sm"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                    }`}
-                    onClick={() =>
-                      setStaffRoleFilter(tab.key as "all" | "teacher" | "staff" | "principal")
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                ].map(tab => {
+                  const isActive = staffRoleFilter === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() =>
+                        setStaffRoleFilter(tab.key as "all" | "teacher" | "staff" | "principal")
+                      }
+                      className={`relative px-3.5 py-1.5 text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap transition-colors duration-200 z-10 ${
+                        isActive
+                          ? "text-[var(--text-primary)] font-bold"
+                          : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeStaffFilterPill"
+                          className="absolute inset-0 bg-[var(--border-accent)] rounded-lg shadow-sm border border-[var(--border)]/60 -z-10"
+                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                        />
+                      )}
+                      <span className="relative z-10">{tab.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1150,31 +1169,39 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {/* Intuitive School Division Filters */}
-              <div className="segmented-control h-10 p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
+              {/* Intuitive School Division Filters with Smooth Horizontal Sliding Indicator */}
+              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
                 {[
                   { key: "all", label: "All Students" },
                   { key: "primary", label: "Primary (G1–5)" },
                   { key: "middle", label: "Middle (G6–8)" },
                   { key: "high", label: "High (G9–12)" },
-                  { key: "missing", label: "Needs Login" },
-                ].map(tab => (
-                  <button
-                    key={tab.key}
-                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
-                      studentFilter === tab.key
-                        ? "bg-[var(--border-accent)] text-[var(--text-primary)] font-bold shadow-sm"
-                        : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                    }`}
-                    onClick={() =>
-                      setStudentFilter(
-                        tab.key as "all" | "primary" | "middle" | "high" | "missing"
-                      )
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                ].map(tab => {
+                  const isActive = studentFilter === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() =>
+                        setStudentFilter(tab.key as "all" | "primary" | "middle" | "high")
+                      }
+                      className={`relative px-3.5 py-1.5 text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap transition-colors duration-200 z-10 ${
+                        isActive
+                          ? "text-[var(--text-primary)] font-bold"
+                          : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeStudentFilterPill"
+                          className="absolute inset-0 bg-[var(--border-accent)] rounded-lg shadow-sm border border-[var(--border)]/60 -z-10"
+                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                        />
+                      )}
+                      <span className="relative z-10">{tab.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
