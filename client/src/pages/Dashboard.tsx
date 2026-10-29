@@ -3865,13 +3865,9 @@ function AnalyticsView({
     useInvoices();
 
   const [analyticsTab, setAnalyticsTab] = useState<
-    "overview" | "staff" | "academics" | "attendance" | "interventions" | "finance"
+    "overview" | "staff" | "academics" | "attendance" | "finance"
   >("overview");
   const [selectedTerm, setSelectedTerm] = useState("All Terms (2024–25)");
-  const [interventionSearch, setInterventionSearch] = useState("");
-  const [interventionFilter, setInterventionFilter] = useState<
-    "all" | "critical" | "watchlist" | "attendance"
-  >("all");
   const [staffSearch, setStaffSearch] = useState("");
   const [staffFilter, setStaffFilter] = useState<"all" | "teacher" | "admin" | "principal">("all");
 
@@ -4261,29 +4257,6 @@ function AnalyticsView({
     [subjectAverages, attendancePct, graded]
   );
 
-  /** Early intervention roster from real database student rows */
-  const filteredInterventions = useMemo(() => {
-    return analyticsStudents
-      .filter(s => s.average > 0 || s.attendance > 0)
-      .filter(s => {
-        if (interventionFilter === "critical") return s.average < 50;
-        if (interventionFilter === "watchlist")
-          return s.average >= 50 && s.average < 65;
-        if (interventionFilter === "attendance") return s.attendance < 75;
-        return s.average < 65 || s.attendance < 75;
-      })
-      .filter(s => {
-        if (!interventionSearch.trim()) return true;
-        const q = interventionSearch.toLowerCase();
-        return (
-          s.name.toLowerCase().includes(q) ||
-          s.grade.toLowerCase().includes(q) ||
-          (s.usn && s.usn.toLowerCase().includes(q))
-        );
-      })
-      .sort((a, b) => a.average - b.average);
-  }, [analyticsStudents, interventionFilter, interventionSearch]);
-
   /** Full institutional analytics export containing live students & staff records with Indian Rupee formatting */
   const handleExportReport = () => {
     const lines: string[] = [];
@@ -4323,20 +4296,6 @@ function AnalyticsView({
     for (const s of staffMembers) {
       lines.push(
         `"${s.name}","${s.usn || "—"}","${s.role}","${s.department}","${s.email}",${s.attendance || 95},"${s.status}"`
-      );
-    }
-    lines.push("");
-    lines.push("--- EARLY INTERVENTION ROSTER ---");
-    lines.push("Student Name,USN,Grade,Average (%),Attendance (%),Risk Level");
-    for (const student of filteredInterventions) {
-      const risk =
-        student.average < 50
-          ? "Critical"
-          : student.average < 65
-            ? "At Risk"
-            : "Watchlist";
-      lines.push(
-        `"${student.name}","${student.usn || "—"}","${student.grade}",${student.average},${student.attendance},"${risk}"`
       );
     }
 
@@ -4440,12 +4399,11 @@ function AnalyticsView({
               className="h-full flex flex-col justify-between"
             />
             <MetricBlock
-              label="Early Intervention"
-              value={`${atRisk} Students`}
-              comparison="Below 50% passing threshold"
-              icon={AlertCircle}
-              spark={atRiskSpark}
-              positive={atRisk === 0}
+              label="Fee Realization"
+              value={`${collections.rate}%`}
+              comparison={`${formatInr(collections.collected, true)} collected • ${analyticsInvoices.length} invoices`}
+              icon={IndianRupee}
+              spark={[58, 64, 70, 75, 78, 82, collections.rate]}
               className="h-full flex flex-col justify-between"
             />
           </>
@@ -4464,12 +4422,6 @@ function AnalyticsView({
           },
           { id: "academics", label: "Academics & Curricula", icon: BookOpen },
           { id: "attendance", label: "Attendance & Vitals", icon: ClipboardCheck },
-          {
-            id: "interventions",
-            label: `Interventions (${filteredInterventions.length})`,
-            icon: ShieldAlert,
-            badge: atRisk > 0,
-          },
           { id: "finance", label: "Fiscal Operations", icon: IndianRupee },
         ].map(tab => {
           const Icon = tab.icon;
@@ -5567,195 +5519,7 @@ function AnalyticsView({
         </div>
       )}
 
-      {/* TAB 5: EARLY INTERVENTION HUB (REAL STUDENTS FROM DB) */}
-      {analyticsTab === "interventions" && (
-        <div className="space-y-6">
-          <section className="panel table-panel">
-            <div className="p-5 border-b border-[var(--border)]">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                  <p className="eyebrow">Early Warning System</p>
-                  <h2 className="panel-title">Learner Intervention Roster</h2>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
-                    Live students in the database requiring academic tutoring,
-                    attendance support, or parent consultation.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative">
-                    <Search
-                      size={14}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Search name, USN, grade..."
-                      value={interventionSearch}
-                      onChange={e => setInterventionSearch(e.target.value)}
-                      className="pl-8 pr-3 py-1.5 text-xs rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] w-48 transition-colors"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-[var(--bg-raised)] p-1 rounded-lg border border-[var(--border)]">
-                    {[
-                      { id: "all", label: "All Flagged" },
-                      { id: "critical", label: "Critical (<50%)" },
-                      { id: "watchlist", label: "Watch (50–65%)" },
-                      { id: "attendance", label: "Low Att. (<75%)" },
-                    ].map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() =>
-                          setInterventionFilter(
-                            f.id as typeof interventionFilter
-                          )
-                        }
-                        className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all cursor-pointer ${
-                          interventionFilter === f.id
-                            ? "bg-[var(--brand)] text-white shadow-xs"
-                            : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="table-scroll">
-              <table className="data-table" style={{ minWidth: 680 }}>
-                <thead>
-                  <tr>
-                    <th>Student Name</th>
-                    <th>USN</th>
-                    <th>Grade</th>
-                    <th>Academic Score</th>
-                    <th>Attendance</th>
-                    <th>Risk Assessment</th>
-                    <th className="text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredInterventions.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-12 text-center">
-                        <div className="flex flex-col items-center justify-center text-[var(--text-muted)]">
-                          <CheckCircle2 size={32} className="text-emerald-500 mb-2" />
-                          <p className="font-semibold text-sm text-[var(--text-primary)]">
-                            No students match criteria
-                          </p>
-                          <p className="text-xs mt-0.5">
-                            All students in this view meet or exceed current thresholds.
-                          </p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredInterventions.map(student => {
-                      const isCritical = student.average < 50;
-                      const isWatch = student.average >= 50 && student.average < 65;
-                      const hasLowAttendance = student.attendance < 75;
-
-                      return (
-                        <tr key={student.id} className="hover:bg-[var(--bg-hover)]">
-                          <td>
-                            <div className="flex items-center gap-2.5">
-                              <span className="w-7 h-7 rounded-full bg-[var(--brand)]/15 text-[var(--brand)] font-bold text-xs flex items-center justify-center">
-                                {student.initials || student.name.slice(0, 2).toUpperCase()}
-                              </span>
-                              <span className="font-semibold text-[var(--text-primary)]">
-                                {student.name}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="font-mono text-xs text-[var(--text-muted)]">
-                            {student.usn || "—"}
-                          </td>
-                          <td>
-                            <span className="grade-chip">{student.grade}</span>
-                          </td>
-                          <td>
-                            <span
-                              className={`font-semibold ${
-                                isCritical
-                                  ? "text-rose-500"
-                                  : isWatch
-                                    ? "text-amber-500"
-                                    : "text-emerald-500"
-                              }`}
-                            >
-                              {student.average}%
-                            </span>
-                          </td>
-                          <td>
-                            <span
-                              className={`font-medium ${
-                                hasLowAttendance
-                                  ? "text-rose-500"
-                                  : "text-[var(--text-secondary)]"
-                              }`}
-                            >
-                              {student.attendance}%
-                            </span>
-                          </td>
-                          <td>
-                            <span
-                              className={`status-pill ${
-                                isCritical
-                                  ? "danger"
-                                  : isWatch
-                                    ? "warning"
-                                    : "neutral"
-                              }`}
-                            >
-                              <span className="status-dot" />
-                              {isCritical
-                                ? "Critical"
-                                : isWatch
-                                  ? "At Risk"
-                                  : "Watchlist"}
-                            </span>
-                          </td>
-                          <td className="text-right">
-                            <button
-                              onClick={() => {
-                                if (onNavigate) {
-                                  onNavigate("Students", student.id, "student");
-                                } else {
-                                  toast.info(`Reviewing ${student.name}`);
-                                }
-                              }}
-                              className="tiny-action flex items-center gap-1.5 ml-auto cursor-pointer"
-                            >
-                              <span>Open Profile</span>
-                              <ArrowRight size={12} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-raised)]/50 flex items-center justify-between text-xs text-[var(--text-muted)]">
-              <span>
-                Showing {filteredInterventions.length} learners requiring advisory
-                follow-up
-              </span>
-              <span className="font-medium">
-                Click "Open Profile" to view full exam breakdown and communication log
-              </span>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* TAB 6: FISCAL OPERATIONS (INDIAN RUPEE STANDARDS & EQUAL-HEIGHT PAIRS) */}
+      {/* TAB 5: FISCAL OPERATIONS (INDIAN RUPEE STANDARDS & EQUAL-HEIGHT PAIRS) */}
       {analyticsTab === "finance" && (
         <div className="space-y-6">
           {/* Top 4 Metric Ribbon (Calculated in Indian Rupees with Lakh / Crore formatting) */}
