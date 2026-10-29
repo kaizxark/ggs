@@ -834,7 +834,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
               Teaching Faculty
             </span>
-            <span className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400">
+            <span className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
               <BookOpen size={20} />
             </span>
           </div>
@@ -1112,8 +1112,8 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                               <span>Administrative Staff</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-teal-500/10 text-teal-400 border-teal-500/20">
-                              <BookOpen size={13} className="text-teal-400" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
+                              <BookOpen size={13} className="text-indigo-400" />
                               <span>Teacher</span>
                             </span>
                           )}

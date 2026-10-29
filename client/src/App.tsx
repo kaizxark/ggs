@@ -17,7 +17,7 @@ function AuthSplash() {
       className="min-h-screen bg-[#0b0c10] flex items-center justify-center"
       style={{ fontFamily: "system-ui, sans-serif" }}
     >
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#3fb8a2]/30 border-t-[#3fb8a2]" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--brand)]/30 border-t-[var(--brand)]" />
     </div>
   );
 }

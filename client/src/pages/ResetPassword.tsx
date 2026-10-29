@@ -175,7 +175,7 @@ export default function ResetPassword() {
               <button
                 type="button"
                 onClick={() => setLocation("/login")}
-                className="w-full bg-[#3fb8a2] hover:bg-[#2ea894] text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(63,184,162,.25)]"
+                className="w-full bg-[var(--brand)] hover:bg-[#4338ca] text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(79,70,229,.35)] cursor-pointer"
               >
                 Request a new link
               </button>
@@ -307,7 +307,7 @@ export default function ResetPassword() {
                 <button
                   type="submit"
                   disabled={submitting || !canSubmit}
-                  className="w-full bg-[#3fb8a2] hover:bg-[#2ea894] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--text-primary)] font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(63,184,162,.25)] flex items-center justify-center gap-2"
+                  className="w-full bg-[var(--brand)] hover:bg-[#4338ca] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(79,70,229,.35)] flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {submitting ? (
                     <>

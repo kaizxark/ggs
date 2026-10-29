@@ -29,8 +29,8 @@
  * read yields nothing usable inside the code's remaining lifetime.
  */
 
-/** Teal used elsewhere in the app, kept in sync with client/src/index.css. */
-const TEAL = "#3fb8a2";
+/** Royal Indigo brand color kept in sync with client/src/index.css. */
+const BRAND = "#4f46e5";
 
 export const OTP_SUBJECT = "Your Global Kids School sign-in code";
 
@@ -119,7 +119,7 @@ export function otpEmailHtml({
               ${context}
             </p>
             <div style="margin:26px 0;padding:18px;text-align:center;background:#151a20;border:1px solid #232830;border-radius:12px;">
-              <div style="color:${TEAL};font-size:34px;font-weight:700;letter-spacing:0.32em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">
+              <div style="color:${BRAND};font-size:34px;font-weight:700;letter-spacing:0.32em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">
                 ${digits}
               </div>
             </div>

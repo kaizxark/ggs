@@ -5901,7 +5901,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                     alt=""
                   />
                 ) : (
-                  <span className="avatar avatar-lg h-14 w-14 rounded-full bg-[rgba(63,184,162,0.13)] text-[var(--brand)] border border-[var(--border)] flex items-center justify-center font-bold text-lg shadow-sm">
+                  <span className="avatar avatar-lg h-14 w-14 rounded-full bg-[var(--brand-soft)] text-[var(--brand-strong)] border border-[var(--border)] flex items-center justify-center font-bold text-lg shadow-sm">
                     {initialsFor(currentUser?.fullName || "Admin")}
                   </span>
                 )}
@@ -6206,7 +6206,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   Rules that govern grade evaluation, warning thresholds, and student result publishing.
                 </p>
               </div>
-              <span className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400">
+              <span className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
                 <GraduationCap size={20} />
               </span>
             </div>
@@ -7122,7 +7122,7 @@ export default function Home() {
                           alt=""
                         />
                       ) : (
-                        <span className="avatar avatar-sm bg-[rgba(63,184,162,0.13)] text-[var(--brand)]">
+                        <span className="avatar avatar-sm bg-[var(--brand-soft)] text-[var(--brand-strong)]">
                           {userInitials}
                         </span>
                       )}
@@ -7169,7 +7169,7 @@ export default function Home() {
                             alt=""
                           />
                         ) : (
-                          <span className="avatar avatar-sm bg-[rgba(63,184,162,0.13)] text-[var(--brand)]">
+                          <span className="avatar avatar-sm bg-[var(--brand-soft)] text-[var(--brand-strong)]">
                             {userInitials}
                           </span>
                         )}

@@ -33,14 +33,14 @@ export const mockAttendanceData = [
 ];
 
 export const mockStudents = [
-  { id: "GKS-24081", name: "Aarav Mehta", initials: "AM", grade: "Grade 8", section: "B", attendance: 97, average: 91, fees: "Paid", transport: "Route 04", status: "Active", tone: "teal" },
-  { id: "GKS-23819", name: "Ishita Nair", initials: "IN", grade: "Grade 10", section: "A", attendance: 94, average: 88, fees: "Paid", transport: "Route 02", status: "Active", tone: "violet" },
-  { id: "GKS-24211", name: "Vihaan Kapoor", initials: "VK", grade: "Grade 6", section: "C", attendance: 89, average: 82, fees: "Due", transport: "Route 09", status: "Review", tone: "amber" },
-  { id: "GKS-23104", name: "Ananya Rao", initials: "AR", grade: "Grade 12", section: "A", attendance: 98, average: 95, fees: "Paid", transport: "Self", status: "Active", tone: "rose" },
-  { id: "GKS-23998", name: "Kabir Malhotra", initials: "KM", grade: "Grade 9", section: "D", attendance: 92, average: 86, fees: "Paid", transport: "Route 06", status: "Active", tone: "blue" },
-  { id: "GKS-24306", name: "Mira Thomas", initials: "MT", grade: "Grade 5", section: "A", attendance: 86, average: 79, fees: "Due", transport: "Route 03", status: "Review", tone: "orange" },
-  { id: "GKS-23277", name: "Arjun Menon", initials: "AM", grade: "Grade 11", section: "C", attendance: 96, average: 90, fees: "Paid", transport: "Route 01", status: "Active", tone: "indigo" },
-  { id: "GKS-24170", name: "Sara Fernandes", initials: "SF", grade: "Grade 7", section: "B", attendance: 93, average: 87, fees: "Paid", transport: "Route 07", status: "Active", tone: "pink" },
+  { id: "GKS-24081", name: "Aarav Mehta", initials: "AM", grade: "Grade 8", section: "B", attendance: 97, average: 91, fees: "Paid", status: "Active", tone: "teal" },
+  { id: "GKS-23819", name: "Ishita Nair", initials: "IN", grade: "Grade 10", section: "A", attendance: 94, average: 88, fees: "Paid", status: "Active", tone: "violet" },
+  { id: "GKS-24211", name: "Vihaan Kapoor", initials: "VK", grade: "Grade 6", section: "C", attendance: 89, average: 82, fees: "Due", status: "Review", tone: "amber" },
+  { id: "GKS-23104", name: "Ananya Rao", initials: "AR", grade: "Grade 12", section: "A", attendance: 98, average: 95, fees: "Paid", status: "Active", tone: "rose" },
+  { id: "GKS-23998", name: "Kabir Malhotra", initials: "KM", grade: "Grade 9", section: "D", attendance: 92, average: 86, fees: "Paid", status: "Active", tone: "blue" },
+  { id: "GKS-24306", name: "Mira Thomas", initials: "MT", grade: "Grade 5", section: "A", attendance: 86, average: 79, fees: "Due", status: "Review", tone: "orange" },
+  { id: "GKS-23277", name: "Arjun Menon", initials: "AM", grade: "Grade 11", section: "C", attendance: 96, average: 90, fees: "Paid", status: "Active", tone: "indigo" },
+  { id: "GKS-24170", name: "Sara Fernandes", initials: "SF", grade: "Grade 7", section: "B", attendance: 93, average: 87, fees: "Paid", status: "Active", tone: "pink" },
 ];
 
 export const mockSchedule = [
@@ -51,7 +51,7 @@ export const mockSchedule = [
   { id: "s5", time: "13:00", subject: "Chemistry", detail: "Grade 12 · Lab 2", color: "#3b82b4" },
 ];
 
-export type ActivityCategory = "general" | "operation" | "library" | "transport";
+export type ActivityCategory = "general" | "operation" | "library";
 
 export const mockActivityLog: ActivityItem[] = [
   // General — recent activity feed (Overview)
@@ -69,12 +69,6 @@ export const mockActivityLog: ActivityItem[] = [
   { id: "lib-2", category: "library", time: "09:15", title: "Chemistry guide issued", detail: "Ishita Nair · Grade 10", icon: "library", color: "blue" },
   { id: "lib-3", category: "library", time: "08:50", title: "Novel returned late", detail: "Vihaan Kapoor · Grade 6 · +2 days", icon: "alert", color: "amber" },
   { id: "lib-4", category: "library", time: "08:30", title: "History atlas issued", detail: "Ananya Rao · Grade 12", icon: "library", color: "violet" },
-  // Transport — route checkpoints
-  { id: "trn-1", category: "transport", time: "07:05", title: "Route 03 departed", detail: "Yelahanka pickup · 31 students", icon: "bus", color: "amber" },
-  { id: "trn-2", category: "transport", time: "07:12", title: "Route 01 arrived", detail: "Main gate · 34 students", icon: "bus", color: "teal" },
-  { id: "trn-3", category: "transport", time: "07:18", title: "Route 06 departed", detail: "HSR layout pickup · 22 students", icon: "bus", color: "teal" },
-  { id: "trn-4", category: "transport", time: "07:31", title: "Route 09 delayed", detail: "Traffic near Silk Board · +8 min", icon: "bus", color: "coral" },
-  { id: "trn-5", category: "transport", time: "07:40", title: "Route 04 arrived", detail: "Main gate · 26 students", icon: "bus", color: "teal" },
 ];
 
 export const mockHealthMetrics = [
@@ -103,7 +97,7 @@ export const mockClassAttendance = [
 ];
 
 export const avatarTones: Record<string, string> = {
-  teal: "bg-[rgba(63,184,162,0.13)] text-[#3fb8a2]",
+  teal: "bg-[rgba(99,102,241,0.14)] text-[var(--brand-strong)]",
   violet: "bg-[rgba(150,125,220,0.13)] text-[#ab95e8]",
   amber: "bg-[rgba(224,180,92,0.13)] text-[#e0b45c]",
   rose: "bg-[rgba(224,122,122,0.13)] text-[#ec9c9c]",
@@ -114,14 +108,14 @@ export const avatarTones: Record<string, string> = {
 };
 
 export const mockStaff = [
-  { id: "STF-001", name: "Neha Kulkarni", initials: "NK", role: "Class Teacher", department: "Grade 8", email: "neha.kulkarni@globalkids.edu", attendance: 98, status: "On campus", tone: "teal" },
-  { id: "STF-002", name: "Ravi Menon", initials: "RM", role: "Physics Teacher", department: "Senior School", email: "ravi.menon@globalkids.edu", attendance: 96, status: "On campus", tone: "blue" },
-  { id: "STF-003", name: "Sonia Joseph", initials: "SJ", role: "English Teacher", department: "Middle School", email: "sonia.joseph@globalkids.edu", attendance: 94, status: "On campus", tone: "violet" },
-  { id: "STF-004", name: "Arvind Iyer", initials: "AI", role: "Chemistry Teacher", department: "Senior School", email: "arvind.iyer@globalkids.edu", attendance: 91, status: "On leave", tone: "amber" },
-  { id: "STF-005", name: "Meera Shah", initials: "MS", role: "Mathematics Teacher", department: "Middle School", email: "meera.shah@globalkids.edu", attendance: 97, status: "On campus", tone: "rose" },
-  { id: "STF-006", name: "Daniel Thomas", initials: "DT", role: "Sports Coordinator", department: "Activities", email: "daniel.thomas@globalkids.edu", attendance: 93, status: "On campus", tone: "orange" },
-  { id: "STF-007", name: "Priya Nair", initials: "PN", role: "Admissions Officer", department: "Front Office", email: "priya.nair@globalkids.edu", attendance: 99, status: "On campus", tone: "indigo" },
-  { id: "STF-008", name: "Karthik Rao", initials: "KR", role: "IT Administrator", department: "Technology", email: "karthik.rao@globalkids.edu", attendance: 95, status: "On campus", tone: "pink" },
+  { id: "STF-001", usn: "STF1001", name: "Neha Kulkarni", initials: "NK", role: "Class Teacher", department: "Grade 8", email: "neha.kulkarni@globalkids.edu", attendance: 98, status: "On campus", tone: "teal" },
+  { id: "STF-002", usn: "STF1002", name: "Ravi Menon", initials: "RM", role: "Physics Teacher", department: "Senior School", email: "ravi.menon@globalkids.edu", attendance: 96, status: "On campus", tone: "blue" },
+  { id: "STF-003", usn: "STF1003", name: "Sonia Joseph", initials: "SJ", role: "English Teacher", department: "Middle School", email: "sonia.joseph@globalkids.edu", attendance: 94, status: "On campus", tone: "violet" },
+  { id: "STF-004", usn: "STF1004", name: "Arvind Iyer", initials: "AI", role: "Chemistry Teacher", department: "Senior School", email: "arvind.iyer@globalkids.edu", attendance: 91, status: "On leave", tone: "amber" },
+  { id: "STF-005", usn: "STF1005", name: "Meera Shah", initials: "MS", role: "Mathematics Teacher", department: "Middle School", email: "meera.shah@globalkids.edu", attendance: 97, status: "On campus", tone: "rose" },
+  { id: "STF-006", usn: "STF1006", name: "Daniel Thomas", initials: "DT", role: "Sports Coordinator", department: "Activities", email: "daniel.thomas@globalkids.edu", attendance: 93, status: "On campus", tone: "orange" },
+  { id: "STF-007", usn: "STF1007", name: "Priya Nair", initials: "PN", role: "Admissions Officer", department: "Front Office", email: "priya.nair@globalkids.edu", attendance: 99, status: "On campus", tone: "indigo" },
+  { id: "STF-008", usn: "STF1008", name: "Karthik Rao", initials: "KR", role: "IT Administrator", department: "Technology", email: "karthik.rao@globalkids.edu", attendance: 95, status: "On campus", tone: "pink" },
 ];
 
 export const mockTimetable = [
@@ -193,32 +187,6 @@ export const mockExamResults = [
   { id: "res-4", subject: "History", grade: "Grade 9 — D", graded: 28, total: 28, published: true },
 ];
 
-export const mockAssignments = [
-  { id: "ASG-001", title: "Chapter 4 problem set", subject: "Mathematics", grade: "Grade 8 — B", student: "Aarav Mehta", submitted: "Today · 07:58", late: false, graded: false },
-  { id: "ASG-002", title: "Lab report: Ohm's law", subject: "Physics", grade: "Grade 11 — A", student: "Ishita Nair", submitted: "Today · 07:40", late: false, graded: false },
-  { id: "ASG-003", title: "Essay: climate and society", subject: "English", grade: "Grade 9 — D", student: "Kabir Malhotra", submitted: "Yesterday · 22:14", late: true, graded: false },
-  { id: "ASG-004", title: "Periodic table worksheet", subject: "Chemistry", grade: "Grade 12 — A", student: "Ananya Rao", submitted: "Yesterday · 19:02", late: false, graded: false },
-  { id: "ASG-005", title: "Map skills exercise", subject: "Geography", grade: "Grade 6 — C", student: "Mira Thomas", submitted: "2 days ago", late: true, graded: false },
-  { id: "ASG-006", title: "Reading log: week 38", subject: "Languages", grade: "Grade 5 — A", student: "Sara Fernandes", submitted: "2 days ago", late: false, graded: false },
-];
-
-export const mockTransportRoutes = [
-  { id: "Route 01", vehicle: "GK-T04", driver: "Suresh Gowda", pickup: "07:10 – 07:40", students: 34, status: "On time" },
-  { id: "Route 02", vehicle: "GK-T07", driver: "Manjunath K.", pickup: "07:15 – 07:45", students: 28, status: "On time" },
-  { id: "Route 03", vehicle: "GK-T02", driver: "Lakshmi V.", pickup: "07:05 – 07:35", students: 31, status: "Delayed" },
-  { id: "Route 04", vehicle: "GK-T09", driver: "Ramesh P.", pickup: "07:20 – 07:50", students: 26, status: "On time" },
-  { id: "Route 06", vehicle: "GK-T11", driver: "Farhan S.", pickup: "07:10 – 07:30", students: 22, status: "On time" },
-  { id: "Route 09", vehicle: "GK-T06", driver: "Deepak N.", pickup: "07:25 – 07:55", students: 35, status: "Delayed" },
-];
-
-export const mockVehicles = [
-  { id: "GK-T04", driver: "Suresh Gowda", driverPhone: "97400228626", routeCode: "RT-01", routeName: "Sira Road Route", capacity: 40, status: "Active" },
-  { id: "GK-T07", driver: "Manjunath K.", driverPhone: "97400228627", routeCode: "RT-04", routeName: "Bannur Road Route", capacity: 35, status: "Active" },
-  { id: "GK-T02", driver: "Lakshmi V.", driverPhone: "97400228628", routeCode: "RT-02", routeName: "Malavalli Road Route", capacity: 40, status: "Active" },
-  { id: "GK-T09", driver: "Ramesh P.", driverPhone: "97400228629", routeCode: "RT-07", routeName: "Tumkur Main Route", capacity: null, status: "Maintenance" },
-  { id: "GK-T11", driver: "Farhan S.", driverPhone: "97400228630", routeCode: "RT-05", routeName: "Kunigal Road Route", capacity: 35, status: "Active" },
-];
-
 export const mockLibraryBooks = [
   { id: "BK-001", title: "The Discovery of India", author: "Jawaharlal Nehru", category: "History", copies: 8, issued: 5, status: "Available" },
   { id: "BK-002", title: "A Brief History of Time", author: "Stephen Hawking", category: "Science", copies: 6, issued: 6, status: "All out" },
@@ -239,7 +207,7 @@ export const mockAnnouncements = [
 
 export const mockMessages = [
   { id: "MSG-001", initials: "MN", name: "Mrs. Nair", subject: "Ishita’s exam schedule", time: "11 min", unread: true },
-  { id: "MSG-002", initials: "RD", name: "Mr. Deshmukh", subject: "Bus route 06 pickup", time: "1 hr", unread: true },
+  { id: "MSG-002", initials: "RD", name: "Mr. Deshmukh", subject: "School schedule update", time: "1 hr", unread: true },
   { id: "MSG-003", initials: "FA", name: "Fatima Ahmed", subject: "Art club registration", time: "3 hrs", unread: false },
 ];
 
@@ -248,7 +216,6 @@ export const mockNotifications = [
   { id: 2, title: "Fee payment received", detail: "Kapoor family paid ₹38,000 · INV-2026-1099", time: "48 min ago", unread: true, tone: "teal", kind: "Finance", icon: "rupee" },
   { id: 3, title: "Exam schedule published", detail: "Mid-term timetable is now visible to families", time: "2 hrs ago", unread: true, tone: "violet", kind: "Academic", icon: "file" },
   { id: 4, title: "Leave request pending", detail: "Arvind Iyer requested 2 days · 06–07 Oct", time: "3 hrs ago", unread: true, tone: "amber", kind: "Attendance", icon: "calendar" },
-  { id: 5, title: "Transport delay resolved", detail: "Route 09 is back on schedule", time: "5 hrs ago", unread: false, tone: "blue", kind: "Info", icon: "bus" },
   { id: 6, title: "New parent message", detail: "Mrs. Nair · Ishita's exam schedule", time: "Yesterday", unread: false, tone: "teal", kind: "Message", icon: "message" },
 ];
 
@@ -323,8 +290,8 @@ export const mockSettings: SettingRow[] = [
 /* Row types — column names mirror the UI field names                  */
 /* ------------------------------------------------------------------ */
 
-export interface Student extends BaseRow { name: string; initials: string; grade: string; section: string; attendance: number; /** How many attendance rows back `attendance`. 0 means unmarked, not 0%. */ attendance_records: number; average: number; scored_papers: number; fees: string; transport: string; status: string; tone: string; admission_no: string; }
-export interface StaffMember extends BaseRow { name: string; initials: string; role: string; department: string; email: string; attendance: number; status: string; tone: string; }
+export interface Student extends BaseRow { usn?: string; name: string; initials: string; grade: string; section: string; attendance: number; /** How many attendance rows back `attendance`. 0 means unmarked, not 0%. */ attendance_records: number; average: number; scored_papers: number; fees: string; status: string; tone: string; }
+export interface StaffMember extends BaseRow { usn: string; name: string; initials: string; role: string; department: string; email: string; attendance: number; status: string; tone: string; photo_url?: string | null; }
 export interface AttendanceDaily extends BaseRow { day: string; present: number; absent: number; late: number; leave: number; }
 export interface ClassAttendanceRow extends BaseRow { label: string; value: number; present: number; total: number; teacher: string; }
 export interface ScheduleItem extends BaseRow { time: string; subject: string; detail: string; color: string; }
@@ -332,16 +299,13 @@ export interface ActivityItem extends BaseRow { category: ActivityCategory; time
 export interface HealthMetric extends BaseRow { label: string; value: string; change: string; progress: number; color: string; }
 export interface FinanceMonth extends BaseRow { month: string; collected: number; pending: number; }
 export interface FeeCategory extends BaseRow { name: string; value: number; color: string; }
-export interface Invoice extends BaseRow { family: string; student: string; due_date: string; amount: number; status: string; }
+export interface Invoice extends BaseRow { family: string; student: string; due_date: string; amount: number; total?: number; paid?: number; outstanding?: number; status: string; }
 export interface Payment extends BaseRow { invoice_id: string | null; student: string; amount: number; method: string; paid_at: string; }
 export interface Announcement extends BaseRow { title: string; audience: string; date: string; status: string; color: string; image_url: string | null; body: string | null; }
 export interface ParentMessage extends BaseRow { initials: string; name: string; subject: string; time: string; unread: boolean; }
 export interface NotificationItem extends BaseRow { title: string; detail: string; time: string; unread: boolean; tone: string; icon: string; kind: string; }
 export interface Exam extends BaseRow { name: string; subject: string; grade: string; date: string; time: string; venue: string; status: string; }
 export interface ExamResult extends BaseRow { subject: string; grade: string; graded: number; total: number; published: boolean; }
-export interface Assignment extends BaseRow { title: string; subject: string; grade: string; student: string; submitted: string; late: boolean; graded: boolean; }
-export interface TransportRoute extends BaseRow { vehicle: string; driver: string; pickup: string; students: number; status: string; }
-export interface Vehicle extends BaseRow { driver: string; driverPhone: string; routeCode: string; routeName: string; /** Seat count. null when the school has not recorded one — never a guess. */ capacity: number | null; status: string; }
 export interface LibraryBook extends BaseRow { title: string; author: string; category: string; copies: number; issued: number; status: string; }
 export interface TimetableEntry extends BaseRow { day: string; period: string; time: string; grade_6: string; grade_7: string; grade_8: string; grade_9: string; }
 export interface SubjectRow extends BaseRow { name: string; teacher: string; classes: string; periods: number; progress: number; }
@@ -579,12 +543,13 @@ export function useSupabaseTable<T extends BaseRow>(
 /* point these at a single table — the schemas do not line up.         */
 /* ------------------------------------------------------------------ */
 
-export { usePeopleView as usePeople } from "./erp-views";
+export { usePeopleView as usePeople, type PeopleRow } from "./erp-views";
 export {
   useStudentsView as useStudents,
   useStaffView as useStaff,
   useAttendanceDailyView as useAttendanceDaily,
   useClassAttendanceView as useClassAttendance,
+  useDashboardAttendance as useDashboardAttendance,
   useScheduleView as useSchedule,
   useHealthMetricsView as useHealthMetrics,
   useFinanceMonthlyView as useFinanceMonthly,
@@ -598,9 +563,6 @@ export {
   type CurrentUser,
   useExamsView as useExams,
   useExamResultsView as useExamResults,
-  useAssignmentsView as useAssignments,
-  useTransportRoutesView as useTransportRoutes,
-  useVehiclesView as useVehicles,
   useLibraryBooksView as useLibraryBooks,
   useSubjectsView as useSubjects,
   usePerformanceTrendView as usePerformanceTrend,
@@ -609,6 +571,7 @@ export {
   useReportExportsView as useReportExports,
   useActivityFeedView as useActivityFeed,
   useTimetableView as useTimetable,
+  useStudentCountsView as useStudentCounts,
   clearErpCache,
 } from "./erp-views";
 

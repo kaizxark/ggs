@@ -278,7 +278,7 @@ export default function Login() {
             )}
 
             {notice && (
-              <div className="flex items-start gap-2 text-[var(--brand)] text-[12.5px] bg-[#1d3d35]/60 border border-[#1d3d35] rounded-lg px-3 py-2">
+              <div className="flex items-start gap-2 text-[var(--brand-strong)] text-[12.5px] bg-indigo-950/60 border border-indigo-900/60 rounded-lg px-3 py-2">
                 <Check size={14} className="flex-shrink-0 mt-px" />
                 {notice}
               </div>
@@ -287,7 +287,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#3fb8a2] hover:bg-[#2ea894] disabled:opacity-70 text-[var(--text-primary)] font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(63,184,162,.25)] flex items-center justify-center gap-2"
+              className="w-full bg-[var(--brand)] hover:bg-[#4338ca] disabled:opacity-70 text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(79,70,229,.35)] flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
                 <>

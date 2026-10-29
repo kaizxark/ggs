@@ -21,8 +21,8 @@
 
 export const RESET_SUBJECT = "Reset your Global Kids School password";
 
-/** Teal used elsewhere in the app, kept in sync with client/src/index.css. */
-const TEAL = "#3fb8a2";
+/** Royal Indigo brand color kept in sync with client/src/index.css. */
+const BRAND = "#4f46e5";
 
 /**
  * Escape a value for interpolation into HTML.
@@ -138,7 +138,7 @@ export function resetEmailHtml({
             </p>
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0;">
               <tr>
-                <td align="center" style="background:${TEAL};border-radius:10px;">
+                <td align="center" style="background:${BRAND};border-radius:10px;">
                   <a href="${href}"
                     style="display:inline-block;padding:13px 28px;color:#06231d;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.01em;">
                     Choose a new password
@@ -157,7 +157,7 @@ export function resetEmailHtml({
             </table>
             <p style="margin:0 0 22px;color:#6b7480;font-size:12.5px;line-height:1.6;">
               If the button does not work, copy this link into your browser:<br />
-              <a href="${href}" style="color:${TEAL};word-break:break-all;text-decoration:underline;">${href}</a>
+              <a href="${href}" style="color:${BRAND};word-break:break-all;text-decoration:underline;">${href}</a>
             </p>
             <p style="margin:0;padding-top:18px;border-top:1px solid #1e232b;color:#6b7480;font-size:12.5px;line-height:1.6;">
               If you did not request this, ignore this email — your password will not change
