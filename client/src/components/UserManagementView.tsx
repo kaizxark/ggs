@@ -1141,7 +1141,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 Student Portal Credentials
               </h2>
               <p className="text-xs text-[var(--text-muted)]">
-                Pupil USN sign-in handles, date-of-birth passwords, and login credentials.
+                Pupil USN sign-in handles, secure passwords, and portal login credentials.
               </p>
             </div>
           </div>
@@ -1228,7 +1228,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                     Username (USN)
                   </th>
                   <th style={{ minWidth: 180 }} className="py-4 px-6 text-left">
-                    Portal Password (DOB)
+                    Portal Password
                   </th>
                   <th style={{ minWidth: 130 }} className="py-4 px-6 text-left">
                     Issued Date
@@ -1330,7 +1330,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         <td className="py-4.5 px-6 text-xs text-[var(--text-muted)]">
                           {row.issuedAt
                             ? new Date(row.issuedAt).toLocaleDateString()
-                            : "Auto (DOB)"}
+                            : "Active"}
                         </td>
                       </tr>
                     );
