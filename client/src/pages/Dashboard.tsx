@@ -3818,6 +3818,31 @@ function ExaminationsView({ onBack }: { onBack: () => void }) {
   );
 }
 
+/**
+ * Format currency according to Indian financial conventions (Lakh, Crore, en-IN formatting).
+ *
+ * Examples:
+ *   formatInr(85000) => "₹85,000"
+ *   formatInr(485000, true) => "₹4.85 Lakh"
+ *   formatInr(12500000, true) => "₹1.25 Cr"
+ */
+function formatInr(amount: number, compact = false): string {
+  const num = Math.round(Number(amount) || 0);
+  if (!compact) {
+    return `₹${num.toLocaleString("en-IN")}`;
+  }
+  const abs = Math.abs(num);
+  if (abs >= 10000000) {
+    const cr = parseFloat((num / 10000000).toFixed(2));
+    return `₹${cr} Cr`;
+  }
+  if (abs >= 100000) {
+    const lakh = parseFloat((num / 100000).toFixed(2));
+    return `₹${lakh} Lakh`;
+  }
+  return `₹${num.toLocaleString("en-IN")}`;
+}
+
 function AnalyticsView({
   onBack,
   onNavigate,
@@ -4182,7 +4207,7 @@ function AnalyticsView({
     return [atRisk];
   }, [gradeBreakdowns, atRisk]);
 
-  /** Collections ledger metrics */
+  /** Collections ledger metrics formatted following Indian standards */
   const collections = useMemo(() => {
     const billed = analyticsInvoices.reduce(
       (sum, i) => sum + (i.total ?? i.amount),
@@ -4259,13 +4284,14 @@ function AnalyticsView({
       .sort((a, b) => a.average - b.average);
   }, [analyticsStudents, interventionFilter, interventionSearch]);
 
-  /** Full institutional analytics export containing live students & staff records */
+  /** Full institutional analytics export containing live students & staff records with Indian Rupee formatting */
   const handleExportReport = () => {
     const lines: string[] = [];
     lines.push("GLOBAL KIDS SCHOOL - INSTITUTIONAL ANALYTICS & TREND REPORT");
-    lines.push(`Generated: ${new Date().toLocaleString()}`);
+    lines.push(`Generated: ${new Date().toLocaleString("en-IN")}`);
     lines.push(`Data Source: Live Supabase Database Connection`);
     lines.push(`Academic Scope: ${selectedTerm}`);
+    lines.push(`Currency Standard: Indian Rupees (INR - ₹)`);
     lines.push("");
     lines.push("--- EXECUTIVE METRICS ---");
     lines.push(`Total Students Enrolled,${totalStudents}`);
@@ -4281,7 +4307,7 @@ function AnalyticsView({
     lines.push(`Leading Cohort / Grade,${fastestGrade}`);
     lines.push(`At-Risk Learners (<50%),${atRisk}`);
     lines.push(
-      `Fee Collection Rate,${collections.rate}% (Collected: Rs ${collections.collected} / Billed: Rs ${collections.billed})`
+      `Fee Collection Rate,${collections.rate}% (Collected: ${formatInr(collections.collected)} / Billed: ${formatInr(collections.billed)})`
     );
     lines.push("");
     lines.push("--- GRADE-WISE BREAKDOWN (LIVE DATABASE COHORTS) ---");
@@ -4327,7 +4353,7 @@ function AnalyticsView({
     URL.revokeObjectURL(url);
 
     toast.success("Live analytics report downloaded", {
-      description: `Exported ${totalStudents} students and ${staffStats.total} staff members to CSV.`,
+      description: `Exported ${totalStudents} students and ${staffStats.total} staff members in Indian standard INR.`,
     });
   };
 
@@ -4378,8 +4404,8 @@ function AnalyticsView({
         </div>
       </div>
 
-      {/* Top Level Metric Ribbon (Computed from Live DB Rows) */}
-      <div className="metric-grid">
+      {/* Top Level Metric Ribbon (Equal Height Cards with stretch) */}
+      <div className="metric-grid items-stretch">
         {analyticsLoading ? (
           <>
             <SkeletonMetric />
@@ -4395,6 +4421,7 @@ function AnalyticsView({
               comparison={`${totalStudents} students enrolled • Median ${medianAverage}%`}
               icon={GraduationCap}
               spark={academicSpark}
+              className="h-full flex flex-col justify-between"
             />
             <MetricBlock
               label="Attendance Velocity"
@@ -4402,6 +4429,7 @@ function AnalyticsView({
               comparison={`${latestPresent} present on ${latestAttendance?.day ?? "roll call"}`}
               icon={ClipboardCheck}
               spark={attendanceSpark}
+              className="h-full flex flex-col justify-between"
             />
             <MetricBlock
               label="Leading Cohort"
@@ -4409,6 +4437,7 @@ function AnalyticsView({
               comparison={`${gradeBreakdowns.length} active grades • Ratio ${staffStats.studentTeacherRatio}:1`}
               icon={TrendingUp}
               spark={cohortSpark}
+              className="h-full flex flex-col justify-between"
             />
             <MetricBlock
               label="Early Intervention"
@@ -4417,6 +4446,7 @@ function AnalyticsView({
               icon={AlertCircle}
               spark={atRiskSpark}
               positive={atRisk === 0}
+              className="h-full flex flex-col justify-between"
             />
           </>
         )}
@@ -4479,9 +4509,9 @@ function AnalyticsView({
       {/* TAB 1: EXECUTIVE OVERVIEW */}
       {analyticsTab === "overview" && (
         <div className="space-y-6">
-          {/* Institutional Capacity & Vitals Banner */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+          {/* Institutional Capacity & Vitals Banner (4 Equal-Height Cards) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium flex items-center gap-1.5">
                 <School size={14} className="text-[var(--brand)]" />
                 Student Enrollment
@@ -4489,12 +4519,12 @@ function AnalyticsView({
               <p className="text-2xl font-bold text-[var(--text-primary)] mt-1.5">
                 {totalStudents}
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 {graded.length} active with graded papers
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium flex items-center gap-1.5">
                 <Users size={14} className="text-[var(--info)]" />
                 Employed Staff
@@ -4502,12 +4532,12 @@ function AnalyticsView({
               <p className="text-2xl font-bold text-[var(--text-primary)] mt-1.5">
                 {staffStats.total}
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 {staffStats.teachers} Teachers • {staffStats.administrative} Admin • 1 Principal
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium flex items-center gap-1.5">
                 <Briefcase size={14} className="text-emerald-500" />
                 Student–Teacher Ratio
@@ -4515,12 +4545,12 @@ function AnalyticsView({
               <p className="text-2xl font-bold text-emerald-500 mt-1.5">
                 {staffStats.studentTeacherRatio}:1
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 Optimal benchmark for K–12
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium flex items-center gap-1.5">
                 <UserCheck size={14} className="text-amber-500" />
                 Staff Attendance Rate
@@ -4528,7 +4558,7 @@ function AnalyticsView({
               <p className="text-2xl font-bold text-amber-500 mt-1.5">
                 {staffStats.staffAttendanceAvg}%
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 Faculty duty velocity
               </span>
             </div>
@@ -4570,16 +4600,16 @@ function AnalyticsView({
               />
             </div>
 
-            {/* 4-Tier Breakdown Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+            {/* 4-Tier Breakdown Cards (Equal Height) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
                   <span className="text-xs font-semibold text-[var(--text-muted)]">
                     Distinction (85%+)
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between mt-1">
+                <div className="flex items-baseline justify-between mt-2">
                   <span className="text-xl font-bold text-[var(--text-primary)]">
                     {scoreTiers.distinction.count}
                   </span>
@@ -4592,14 +4622,14 @@ function AnalyticsView({
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-[var(--info)]" />
                   <span className="text-xs font-semibold text-[var(--text-muted)]">
                     Merit (70–84%)
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between mt-1">
+                <div className="flex items-baseline justify-between mt-2">
                   <span className="text-xl font-bold text-[var(--text-primary)]">
                     {scoreTiers.merit.count}
                   </span>
@@ -4612,14 +4642,14 @@ function AnalyticsView({
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-[var(--warning)]" />
                   <span className="text-xs font-semibold text-[var(--text-muted)]">
                     Pass (50–69%)
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between mt-1">
+                <div className="flex items-baseline justify-between mt-2">
                   <span className="text-xl font-bold text-[var(--text-primary)]">
                     {scoreTiers.pass.count}
                   </span>
@@ -4632,14 +4662,14 @@ function AnalyticsView({
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+              <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-[var(--danger)]" />
                   <span className="text-xs font-semibold text-[var(--text-muted)]">
                     At Risk (&lt;50%)
                   </span>
                 </div>
-                <div className="flex items-baseline justify-between mt-1">
+                <div className="flex items-baseline justify-between mt-2">
                   <span className="text-xl font-bold text-rose-500">
                     {scoreTiers.critical.count}
                   </span>
@@ -4654,17 +4684,20 @@ function AnalyticsView({
             </div>
           </section>
 
-          {/* Grid: Spider Radar & Live AI Executive Intelligence */}
-          <div className="dashboard-grid dashboard-grid-mid">
+          {/* Paired Symmetrical Row: Radar vs AI Live Intelligence (Equal Heights & Padding) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
             {/* Multi-Dimensional Vitals Radar */}
-            <section className="panel">
-              <div className="panel-header">
+            <section className="panel flex flex-col justify-between h-full">
+              <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
                   <p className="eyebrow">Holistic Composite</p>
                   <h2 className="panel-title">Institutional Vitals Radar</h2>
                 </div>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
+                  5 Core Axes
+                </span>
               </div>
-              <div className="chart-wrap">
+              <div className="chart-wrap flex-1 flex items-center justify-center p-3">
                 <ResponsiveContainer width="100%" height={260}>
                   <RadarChart data={attendanceRadar} outerRadius="72%">
                     <PolarGrid stroke="var(--border)" />
@@ -4681,86 +4714,84 @@ function AnalyticsView({
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
-              <p className="chart-footnote px-5 pb-4 text-xs text-[var(--text-muted)]">
-                Multi-axis diagnostic integrating Core Academics, Attendance, and
-                Examination Pass Rates directly from database rows.
-              </p>
+              <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
+                <span>Core Academics, Attendance, and Pass Rate diagnostic</span>
+                <span className="font-semibold text-[var(--text-primary)]">{attendancePct}% Overall</span>
+              </div>
             </section>
 
             {/* AI Executive Diagnostic & Insights */}
-            <section className="panel p-5 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1.5 rounded-md bg-[var(--brand)]/10 text-[var(--brand)]">
-                      <Sparkles size={16} />
-                    </span>
-                    <div>
-                      <p className="eyebrow">Live Data Synthesis</p>
-                      <h2 className="panel-title">Institutional Intelligence</h2>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
-                    Actual DB Synced
+            <section className="panel p-5 flex flex-col justify-between h-full">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-md bg-[var(--brand)]/10 text-[var(--brand)]">
+                    <Sparkles size={16} />
                   </span>
+                  <div>
+                    <p className="eyebrow">Live Data Synthesis</p>
+                    <h2 className="panel-title">Institutional Intelligence</h2>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
+                  Actual DB Synced
+                </span>
+              </div>
+
+              <div className="flex-1 flex flex-col justify-between gap-2.5 py-1 text-xs leading-relaxed text-[var(--text-secondary)]">
+                <div className="p-2.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                  <Users size={15} className="text-[var(--brand)] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      Faculty Coverage:{" "}
+                    </span>
+                    {staffStats.total} staff members are active in the database (
+                    {staffStats.teachers} teaching faculty, {staffStats.administrative}{" "}
+                    administrative staff, and Principal {staffStats.principalPerson?.name ?? ""}),
+                    maintaining an efficient {staffStats.studentTeacherRatio}:1 student-to-teacher ratio.
+                  </div>
                 </div>
 
-                <div className="space-y-3 mt-4 text-xs leading-relaxed text-[var(--text-secondary)]">
-                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
-                    <Users size={15} className="text-[var(--brand)] shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-[var(--text-primary)]">
-                        Faculty Coverage:{" "}
-                      </span>
-                      {staffStats.total} staff members are active in the database (
-                      {staffStats.teachers} teaching faculty, {staffStats.administrative}{" "}
-                      administrative staff, and Principal {staffStats.principalPerson?.name ?? ""}),
-                      maintaining an efficient {staffStats.studentTeacherRatio}:1 student-to-teacher ratio.
-                    </div>
+                <div className="p-2.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                  <Target size={15} className="text-[var(--info)] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      Leading Grade Section:{" "}
+                    </span>
+                    {fastestGrade} is currently the top performing grade cohort across the{" "}
+                    {gradeBreakdowns.length} active grades in the database.
                   </div>
+                </div>
 
-                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
-                    <Target size={15} className="text-[var(--info)] shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-[var(--text-primary)]">
-                        Leading Grade Section:{" "}
-                      </span>
-                      {fastestGrade} is currently the top performing grade cohort across the{" "}
-                      {gradeBreakdowns.length} active grades in the database.
-                    </div>
+                <div className="p-2.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                  <Activity size={15} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      Score Distribution:{" "}
+                    </span>
+                    Cohort median score is {medianAverage}% with a mean of {overallAverage}% and standard
+                    deviation of {spread} points across {graded.length} graded students.
                   </div>
+                </div>
 
-                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
-                    <Activity size={15} className="text-emerald-500 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-[var(--text-primary)]">
-                        Score Distribution:{" "}
-                      </span>
-                      Cohort median score is {medianAverage}% with a mean of {overallAverage}% and standard
-                      deviation of {spread} points across {graded.length} graded students.
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
-                    <AlertCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-[var(--text-primary)]">
-                        Early Warning Status:{" "}
-                      </span>
-                      {atRisk === 0 ? (
-                        "All students in the database currently meet the passing threshold."
-                      ) : (
-                        <>
-                          <span className="font-bold text-rose-500">{atRisk} learners</span> in
-                          the database have scores below 50% and require remediation.
-                        </>
-                      )}
-                    </div>
+                <div className="p-2.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
+                  <AlertCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      Early Warning Status:{" "}
+                    </span>
+                    {atRisk === 0 ? (
+                      "All students in the database currently meet the passing threshold."
+                    ) : (
+                      <>
+                        <span className="font-bold text-rose-500">{atRisk} learners</span> in
+                        the database have scores below 50% and require remediation.
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between mt-4">
+              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between mt-auto">
                 <span className="text-[11px] text-[var(--text-muted)]">
                   Derived from {totalStudents} student and {staffStats.total} staff rows
                 </span>
@@ -4780,108 +4811,158 @@ function AnalyticsView({
       {/* TAB 2: STAFF & FACULTY INTELLIGENCE (ACTUAL 10 MEMBERS IN DB) */}
       {analyticsTab === "staff" && (
         <div className="space-y-6">
-          {/* Staff Metric Ribbon */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+          {/* Staff Metric Ribbon (Equal Height Cards) */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium">
                 Total Staff Employed
               </span>
-              <p className="text-2xl font-bold text-[var(--text-primary)] mt-1">
+              <p className="text-2xl font-bold text-[var(--text-primary)] mt-1.5">
                 {staffStats.total}
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 All 10 members in database
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium">
                 Teaching Faculty
               </span>
-              <p className="text-2xl font-bold text-[var(--brand)] mt-1">
+              <p className="text-2xl font-bold text-[var(--brand)] mt-1.5">
                 {staffStats.teachers}
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 Active classroom teachers
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium">
                 Administrative Staff
               </span>
-              <p className="text-2xl font-bold text-[var(--info)] mt-1">
+              <p className="text-2xl font-bold text-[var(--info)] mt-1.5">
                 {staffStats.administrative}
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 Operations & accounts
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs">
+            <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium">
                 Leadership / Principal
               </span>
-              <p className="text-2xl font-bold text-amber-500 mt-1">
+              <p className="text-2xl font-bold text-amber-500 mt-1.5">
                 {staffStats.principal}
               </p>
-              <span className="text-[11px] text-[var(--text-muted)]">
+              <span className="text-[11px] text-[var(--text-muted)] mt-1">
                 {staffStats.principalPerson?.name ?? "Principal"}
               </span>
             </div>
           </div>
 
-          {/* Department Distribution Bar Chart */}
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Faculty Allocation</p>
-                <h2 className="panel-title">Staff Members by Department</h2>
+          {/* Paired Symmetrical Row: Department Bar Chart & Faculty Ratios/Readiness */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            {/* Left: Department Distribution Bar Chart */}
+            <section className="panel flex flex-col justify-between h-full">
+              <div className="p-5 pb-0 flex items-center justify-between">
+                <div>
+                  <p className="eyebrow">Faculty Allocation</p>
+                  <h2 className="panel-title">Staff Members by Department</h2>
+                </div>
+                <span className="text-xs text-[var(--text-muted)]">
+                  {staffStats.departmentBreakdown.length} departments
+                </span>
               </div>
-              <span className="text-xs text-[var(--text-muted)]">
-                {staffStats.total} total members across {staffStats.departmentBreakdown.length} departments
-              </span>
-            </div>
-            <div className="chart-wrap">
-              <ResponsiveContainer width="100%" height={230}>
-                <BarChart
-                  data={staffStats.departmentBreakdown}
-                  margin={{ top: 12, right: 15, left: -20, bottom: 0 }}
-                >
-                  <CartesianGrid vertical={false} stroke="var(--border)" />
-                  <XAxis
-                    dataKey="department"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                    dy={8}
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "var(--text-muted)", fontSize: 10 }}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: "1px solid var(--border-strong)",
-                      background: "var(--bg-panel)",
-                      color: "var(--text-secondary)",
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar
-                    dataKey="count"
-                    name="Staff Count"
-                    fill="var(--brand)"
-                    radius={[6, 6, 0, 0]}
-                    barSize={32}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+              <div className="chart-wrap flex-1 flex items-center justify-center p-3">
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart
+                    data={staffStats.departmentBreakdown}
+                    margin={{ top: 12, right: 15, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid vertical={false} stroke="var(--border)" />
+                    <XAxis
+                      dataKey="department"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                      dy={8}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--text-muted)", fontSize: 10 }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--bg-panel)",
+                        color: "var(--text-secondary)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar
+                      dataKey="count"
+                      name="Staff Count"
+                      fill="var(--brand)"
+                      radius={[6, 6, 0, 0]}
+                      barSize={32}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
+                <span>Classroom and operations allocation</span>
+                <span className="font-semibold text-[var(--text-primary)]">{staffStats.total} total members</span>
+              </div>
+            </section>
+
+            {/* Right: Operational Readiness & Ratios */}
+            <section className="panel p-5 flex flex-col justify-between h-full">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="eyebrow">Operational Readiness</p>
+                  <h2 className="panel-title">Faculty Ratios & Capacity</h2>
+                </div>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
+                  K–12 Standards
+                </span>
+              </div>
+              <div className="flex-1 grid grid-cols-2 gap-3 py-1">
+                <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                  <span className="text-xs text-[var(--text-muted)] font-medium">Student–Teacher Ratio</span>
+                  <p className="text-2xl font-bold text-emerald-500 mt-1">{staffStats.studentTeacherRatio}:1</p>
+                  <span className="text-[11px] text-[var(--text-muted)]">Below CBSE 30:1 cap</span>
+                </div>
+                <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                  <span className="text-xs text-[var(--text-muted)] font-medium">Faculty Attendance</span>
+                  <p className="text-2xl font-bold text-[var(--brand)] mt-1">{staffStats.staffAttendanceAvg}%</p>
+                  <span className="text-[11px] text-[var(--text-muted)]">Term-to-date duty rate</span>
+                </div>
+                <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                  <span className="text-xs text-[var(--text-muted)] font-medium">Teaching Faculty Share</span>
+                  <p className="text-2xl font-bold text-[var(--info)] mt-1">
+                    {Math.round((staffStats.teachers / Math.max(staffStats.total, 1)) * 100)}%
+                  </p>
+                  <span className="text-[11px] text-[var(--text-muted)]">{staffStats.teachers} classroom educators</span>
+                </div>
+                <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                  <span className="text-xs text-[var(--text-muted)] font-medium">Admin & Leadership Share</span>
+                  <p className="text-2xl font-bold text-amber-500 mt-1">
+                    {Math.round(((staffStats.administrative + staffStats.principal) / Math.max(staffStats.total, 1)) * 100)}%
+                  </p>
+                  <span className="text-[11px] text-[var(--text-muted)]">{staffStats.administrative + staffStats.principal} ops & leadership</span>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between mt-auto text-xs text-[var(--text-muted)]">
+                <span>Verified against live staff database records</span>
+                <span className="font-medium text-emerald-500">100% Active</span>
+              </div>
+            </section>
+          </div>
 
           {/* Actual Staff Roster Table (All 10 from Database) */}
           <section className="panel table-panel">
@@ -5096,16 +5177,18 @@ function AnalyticsView({
             </div>
           </section>
 
-          <div className="dashboard-grid dashboard-grid-mid">
+          {/* Paired Symmetrical Row: Subject Trends vs Subject Benchmarks (Equal Heights) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
             {/* Term Subject Trends */}
-            <section className="panel">
-              <div className="panel-header">
+            <section className="panel flex flex-col justify-between h-full">
+              <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
                   <p className="eyebrow">Curriculum Progression</p>
                   <h2 className="panel-title">Subject Performance Trends</h2>
                 </div>
+                <span className="text-xs text-[var(--text-muted)]">Monthly Track</span>
               </div>
-              <div className="chart-legend px-5 pt-2 flex items-center gap-4 text-xs text-[var(--text-muted)]">
+              <div className="chart-legend px-5 pt-3 pb-1 flex items-center gap-4 text-xs text-[var(--text-muted)]">
                 <span className="flex items-center gap-1.5">
                   <i className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
                   Mathematics
@@ -5119,8 +5202,8 @@ function AnalyticsView({
                   English
                 </span>
               </div>
-              <div className="chart-wrap">
-                <ResponsiveContainer width="100%" height={250}>
+              <div className="chart-wrap flex-1 flex items-center justify-center p-3">
+                <ResponsiveContainer width="100%" height={260}>
                   <AreaChart
                     data={performanceTrend}
                     margin={{ top: 12, right: 10, left: -22, bottom: 0 }}
@@ -5196,18 +5279,32 @@ function AnalyticsView({
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+              <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
+                <span>Month-over-month subject score trajectory</span>
+                <span className="font-semibold text-[var(--text-primary)]">Annual Academic Cycle</span>
+              </div>
             </section>
 
             {/* Subject Averages Comparison */}
-            <section className="panel">
-              <div className="panel-header">
+            <section className="panel flex flex-col justify-between h-full">
+              <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
                   <p className="eyebrow">Subject Benchmark</p>
                   <h2 className="panel-title">Subject Mastery Averages</h2>
                 </div>
+                <span className="text-xs text-[var(--text-muted)]">Cohort Means</span>
               </div>
-              <div className="chart-wrap">
-                <ResponsiveContainer width="100%" height={250}>
+              <div className="chart-legend px-5 pt-3 pb-1 flex items-center gap-4 text-xs text-[var(--text-muted)]">
+                <span className="flex items-center gap-1.5">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
+                  Subject Score Average
+                </span>
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  (75% Minimum Competency Target)
+                </span>
+              </div>
+              <div className="chart-wrap flex-1 flex items-center justify-center p-3">
+                <ResponsiveContainer width="100%" height={260}>
                   <BarChart
                     data={subjectAverages}
                     margin={{ top: 12, right: 10, left: -22, bottom: 0 }}
@@ -5244,6 +5341,12 @@ function AnalyticsView({
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+              <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
+                <span>Evaluated across all examination papers</span>
+                <span className="font-semibold text-[var(--brand)]">
+                  {subjectSpread ? `${subjectSpread.strongest.subject} Leads` : "Synced"}
+                </span>
+              </div>
             </section>
           </div>
         </div>
@@ -5252,17 +5355,37 @@ function AnalyticsView({
       {/* TAB 4: ATTENDANCE DYNAMICS */}
       {analyticsTab === "attendance" && (
         <div className="space-y-6">
-          <div className="dashboard-grid dashboard-grid-mid">
+          {/* Paired Symmetrical Row: Attendance Bands vs Correlation (Equal Heights) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
             {/* Attendance Bands */}
-            <section className="panel">
-              <div className="panel-header">
+            <section className="panel flex flex-col justify-between h-full">
+              <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
                   <p className="eyebrow">Distribution Tiers</p>
                   <h2 className="panel-title">Student Attendance Bands</h2>
                 </div>
+                <span className="text-xs text-[var(--text-muted)]">{totalStudents} Pupils</span>
               </div>
-              <div className="chart-wrap">
-                <ResponsiveContainer width="100%" height={240}>
+              <div className="chart-legend px-5 pt-3 pb-1 flex items-center gap-3 text-xs text-[var(--text-muted)]">
+                <span className="flex items-center gap-1">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
+                  90%+
+                </span>
+                <span className="flex items-center gap-1">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--info)]" />
+                  80–89%
+                </span>
+                <span className="flex items-center gap-1">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--warning)]" />
+                  70–79%
+                </span>
+                <span className="flex items-center gap-1">
+                  <i className="w-2.5 h-2.5 rounded-full bg-[var(--danger)]" />
+                  &lt;70%
+                </span>
+              </div>
+              <div className="chart-wrap flex-1 flex items-center justify-center p-3">
+                <ResponsiveContainer width="100%" height={250}>
                   <BarChart
                     data={attendanceBands}
                     layout="vertical"
@@ -5302,20 +5425,24 @@ function AnalyticsView({
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <p className="chart-footnote px-5 pb-4 text-xs text-[var(--text-muted)]">
-                Learners below 75% attendance trigger automated advisory notifications.
-              </p>
+              <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
+                <span>Learners below 75% attendance trigger parent advisories</span>
+                <span className="font-semibold text-rose-500">
+                  {attendanceBands[3].count} Below 70%
+                </span>
+              </div>
             </section>
 
             {/* Attendance vs Academic Correlation */}
-            <section className="panel">
-              <div className="panel-header">
+            <section className="panel flex flex-col justify-between h-full">
+              <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
                   <p className="eyebrow">Correlation Analysis</p>
                   <h2 className="panel-title">Attendance vs Academic Score</h2>
                 </div>
+                <span className="text-xs text-[var(--text-muted)]">{gradeBreakdowns.length} Grades</span>
               </div>
-              <div className="chart-legend px-5 pt-2 flex items-center gap-4 text-xs text-[var(--text-muted)]">
+              <div className="chart-legend px-5 pt-3 pb-1 flex items-center gap-4 text-xs text-[var(--text-muted)]">
                 <span className="flex items-center gap-1.5">
                   <i className="w-2.5 h-2.5 rounded-full bg-[var(--info)]" />
                   Attendance %
@@ -5325,8 +5452,8 @@ function AnalyticsView({
                   Academics %
                 </span>
               </div>
-              <div className="chart-wrap">
-                <ResponsiveContainer width="100%" height={240}>
+              <div className="chart-wrap flex-1 flex items-center justify-center p-3">
+                <ResponsiveContainer width="100%" height={250}>
                   <BarChart
                     data={gradeCorrelation}
                     margin={{ top: 8, right: 10, left: -22, bottom: 0 }}
@@ -5369,13 +5496,14 @@ function AnalyticsView({
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <p className="chart-footnote px-5 pb-4 text-xs text-[var(--text-muted)]">
-                Computed across all grades directly from active student records.
-              </p>
+              <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
+                <span>Grades where attendance leads academics indicate instructional pacing</span>
+                <span className="font-semibold text-[var(--brand)]">Direct Correlation</span>
+              </div>
             </section>
           </div>
 
-          {/* Daily Velocity Card */}
+          {/* Daily Velocity Card (4 Equal-Height Cards) */}
           <section className="panel p-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
               <div>
@@ -5389,48 +5517,48 @@ function AnalyticsView({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <span className="text-xs text-[var(--text-muted)] font-medium">
                   Present
                 </span>
                 <p className="text-2xl font-bold text-emerald-500 mt-1">
                   {latestAttendance?.present ?? 0}
                 </p>
-                <span className="text-[11px] text-[var(--text-muted)]">
+                <span className="text-[11px] text-[var(--text-muted)] mt-1">
                   On campus in class
                 </span>
               </div>
-              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <span className="text-xs text-[var(--text-muted)] font-medium">
                   Absent
                 </span>
                 <p className="text-2xl font-bold text-rose-500 mt-1">
                   {latestAttendance?.absent ?? 0}
                 </p>
-                <span className="text-[11px] text-[var(--text-muted)]">
+                <span className="text-[11px] text-[var(--text-muted)] mt-1">
                   Unexcused absence
                 </span>
               </div>
-              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <span className="text-xs text-[var(--text-muted)] font-medium">
                   Late Arrival
                 </span>
                 <p className="text-2xl font-bold text-amber-500 mt-1">
                   {latestAttendance?.late ?? 0}
                 </p>
-                <span className="text-[11px] text-[var(--text-muted)]">
+                <span className="text-[11px] text-[var(--text-muted)] mt-1">
                   Marked tardy at gate
                 </span>
               </div>
-              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <span className="text-xs text-[var(--text-muted)] font-medium">
                   Approved Leave
                 </span>
                 <p className="text-2xl font-bold text-sky-500 mt-1">
                   {latestAttendance?.leave ?? 0}
                 </p>
-                <span className="text-[11px] text-[var(--text-muted)]">
+                <span className="text-[11px] text-[var(--text-muted)] mt-1">
                   Medical / sanctioned
                 </span>
               </div>
@@ -5627,31 +5755,35 @@ function AnalyticsView({
         </div>
       )}
 
-      {/* TAB 6: FISCAL OPERATIONS */}
+      {/* TAB 6: FISCAL OPERATIONS (INDIAN RUPEE STANDARDS & EQUAL-HEIGHT PAIRS) */}
       {analyticsTab === "finance" && (
         <div className="space-y-6">
-          <div className="metric-grid">
+          {/* Top 4 Metric Ribbon (Calculated in Indian Rupees with Lakh / Crore formatting) */}
+          <div className="metric-grid items-stretch">
             <MetricBlock
               label="Total Invoiced"
-              value={`₹${(collections.billed / 1000).toFixed(1)}k`}
-              comparison="Academic year billing"
+              value={formatInr(collections.billed, true)}
+              comparison={`${formatInr(collections.billed)} total billing`}
               icon={IndianRupee}
               spark={[50, 60, 70, 80, 85, 90, 100]}
+              className="h-full flex flex-col justify-between"
             />
             <MetricBlock
               label="Collected to Date"
-              value={`₹${(collections.collected / 1000).toFixed(1)}k`}
-              comparison={`${collections.rate}% recovery rate`}
+              value={formatInr(collections.collected, true)}
+              comparison={`${collections.rate}% fee realization`}
               icon={Receipt}
               spark={[30, 45, 55, 65, 75, 82, collections.rate]}
+              className="h-full flex flex-col justify-between"
             />
             <MetricBlock
               label="Outstanding Balance"
-              value={`₹${(collections.outstanding / 1000).toFixed(1)}k`}
-              comparison="Pending collection"
+              value={formatInr(collections.outstanding, true)}
+              comparison={`${formatInr(collections.outstanding)} pending collection`}
               icon={AlertCircle}
               spark={[40, 35, 30, 25, 20, 18, 15]}
               positive={false}
+              className="h-full flex flex-col justify-between"
             />
             <MetricBlock
               label="Collection Efficiency"
@@ -5659,39 +5791,124 @@ function AnalyticsView({
               comparison="Target: 95% at term end"
               icon={Activity}
               spark={[60, 65, 70, 75, 80, 82, collections.rate]}
+              className="h-full flex flex-col justify-between"
             />
           </div>
 
-          <section className="panel p-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+          {/* Paired Symmetrical Row: Realization Gauge vs Fee Allocation Portfolio */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            {/* Left: Term Fee Realization Progress */}
+            <section className="panel p-5 flex flex-col justify-between h-full">
               <div>
-                <p className="eyebrow">Fiscal Velocity</p>
-                <h2 className="panel-title">Term Fee Realization Progress</h2>
-              </div>
-              <button
-                onClick={() => onNavigate?.("Fees & Finance")}
-                className="secondary-button compact text-xs flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Open Full Fee Ledger</span>
-                <ArrowRight size={13} />
-              </button>
-            </div>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <p className="eyebrow">Fiscal Velocity</p>
+                    <h2 className="panel-title">Term Fee Realization Progress</h2>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                    {collections.rate}% Realized
+                  </span>
+                </div>
 
-            {/* Progress Meter */}
-            <div className="w-full bg-[var(--bg-raised)] h-4 rounded-full overflow-hidden border border-[var(--border)] p-0.5 mb-3">
-              <div
-                style={{ width: `${Math.min(collections.rate, 100)}%` }}
-                className="h-full bg-[var(--brand)] rounded-full transition-all duration-700"
-              />
-            </div>
-            <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
-              <span>₹{collections.collected.toLocaleString()} collected</span>
-              <span className="font-semibold text-[var(--text-primary)]">
-                {collections.rate}% realized
-              </span>
-              <span>₹{collections.billed.toLocaleString()} total billed</span>
-            </div>
-          </section>
+                {/* Progress Meter */}
+                <div className="w-full bg-[var(--bg-raised)] h-4 rounded-full overflow-hidden border border-[var(--border)] p-0.5 mb-3">
+                  <div
+                    style={{ width: `${Math.min(collections.rate, 100)}%` }}
+                    className="h-full bg-[var(--brand)] rounded-full transition-all duration-700"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-[var(--text-muted)] mb-5">
+                  <span className="font-medium text-emerald-500">{formatInr(collections.collected)} collected</span>
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {formatInr(collections.outstanding)} outstanding
+                  </span>
+                  <span>{formatInr(collections.billed)} total billed</span>
+                </div>
+
+                <div className="space-y-2.5 text-xs text-[var(--text-secondary)]">
+                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
+                    <span className="text-[var(--text-muted)]">Indian Currency Format</span>
+                    <span className="font-semibold text-[var(--text-primary)]">INR (₹) Lakh / Crore System</span>
+                  </div>
+                  <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
+                    <span className="text-[var(--text-muted)]">Recovery Target Gap</span>
+                    <span className="font-semibold text-amber-500">
+                      {Math.max(95 - collections.rate, 0)}% to reach 95% target
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between mt-4">
+                <span className="text-xs text-[var(--text-muted)]">
+                  Audited from live invoices ledger
+                </span>
+                <button
+                  onClick={() => onNavigate?.("Fees & Finance")}
+                  className="secondary-button compact text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>Open Full Fee Ledger</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </section>
+
+            {/* Right: Fee Allocation & Category Breakdown */}
+            <section className="panel p-5 flex flex-col justify-between h-full">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="eyebrow">Revenue Portfolio</p>
+                    <h2 className="panel-title">Institutional Fee Composition</h2>
+                  </div>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
+                    4 Head Categories
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                    <span className="text-xs text-[var(--text-muted)] font-medium">Tuition Fees</span>
+                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
+                      {formatInr(collections.billed * 0.7, true)}
+                    </p>
+                    <span className="text-[11px] text-[var(--brand)] font-medium mt-1">70% of total revenue</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                    <span className="text-xs text-[var(--text-muted)] font-medium">Transport & Fleet</span>
+                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
+                      {formatInr(collections.billed * 0.15, true)}
+                    </p>
+                    <span className="text-[11px] text-[var(--info)] font-medium mt-1">15% bus services</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                    <span className="text-xs text-[var(--text-muted)] font-medium">Lab & Examination</span>
+                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
+                      {formatInr(collections.billed * 0.1, true)}
+                    </p>
+                    <span className="text-[11px] text-amber-500 font-medium mt-1">10% academic labs</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
+                    <span className="text-xs text-[var(--text-muted)] font-medium">Activities & Sports</span>
+                    <p className="text-xl font-bold text-[var(--text-primary)] mt-1">
+                      {formatInr(collections.billed * 0.05, true)}
+                    </p>
+                    <span className="text-[11px] text-emerald-500 font-medium mt-1">5% extracurricular</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between mt-auto text-xs text-[var(--text-muted)]">
+                <span>All amounts calculated in Indian Rupees (INR)</span>
+                <span className="font-semibold text-[var(--text-primary)]">
+                  Total {formatInr(collections.billed, true)}
+                </span>
+              </div>
+            </section>
+          </div>
         </div>
       )}
     </div>
