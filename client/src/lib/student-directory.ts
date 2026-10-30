@@ -243,6 +243,7 @@ export async function downloadDirectoryExport(
 }
 
 export interface StudentDraft {
+  name?: string;
   first_name: string;
   last_name: string;
   usn?: string;

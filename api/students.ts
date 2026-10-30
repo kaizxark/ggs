@@ -934,8 +934,14 @@ export default async function handler(req: Request): Promise<Response> {
       return fail("Bad request.", 400, "bad_request");
     }
 
-    const firstName = clean(body.first_name, 60);
-    const lastName = clean(body.last_name, 60);
+    let firstName = clean(body.first_name, 60);
+    let lastName = clean(body.last_name, 60);
+    const fullName = clean(body.name || body.full_name, 120);
+    if (!firstName && fullName) {
+      const parts = fullName.split(/\s+/);
+      firstName = clean(parts[0], 60);
+      lastName = clean(parts.slice(1).join(" ") || parts[0], 60);
+    }
 
     const fieldErrors: Record<string, string> = {};
     if (!firstName) fieldErrors.first_name = "Enter a first name.";
@@ -1183,6 +1189,15 @@ export default async function handler(req: Request): Promise<Response> {
       }
       // An explicit empty string clears the field; `undefined` leaves it alone.
       patch[field] = value;
+    }
+
+    if (("name" in body || "full_name" in body) && !("first_name" in body)) {
+      const fullName = clean(body.name || body.full_name, 120);
+      if (fullName) {
+        const parts = fullName.split(/\s+/);
+        patch.first_name = clean(parts[0], 60);
+        patch.last_name = clean(parts.slice(1).join(" ") || parts[0], 60);
+      }
     }
 
     if ("usn" in body) {
