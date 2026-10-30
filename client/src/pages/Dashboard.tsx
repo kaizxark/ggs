@@ -2159,7 +2159,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         <section className="panel">
           <div className="panel-header dashboard-attendance-header">
             <div>
-              <p className="eyebrow">School-wide signal</p>
               <h2 className="panel-title">Attendance overview</h2>
             </div>
             <div className="dashboard-attendance-controls">
@@ -2289,7 +2288,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
               ) : (
                 <>
                   <strong>{latestPresent.toLocaleString("en-IN")}</strong>{" "}
-                  students present on the latest school day
+                  students present
                 </>
               )}
             </span>
@@ -2302,7 +2301,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Term attendance</p>
               <h2 className="panel-title">Class watchlist</h2>
             </div>
             <button
@@ -2357,7 +2355,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Needs a decision</p>
               <h2 className="panel-title">Attention required</h2>
             </div>
             <span className="count-badge">
@@ -2391,7 +2388,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">School communications</p>
               <h2 className="panel-title">Recent announcements</h2>
             </div>
             <span className="count-badge">
@@ -2440,7 +2436,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
       <section className="panel health-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Leadership view</p>
             <h2 className="panel-title">School health overview</h2>
           </div>
           {canSeeReports && (
@@ -2493,9 +2488,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                         }}
                       />
                     </div>
-                    <p className="mt-2 text-[12.5px] text-[var(--text-muted)]">
-                      Across the current term
-                    </p>
                   </div>
                 </div>
               </div>
@@ -4360,17 +4352,13 @@ function AnalyticsView({
           />
           <div className="flex flex-wrap items-center gap-2.5 mt-1">
             <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-              Institutional Analytics & Intelligence
+              Institutional Analytics
             </h1>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/25">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live DB: {totalStudents} Students • {staffStats.total} Staff
             </span>
           </div>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Live analytics projected directly from database records for {totalStudents}{" "}
-            pupils and {staffStats.total} faculty & administration members.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -4409,15 +4397,15 @@ function AnalyticsView({
             <MetricBlock
               label="Academic Average"
               value={`${overallAverage}%`}
-              comparison={`${totalStudents} students enrolled • Median ${medianAverage}%`}
+              comparison={`Median ${medianAverage}%`}
               icon={GraduationCap}
               spark={academicSpark}
               className="h-full flex flex-col justify-between"
             />
             <MetricBlock
-              label="Attendance Velocity"
+              label="Attendance Rate"
               value={`${attendancePct}%`}
-              comparison={`${latestPresent} present on ${latestAttendance?.day ?? "roll call"}`}
+              comparison={`${latestPresent} present today`}
               icon={ClipboardCheck}
               spark={attendanceSpark}
               className="h-full flex flex-col justify-between"
@@ -4425,7 +4413,7 @@ function AnalyticsView({
             <MetricBlock
               label="Leading Cohort"
               value={fastestGrade}
-              comparison={`${gradeBreakdowns.length} active grades • Ratio ${staffStats.studentTeacherRatio}:1`}
+              comparison={`${gradeBreakdowns.length} active grades`}
               icon={TrendingUp}
               spark={cohortSpark}
               className="h-full flex flex-col justify-between"
@@ -4433,7 +4421,7 @@ function AnalyticsView({
             <MetricBlock
               label="Faculty Strength"
               value={`${staffStats.total} Members`}
-              comparison={`${staffStats.teachers} Teachers • ${staffStats.studentTeacherRatio}:1 Ratio`}
+              comparison={`${staffStats.teachers} teachers · ${staffStats.administrative} admin`}
               icon={Users}
               spark={[92, 94, 91, 95, 96, 94, staffStats.staffAttendanceAvg]}
               className="h-full flex flex-col justify-between"
@@ -4494,7 +4482,7 @@ function AnalyticsView({
                 {totalStudents}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                {graded.length} active with graded papers
+                {graded.length} graded pupils
               </span>
             </div>
 
@@ -4507,7 +4495,7 @@ function AnalyticsView({
                 {staffStats.total}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                {staffStats.teachers} Teachers • {staffStats.administrative} Admin • 1 Principal
+                {staffStats.teachers} teachers · {staffStats.administrative} admin
               </span>
             </div>
 
@@ -4520,7 +4508,7 @@ function AnalyticsView({
                 {staffStats.studentTeacherRatio}:1
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                Optimal benchmark for K–12
+                CBSE 30:1 benchmark
               </span>
             </div>
 
@@ -4533,7 +4521,7 @@ function AnalyticsView({
                 {staffStats.staffAttendanceAvg}%
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                Faculty duty velocity
+                Term attendance
               </span>
             </div>
           </div>
@@ -4542,11 +4530,10 @@ function AnalyticsView({
           <section className="panel p-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
               <div>
-                <p className="eyebrow">Academic Stratification</p>
                 <h2 className="panel-title">Cohort Performance Distribution</h2>
               </div>
               <span className="text-xs text-[var(--text-muted)]">
-                Calculated directly from {graded.length} database student records
+                {graded.length} evaluated pupils
               </span>
             </div>
 
@@ -4591,9 +4578,6 @@ function AnalyticsView({
                     {scoreTiers.distinction.pct}%
                   </span>
                 </div>
-                <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Honors roll candidates
-                </p>
               </div>
 
               <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
@@ -4611,9 +4595,6 @@ function AnalyticsView({
                     {scoreTiers.merit.pct}%
                   </span>
                 </div>
-                <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Solid competency baseline
-                </p>
               </div>
 
               <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
@@ -4631,9 +4612,6 @@ function AnalyticsView({
                     {scoreTiers.pass.pct}%
                   </span>
                 </div>
-                <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Target for advancement
-                </p>
               </div>
 
               <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
@@ -4651,9 +4629,6 @@ function AnalyticsView({
                     {scoreTiers.critical.pct}%
                   </span>
                 </div>
-                <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Remediation flagged
-                </p>
               </div>
             </div>
           </section>
@@ -4664,7 +4639,6 @@ function AnalyticsView({
             <section className="panel flex flex-col justify-between h-full">
               <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
-                  <p className="eyebrow">Holistic Composite</p>
                   <h2 className="panel-title">Institutional Vitals Radar</h2>
                 </div>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
@@ -4689,7 +4663,7 @@ function AnalyticsView({
                 </ResponsiveContainer>
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
-                <span>Core Academics, Attendance, and Pass Rate diagnostic</span>
+                <span>Composite institutional health</span>
                 <span className="font-semibold text-[var(--text-primary)]">{attendancePct}% Overall</span>
               </div>
             </section>
@@ -4702,12 +4676,11 @@ function AnalyticsView({
                     <Sparkles size={16} />
                   </span>
                   <div>
-                    <p className="eyebrow">Live Data Synthesis</p>
                     <h2 className="panel-title">Institutional Intelligence</h2>
                   </div>
                 </div>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
-                  Actual DB Synced
+                  Live Sync
                 </span>
               </div>
 
@@ -4718,10 +4691,7 @@ function AnalyticsView({
                     <span className="font-semibold text-[var(--text-primary)]">
                       Faculty Coverage:{" "}
                     </span>
-                    {staffStats.total} staff members are active in the database (
-                    {staffStats.teachers} teaching faculty, {staffStats.administrative}{" "}
-                    administrative staff, and Principal {staffStats.principalPerson?.name ?? ""}),
-                    maintaining an efficient {staffStats.studentTeacherRatio}:1 student-to-teacher ratio.
+                    {staffStats.total} staff members ({staffStats.teachers} teaching, {staffStats.administrative} admin) maintaining a {staffStats.studentTeacherRatio}:1 student ratio.
                   </div>
                 </div>
 
@@ -4729,10 +4699,9 @@ function AnalyticsView({
                   <Target size={15} className="text-[var(--info)] shrink-0 mt-0.5" />
                   <div>
                     <span className="font-semibold text-[var(--text-primary)]">
-                      Leading Grade Section:{" "}
+                      Leading Grade:{" "}
                     </span>
-                    {fastestGrade} is currently the top performing grade cohort across the{" "}
-                    {gradeBreakdowns.length} active grades in the database.
+                    {fastestGrade} is currently the top performing cohort across all {gradeBreakdowns.length} active grades.
                   </div>
                 </div>
 
@@ -4742,8 +4711,7 @@ function AnalyticsView({
                     <span className="font-semibold text-[var(--text-primary)]">
                       Score Distribution:{" "}
                     </span>
-                    Cohort median score is {medianAverage}% with a mean of {overallAverage}% and standard
-                    deviation of {spread} points across {graded.length} graded students.
+                    Cohort median is {medianAverage}% (mean {overallAverage}%) across {graded.length} evaluated pupils.
                   </div>
                 </div>
 
@@ -4751,24 +4719,20 @@ function AnalyticsView({
                   <AlertCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-semibold text-[var(--text-primary)]">
-                      Early Warning Status:{" "}
+                      Early Warning:{" "}
                     </span>
                     {atRisk === 0 ? (
-                      "All students in the database currently meet the passing threshold."
+                      "All enrolled students meet the passing threshold."
                     ) : (
                       <>
-                        <span className="font-bold text-rose-500">{atRisk} learners</span> in
-                        the database have scores below 50% and require remediation.
+                        <span className="font-bold text-rose-500">{atRisk} learners</span> have scores below 50% and require remediation.
                       </>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between mt-auto">
-                <span className="text-[11px] text-[var(--text-muted)]">
-                  Derived from {totalStudents} student and {staffStats.total} staff rows
-                </span>
+              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-end mt-auto">
                 <button
                   onClick={() => setAnalyticsTab("staff")}
                   className="secondary-button compact text-xs flex items-center gap-1.5 cursor-pointer"
@@ -4795,7 +4759,7 @@ function AnalyticsView({
                 {staffStats.total}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                All 10 members in database
+                On active roster
               </span>
             </div>
 
@@ -4807,7 +4771,7 @@ function AnalyticsView({
                 {staffStats.teachers}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                Active classroom teachers
+                Classroom faculty
               </span>
             </div>
 
@@ -4842,7 +4806,6 @@ function AnalyticsView({
             <section className="panel flex flex-col justify-between h-full">
               <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
-                  <p className="eyebrow">Faculty Allocation</p>
                   <h2 className="panel-title">Staff Members by Department</h2>
                 </div>
                 <span className="text-xs text-[var(--text-muted)]">
@@ -4889,8 +4852,8 @@ function AnalyticsView({
                 </ResponsiveContainer>
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
-                <span>Classroom and operations allocation</span>
-                <span className="font-semibold text-[var(--text-primary)]">{staffStats.total} total members</span>
+                <span>Domain allocation</span>
+                <span className="font-semibold text-[var(--text-primary)]">{staffStats.total} members</span>
               </div>
             </section>
 
@@ -4898,7 +4861,6 @@ function AnalyticsView({
             <section className="panel p-5 flex flex-col justify-between h-full">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="eyebrow">Operational Readiness</p>
                   <h2 className="panel-title">Faculty Ratios & Capacity</h2>
                 </div>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-hover)] text-[var(--text-muted)] border border-[var(--border)]">
@@ -4914,7 +4876,7 @@ function AnalyticsView({
                 <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                   <span className="text-xs text-[var(--text-muted)] font-medium">Faculty Attendance</span>
                   <p className="text-2xl font-bold text-[var(--brand)] mt-1">{staffStats.staffAttendanceAvg}%</p>
-                  <span className="text-[11px] text-[var(--text-muted)]">Term-to-date duty rate</span>
+                  <span className="text-[11px] text-[var(--text-muted)]">Term duty rate</span>
                 </div>
                 <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                   <span className="text-xs text-[var(--text-muted)] font-medium">Teaching Faculty Share</span>
@@ -4931,8 +4893,7 @@ function AnalyticsView({
                   <span className="text-[11px] text-[var(--text-muted)]">{staffStats.administrative + staffStats.principal} ops & leadership</span>
                 </div>
               </div>
-              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between mt-auto text-xs text-[var(--text-muted)]">
-                <span>Verified against live staff database records</span>
+              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-end mt-auto text-xs text-[var(--text-muted)]">
                 <span className="font-medium text-emerald-500">100% Active</span>
               </div>
             </section>
@@ -4943,11 +4904,7 @@ function AnalyticsView({
             <div className="p-5 border-b border-[var(--border)]">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <p className="eyebrow">Database Roster</p>
                   <h2 className="panel-title">All Staff & Faculty Records</h2>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">
-                    Live database records of the {staffStats.total} staff members.
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -5167,7 +5124,6 @@ function AnalyticsView({
             <section className="panel flex flex-col justify-between h-full">
               <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
-                  <p className="eyebrow">Curriculum Progression</p>
                   <h2 className="panel-title">Subject Performance Trends</h2>
                 </div>
                 <span className="text-xs text-[var(--text-muted)]">Monthly Track</span>
@@ -5264,7 +5220,7 @@ function AnalyticsView({
                 </ResponsiveContainer>
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
-                <span>Month-over-month subject score trajectory</span>
+                <span>Monthly trajectory</span>
                 <span className="font-semibold text-[var(--text-primary)]">Annual Academic Cycle</span>
               </div>
             </section>
@@ -5273,7 +5229,6 @@ function AnalyticsView({
             <section className="panel flex flex-col justify-between h-full">
               <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
-                  <p className="eyebrow">Subject Benchmark</p>
                   <h2 className="panel-title">Subject Mastery Averages</h2>
                 </div>
                 <span className="text-xs text-[var(--text-muted)]">Cohort Means</span>
@@ -5326,7 +5281,7 @@ function AnalyticsView({
                 </ResponsiveContainer>
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
-                <span>Evaluated across all examination papers</span>
+                <span>Curriculum mastery</span>
                 <span className="font-semibold text-[var(--brand)]">
                   {subjectSpread ? `${subjectSpread.strongest.subject} Leads` : "Synced"}
                 </span>
@@ -5345,7 +5300,6 @@ function AnalyticsView({
             <section className="panel flex flex-col justify-between h-full">
               <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
-                  <p className="eyebrow">Distribution Tiers</p>
                   <h2 className="panel-title">Student Attendance Bands</h2>
                 </div>
                 <span className="text-xs text-[var(--text-muted)]">{totalStudents} Pupils</span>
@@ -5410,7 +5364,7 @@ function AnalyticsView({
                 </ResponsiveContainer>
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
-                <span>Learners below 75% attendance trigger parent advisories</span>
+                <span>Parent alert threshold &lt;75%</span>
                 <span className="font-semibold text-rose-500">
                   {attendanceBands[3].count} Below 70%
                 </span>
@@ -5421,7 +5375,6 @@ function AnalyticsView({
             <section className="panel flex flex-col justify-between h-full">
               <div className="p-5 pb-0 flex items-center justify-between">
                 <div>
-                  <p className="eyebrow">Correlation Analysis</p>
                   <h2 className="panel-title">Attendance vs Academic Score</h2>
                 </div>
                 <span className="text-xs text-[var(--text-muted)]">{gradeBreakdowns.length} Grades</span>
@@ -5481,7 +5434,7 @@ function AnalyticsView({
                 </ResponsiveContainer>
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
-                <span>Grades where attendance leads academics indicate instructional pacing</span>
+                <span>Cohort alignment</span>
                 <span className="font-semibold text-[var(--brand)]">Direct Correlation</span>
               </div>
             </section>
@@ -5491,7 +5444,6 @@ function AnalyticsView({
           <section className="panel p-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
               <div>
-                <p className="eyebrow">Roll-Call Velocity</p>
                 <h2 className="panel-title">
                   Daily Attendance Snapshot ({latestAttendance?.day ?? "Latest Recorded Day"})
                 </h2>
@@ -5879,9 +5831,6 @@ function SettingsView({ onBack }: { onBack: () => void }) {
           <h1 className="page-title text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
             Settings & Preferences
           </h1>
-          <p className="page-subtitle text-sm text-[var(--text-muted)] max-w-2xl leading-relaxed">
-            Manage your personal profile, credentials, school-wide workspace details, academic policies, and system preferences.
-          </p>
         </div>
       </div>
 

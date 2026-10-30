@@ -22,7 +22,7 @@
    * Every rule below that measures itself against the viewport therefore
    * divides by this factor. Set it to 1 to get the unscaled layout back.
    * ================================================================ */
-  --ui-zoom: 1.1;
+  --ui-zoom: 1;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   /* Decelerating curves for anything that travels across the screen. */
