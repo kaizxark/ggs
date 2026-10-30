@@ -190,20 +190,17 @@ function SmoothFilterDropdown({
         <span>{hasValue ? selectedOption?.label ?? value : label}</span>
         <ChevronDown
           size={13}
-          className="smooth-filter-chevron"
-          style={{
-            transform: open ? "rotate(180deg)" : "rotate(0deg)",
-          }}
+          className={`smooth-filter-chevron${open ? " open" : ""}`}
         />
       </button>
 
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            initial={{ opacity: 0, scale: 0.97, y: -2 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -2 }}
-            transition={{ type: "spring", duration: 0.22, bounce: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: -1 }}
+            transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
             className={`smooth-filter-popover${align === "right" ? " smooth-filter-popover-right" : ""}`}
             role="listbox"
           >
@@ -705,48 +702,30 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
         </div>
 
         {/* Active Filter Badges Bar */}
-        <AnimatePresence>
-          {activeFilterCount > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="active-filters-bar"
+        {activeFilterCount > 0 && (
+          <div className="active-filters-bar">
+            <span className="active-filters-label">Active filters:</span>
+            {activeFilters.map((f) => (
+              <span key={f.id} className="active-filter-chip">
+                <span>{f.label}</span>
+                <button
+                  type="button"
+                  onClick={f.onRemove}
+                  aria-label={`Remove filter ${f.label}`}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              className="clear-all-filters-btn"
+              onClick={clearAllFilters}
             >
-              <span className="active-filters-label">Active filters:</span>
-              <AnimatePresence>
-                {activeFilters.map((f) => (
-                  <motion.span
-                    key={f.id}
-                    layout
-                    initial={{ opacity: 0, scale: 0.88 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.85 }}
-                    transition={{ duration: 0.15 }}
-                    className="active-filter-chip"
-                  >
-                    <span>{f.label}</span>
-                    <button
-                      type="button"
-                      onClick={f.onRemove}
-                      aria-label={`Remove filter ${f.label}`}
-                    >
-                      <X size={12} />
-                    </button>
-                  </motion.span>
-                ))}
-              </AnimatePresence>
-              <button
-                type="button"
-                className="clear-all-filters-btn"
-                onClick={clearAllFilters}
-              >
-                Reset all ({activeFilterCount})
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              Reset all ({activeFilterCount})
+            </button>
+          </div>
+        )}
 
         {selected.size > 0 && (
           <div className="bulk-bar">

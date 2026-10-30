@@ -239,11 +239,10 @@ kbd { display: inline-flex; min-width: 21px; height: 20px; align-items: center; 
 .nav-item, .nav-item-label, .command-trigger, .command-item, .topbar-profile,
 .icon-button, .primary-button, .secondary-button, .tiny-action, .row-more,
 .text-button, .back-link, .breadcrumb-root, .profile-menu-item, .segmented-control button,
-.drawer-section button, .data-table tbody tr, .attention-row, .activity-row,
-.report-card, .metric-block, .panel, .grade-chip, .status-pill, .notification-row {
-  transition: color .16s var(--ease-out), background-color .16s var(--ease-out),
-              border-color .16s var(--ease-out), opacity .16s var(--ease-out),
-              box-shadow .2s var(--ease-out), transform .16s var(--ease-out);
+.drawer-section button, .attention-row, .activity-row,
+.grade-chip, .status-pill, .notification-row {
+  transition: color .14s var(--ease-out), background-color .14s var(--ease-out),
+              border-color .14s var(--ease-out), opacity .14s var(--ease-out);
 }
 /* Press feedback: snappy scale-down (zero latency, physical tactile feel) */
 .primary-button:active, .secondary-button:active, .icon-button:active,
@@ -312,51 +311,29 @@ kbd { display: inline-flex; min-width: 21px; height: 20px; align-items: center; 
 .page-stack { display: flex; flex-direction: column; gap: 24px; }
 
 /* ------------------------------------------------------------------ *
- * First-render entrance animation
- *
- * Views fade up into place instead of snapping in. Each direct child of
- * .page-stack is staggered so sections arrive in reading order rather
- * than all at once. The animation runs once per mount (the key changes
- * when you navigate), not on every re-render.
+ * Pure, stable entrance animation
  * ------------------------------------------------------------------ */
-@keyframes erp-rise {
-  from { opacity: 0; transform: translate3d(0, 14px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
-}
-@keyframes erp-rise-soft {
-  from { opacity: 0; transform: translate3d(0, 9px, 0); }
-  to { opacity: 1; transform: translate3d(0, 0, 0); }
+@keyframes erp-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .page-stack > * {
-  animation: erp-rise .42s var(--ease-out) both;
+  animation: erp-fade-in .15s var(--ease-out) both;
 }
-/* Stagger siblings so the page assembles top-to-bottom. */
-.page-stack > *:nth-child(1) { animation-delay: 0ms; }
-.page-stack > *:nth-child(2) { animation-delay: 45ms; }
-.page-stack > *:nth-child(3) { animation-delay: 90ms; }
-.page-stack > *:nth-child(4) { animation-delay: 130ms; }
-.page-stack > *:nth-child(5) { animation-delay: 165ms; }
-.page-stack > *:nth-child(6) { animation-delay: 195ms; }
-.page-stack > *:nth-child(n + 7) { animation-delay: 220ms; }
 
-/* Rows inside a data table fade in slightly faster and softer, so long lists
-   don't feel sluggish while the page chrome is still settling. */
-.data-table tbody tr { animation: erp-rise-soft .3s var(--ease-out) both; }
-.data-table tbody tr:nth-child(1) { animation-delay: 0ms; }
-.data-table tbody tr:nth-child(2) { animation-delay: 22ms; }
-.data-table tbody tr:nth-child(3) { animation-delay: 44ms; }
-.data-table tbody tr:nth-child(4) { animation-delay: 64ms; }
-.data-table tbody tr:nth-child(5) { animation-delay: 82ms; }
-.data-table tbody tr:nth-child(6) { animation-delay: 98ms; }
-.data-table tbody tr:nth-child(n + 7) { animation-delay: 112ms; }
+/* Rows inside a data table: instant, rock-solid, zero layout thrashing or stutter */
+.data-table tbody tr {
+  animation: none;
+  transition: background-color .12s ease;
+}
 
-/* Common list containers (schedule, history, activity, attention). */
+/* Common list containers (schedule, history, activity, attention) */
 .schedule-row, .history-row, .attention-row, .health-metric, .activity-row {
-  animation: erp-rise-soft .34s var(--ease-out) both;
+  animation: none;
+  transition: background-color .12s ease;
 }
 
-/* The drawer slides in from the right (existing behaviour, kept separate). */
 @media (prefers-reduced-motion: reduce) {
   .page-stack > *,
   .data-table tbody tr,
@@ -680,7 +657,11 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 
 .smooth-filter-chevron {
   opacity: 0.6;
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 140ms ease;
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), opacity 120ms ease;
+}
+
+.smooth-filter-chevron.open {
+  transform: rotate(180deg);
 }
 
 .smooth-filter-trigger:hover .smooth-filter-chevron {
@@ -689,7 +670,7 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 
 .smooth-filter-popover {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 5px);
   left: 0;
   z-index: 50;
   min-width: 175px;
@@ -698,15 +679,16 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 5px;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(22, 23, 27, 0.94);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
-  box-shadow: 0 20px 48px -6px rgba(0, 0, 0, 0.72),
-              0 0 0 1px rgba(255, 255, 255, 0.06),
-              inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  background: rgba(22, 23, 27, 0.96);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.68),
+              0 0 0 1px rgba(255, 255, 255, 0.05),
+              inset 0 1px 0 rgba(255, 255, 255, 0.15);
   transform-origin: top left;
+  will-change: transform, opacity;
 }
 
 .smooth-filter-popover::-webkit-scrollbar {
@@ -761,7 +743,22 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   color: var(--brand);
 }
 
-.active-filters-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 10px 19px; background: var(--bg-raised); border-bottom: 1px solid var(--border-subtle); font-size: 12.5px; }
+@keyframes filter-bar-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.active-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 19px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  animation: filter-bar-fade 120ms ease-out;
+}
 .active-filters-label { color: var(--text-muted); font-size: 12px; margin-right: 2px; }
 .active-filter-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 10px; background: var(--brand-soft-2); border: 1px solid var(--brand-border); border-radius: 999px; color: var(--brand-strong); font-size: 11.5px; font-weight: 500; transition: background .14s ease, border-color .14s ease; }
 .active-filter-chip button { display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: inherit; opacity: .75; padding: 0; cursor: pointer; border-radius: 999px; margin-left: 2px; }
