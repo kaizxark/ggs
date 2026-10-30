@@ -487,16 +487,24 @@ function MetricBlock({
   className?: string;
 }) {
   const hasSpark = Boolean(spark && spark.length > 1);
-  const max = hasSpark ? Math.max(...spark!) : 0;
-  const min = hasSpark ? Math.min(...spark!) : 0;
-  const points = hasSpark
-    ? spark!
-        .map(
-          (point, index) =>
-            `${(index / (spark!.length - 1)) * 100},${42 - ((point - min) / Math.max(max - min, 1)) * 30}`
-        )
-        .join(" ")
-    : "";
+  const coords = useMemo(() => {
+    if (!hasSpark || !spark) return [];
+    const minVal = Math.min(...spark);
+    const maxVal = Math.max(...spark);
+    const range = Math.max(maxVal - minVal, 1);
+    return spark.map((point, index) => {
+      const x = (index / (spark.length - 1)) * 100;
+      const y = 38 - ((point - minVal) / range) * 26;
+      return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+    });
+  }, [hasSpark, spark]);
+
+  const points = coords.map((c) => `${c.x},${c.y}`).join(" ");
+  const areaPoints = coords.length > 0 ? `0,44 ${points} 100,44` : "";
+  const lastPoint = coords.length > 0 ? coords[coords.length - 1] : null;
+  const strokeColor = positive ? "var(--brand)" : "var(--danger)";
+  const gradId = `spark-grad-${label.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}`;
+
   return (
     <div className={`metric-block ${className}`}>
       <div className="flex items-center justify-between">
@@ -507,11 +515,11 @@ function MetricBlock({
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
-          <div className="metric-value">
+          <div className="metric-value tabular-nums">
             {loading ? <SkeletonText width={58} height={24} /> : value}
           </div>
           <div
-            className={`metric-change ${
+            className={`metric-change tabular-nums ${
               trend
                 ? positive
                   ? "text-[var(--brand)]"
@@ -538,18 +546,42 @@ function MetricBlock({
           <SkeletonBlock style={{ height: 44, width: 84 }} />
         ) : hasSpark ? (
           <svg
-            viewBox="0 0 100 48"
+            viewBox="0 0 100 44"
             className="h-11 w-[84px] overflow-visible"
             aria-hidden="true"
           >
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={strokeColor} stopOpacity={0.22} />
+                <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <polygon points={areaPoints} fill={`url(#${gradId})`} />
             <polyline
               points={points}
               fill="none"
-              stroke={positive ? "var(--brand)" : "var(--danger)"}
-              strokeWidth="2.3"
+              stroke={strokeColor}
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+            {lastPoint && (
+              <>
+                <circle
+                  cx={lastPoint.x}
+                  cy={lastPoint.y}
+                  r="4"
+                  fill={strokeColor}
+                  opacity={0.22}
+                />
+                <circle
+                  cx={lastPoint.x}
+                  cy={lastPoint.y}
+                  r="2"
+                  fill={strokeColor}
+                />
+              </>
+            )}
           </svg>
         ) : null}
       </div>
