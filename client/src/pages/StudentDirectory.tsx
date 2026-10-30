@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
+  Activity,
+  CalendarDays,
+  Check,
   ChevronDown,
+  CreditCard,
   Download,
   ExternalLink,
   Filter,
+  GraduationCap,
+  Layers,
   Maximize2,
   Minimize2,
   Plus,
@@ -118,6 +125,115 @@ export function formatGradeLabel(g?: string | null): string {
   if (/^\d+$/.test(trimmed)) return `Class ${trimmed}`;
   if (!/^(class|grade)\b/i.test(trimmed)) return `Class ${trimmed}`;
   return trimmed;
+}
+
+interface SmoothSelectOption {
+  value: string;
+  label: string;
+  icon?: React.ReactNode;
+}
+
+interface SmoothFilterDropdownProps {
+  label: string;
+  icon?: React.ReactNode;
+  value: string;
+  options: SmoothSelectOption[];
+  onChange: (val: string) => void;
+  align?: "left" | "right";
+  ariaLabel: string;
+}
+
+function SmoothFilterDropdown({
+  label,
+  icon,
+  value,
+  options,
+  onChange,
+  align = "left",
+  ariaLabel,
+}: SmoothFilterDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const selectedOption = options.find((o) => o.value === value);
+  const hasValue = Boolean(value && value !== "");
+
+  return (
+    <div className="smooth-filter-container" ref={containerRef}>
+      <button
+        type="button"
+        className={`smooth-filter-trigger${hasValue ? " has-value" : ""}`}
+        onClick={() => setOpen((prev) => !prev)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+      >
+        {icon}
+        <span>{hasValue ? selectedOption?.label ?? value : label}</span>
+        <ChevronDown
+          size={13}
+          className="smooth-filter-chevron"
+          style={{
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          }}
+        />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -2 }}
+            transition={{ type: "spring", duration: 0.22, bounce: 0 }}
+            className={`smooth-filter-popover${align === "right" ? " smooth-filter-popover-right" : ""}`}
+            role="listbox"
+          >
+            {options.map((opt) => {
+              const active = opt.value === value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`smooth-filter-item${active ? " active" : ""}`}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  role="option"
+                  aria-selected={active}
+                >
+                  <span className="flex items-center gap-2 min-w-0 truncate">
+                    {opt.icon}
+                    <span className="truncate">{opt.label}</span>
+                  </span>
+                  {active && <Check size={13} className="smooth-check-icon shrink-0" />}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 export function StudentDirectory({ openStudentId, openMode = "drawer", onStudentOpened, onBack }: StudentDirectoryProps) {
@@ -506,116 +622,131 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
             </div>
 
             {/* Smart Class Filter */}
-            <div className={`filter-select${filters.grade ? " active" : ""}`}>
-              <Filter size={13} />
-              <select
-                value={filters.grade ?? ""}
-                onChange={(event) => setFilter({ grade: event.target.value })}
-                aria-label="Filter by class"
-              >
-                <option value="">All classes</option>
-                {(options?.grades ?? []).map((g) => (
-                  <option key={g} value={g}>
-                    {formatGradeLabel(g)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={13} className="filter-chevron" />
-            </div>
+            <SmoothFilterDropdown
+              label="All classes"
+              icon={<GraduationCap size={14} />}
+              value={filters.grade ?? ""}
+              onChange={(val) => setFilter({ grade: val })}
+              ariaLabel="Filter by class"
+              options={[
+                { value: "", label: "All classes" },
+                ...(options?.grades ?? []).map((g) => ({
+                  value: g,
+                  label: formatGradeLabel(g),
+                })),
+              ]}
+            />
 
             {/* Section Filter */}
-            <div className={`filter-select${filters.section ? " active" : ""}`}>
-              <select
-                value={filters.section ?? ""}
-                onChange={(event) => setFilter({ section: event.target.value })}
-                aria-label="Filter by section"
-              >
-                <option value="">All sections</option>
-                {(options?.sections ?? []).map((s) => (
-                  <option key={s} value={s}>
-                    Section {s}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={13} className="filter-chevron" />
-            </div>
+            <SmoothFilterDropdown
+              label="All sections"
+              icon={<Layers size={14} />}
+              value={filters.section ?? ""}
+              onChange={(val) => setFilter({ section: val })}
+              ariaLabel="Filter by section"
+              options={[
+                { value: "", label: "All sections" },
+                ...(options?.sections ?? []).map((s) => ({
+                  value: s,
+                  label: `Section ${s}`,
+                })),
+              ]}
+            />
 
             {/* Smart Attendance Compliance Filter */}
-            <div className={`filter-select${filters.attendance ? " active" : ""}`}>
-              <select
-                value={filters.attendance ?? ""}
-                onChange={(event) => setFilter({ attendance: event.target.value })}
-                aria-label="Filter by attendance"
-              >
-                <option value="">All attendance</option>
-                <option value="at_risk">⚠️ At risk (&lt; 75%)</option>
-                <option value="good">✅ Good (≥ 90%)</option>
-              </select>
-              <ChevronDown size={13} className="filter-chevron" />
-            </div>
+            <SmoothFilterDropdown
+              label="All attendance"
+              icon={<Activity size={14} />}
+              value={filters.attendance ?? ""}
+              onChange={(val) => setFilter({ attendance: val })}
+              ariaLabel="Filter by attendance compliance"
+              options={[
+                { value: "", label: "All attendance" },
+                { value: "at_risk", label: "⚠️ At risk (< 75%)" },
+                { value: "good", label: "✅ Good (≥ 90%)" },
+              ]}
+            />
 
             {/* Fees Filter (for authorized accounts) */}
             {maySeeFees && (
-              <div className={`filter-select${filters.fees ? " active" : ""}`}>
-                <select
-                  value={filters.fees ?? ""}
-                  onChange={(event) => setFilter({ fees: event.target.value })}
-                  aria-label="Filter by fee status"
-                >
-                  <option value="">All fees</option>
-                  <option value="unpaid">Pending dues</option>
-                  <option value="paid">Paid in full</option>
-                </select>
-                <ChevronDown size={13} className="filter-chevron" />
-              </div>
+              <SmoothFilterDropdown
+                label="All fees"
+                icon={<CreditCard size={14} />}
+                value={filters.fees ?? ""}
+                onChange={(val) => setFilter({ fees: val })}
+                ariaLabel="Filter by fee status"
+                options={[
+                  { value: "", label: "All fees" },
+                  { value: "unpaid", label: "Pending dues" },
+                  { value: "paid", label: "Paid in full" },
+                ]}
+              />
             )}
 
             {/* Academic Year Filter */}
             {options?.years && options.years.length > 1 && (
-              <div className={`filter-select${filters.year ? " active" : ""}`}>
-                <select
-                  value={filters.year ?? ""}
-                  onChange={(event) => setFilter({ year: event.target.value })}
-                  aria-label="Filter by academic year"
-                >
-                  <option value="">All years</option>
-                  {options.years.map((y) => (
-                    <option key={y.id} value={y.id}>
-                      {y.name}{y.is_current ? " (Current)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={13} className="filter-chevron" />
-              </div>
+              <SmoothFilterDropdown
+                label="All years"
+                icon={<CalendarDays size={14} />}
+                value={filters.year ?? ""}
+                onChange={(val) => setFilter({ year: val })}
+                ariaLabel="Filter by academic year"
+                align="right"
+                options={[
+                  { value: "", label: "All academic years" },
+                  ...(options?.years ?? []).map((y) => ({
+                    value: y.id,
+                    label: `${y.name}${y.is_current ? " (Current)" : ""}`,
+                  })),
+                ]}
+              />
             )}
           </div>
         </div>
 
         {/* Active Filter Badges Bar */}
-        {activeFilterCount > 0 && (
-          <div className="active-filters-bar">
-            <span className="active-filters-label">Active filters:</span>
-            {activeFilters.map((f) => (
-              <span key={f.id} className="active-filter-chip">
-                <span>{f.label}</span>
-                <button
-                  type="button"
-                  onClick={f.onRemove}
-                  aria-label={`Remove filter ${f.label}`}
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            ))}
-            <button
-              type="button"
-              className="clear-all-filters-btn"
-              onClick={clearAllFilters}
+        <AnimatePresence>
+          {activeFilterCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="active-filters-bar"
             >
-              Reset all ({activeFilterCount})
-            </button>
-          </div>
-        )}
+              <span className="active-filters-label">Active filters:</span>
+              <AnimatePresence>
+                {activeFilters.map((f) => (
+                  <motion.span
+                    key={f.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.88 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.85 }}
+                    transition={{ duration: 0.15 }}
+                    className="active-filter-chip"
+                  >
+                    <span>{f.label}</span>
+                    <button
+                      type="button"
+                      onClick={f.onRemove}
+                      aria-label={`Remove filter ${f.label}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </motion.span>
+                ))}
+              </AnimatePresence>
+              <button
+                type="button"
+                className="clear-all-filters-btn"
+                onClick={clearAllFilters}
+              >
+                Reset all ({activeFilterCount})
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {selected.size > 0 && (
           <div className="bulk-bar">
