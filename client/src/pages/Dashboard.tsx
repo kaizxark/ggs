@@ -3450,6 +3450,7 @@ function StaffView({
               value={roleFilter}
               onChange={setRoleFilter}
               ariaLabel="Filter by role"
+              align="right"
               options={[
                 { value: "", label: "All roles" },
                 ...roles.map(r => ({ value: r, label: r })),

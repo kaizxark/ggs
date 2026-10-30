@@ -1,16 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { avatarTones } from "@/lib/school-data";
 import {
-  Check,
+  Activity,
+  BookOpen,
+  Briefcase,
   Copy,
   ExternalLink,
+  Lock,
+  Mail,
   Maximize2,
   Minimize2,
+  Pencil,
+  Phone,
+  ShieldCheck,
   UserRound,
   X,
 } from "lucide-react";
 
 import { DrawerBackdrop } from "@/components/DrawerBackdrop";
+import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
+import { FormSelect } from "./FormSelect";
 import { toast } from "@/lib/toast";
 import { ApiError, formatDate, initialsFor } from "@/lib/student-directory";
 import {
@@ -62,9 +71,26 @@ export interface StaffDrawerTarget {
   role: string;
   department: string;
   email: string;
+  usn?: string;
   initials: string;
   tone?: string;
+  photo_url?: string | null;
 }
+
+/**
+ * One icon per tab, matching the pupil profile's tab strip.
+ *
+ * The labels alone ("Personal", "Employment") are serviceable, but a tab strip
+ * with no visual anchor reads as a second row of small text. The icons give the
+ * eye something to land on before it reads the word.
+ */
+const STAFF_SECTION_ICONS: Record<StaffSection, typeof UserRound> = {
+  personal: UserRound,
+  employment: Briefcase,
+  teaching: BookOpen,
+  account: ShieldCheck,
+  activity: Activity,
+};
 
 interface StaffDrawerProps {
   staff: StaffDrawerTarget;
@@ -132,6 +158,7 @@ export function StaffDrawer({
   const record = detail?.staff;
   const account = detail?.account ?? null;
   const teaching = detail?.teaching ?? null;
+  const photoUrl = record ? record.photo_url : staff.photo_url ?? null;
 
   const subjectCount = teaching?.subjects.length ?? 0;
   const classTeacherOf = teaching?.class_teacher_of.length ?? 0;
@@ -161,9 +188,19 @@ export function StaffDrawer({
    * section is offered, and once it lands only the ones the server said this
    * caller may read are left. A tab that disappears is one the route refused,
    * never one that quietly rendered empty.
+   *
+   * Sections the route withheld are not dropped here. The route sends the
+   * reason it refused them, so they stay in the strip, disabled and locked,
+   * with that reason on hover. Hiding them made a permission look like an empty
+   * record; this says "not yours to read" without pretending the section does
+   * not exist.
    */
   const allowed = detail ? new Set<string>(detail.sections) : null;
-  const visibleTabs = ALL_STAFF_SECTIONS.filter((key) => !allowed || allowed.has(key));
+  const withheldReason = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of detail?.withheld ?? []) map.set(entry.section, entry.reason);
+    return map;
+  }, [detail]);
 
   return (
     <>
@@ -199,19 +236,42 @@ export function StaffDrawer({
         </div>
 
         <div className="drawer-avatar">
-          <span className={`avatar avatar-lg ${avatarTones[staff.tone ?? "teal"] ?? avatarTones.teal}`}>
-            {staff.initials || initialsFor(staff.name)}
-          </span>
+          {photoUrl ? (
+            <img className="avatar avatar-lg" src={photoUrl} alt="" />
+          ) : (
+            <span className={`avatar avatar-lg ${avatarTones[staff.tone ?? "teal"] ?? avatarTones.teal}`}>
+              {staff.initials || initialsFor(staff.name)}
+            </span>
+          )}
           <div className="min-w-0">
             <p className="font-medium text-[var(--text-secondary)]">
               {record?.designation ?? staff.role}
             </p>
             <p className="truncate text-[12.5px] text-[var(--text-muted)]">
               {record?.department ?? staff.department}
-              {record?.employee_code ? ` · ${record.employee_code}` : ""}
+              {record?.usn ?? staff.usn ? ` · ${record?.usn ?? staff.usn}` : ""}
             </p>
           </div>
         </div>
+
+        {record && (
+          <div className="profile-badges staff-badges">
+            <span className={`status-pill ${record.active ? "success" : "neutral"}`}>
+              <span className="status-dot" />
+              {record.active ? "Active" : "Inactive"}
+            </span>
+            {account?.role && (
+              <span className="status-pill neutral">
+                {ACCESS_LABELS[account.role] ?? account.role}
+              </span>
+            )}
+            {teaching && taughtClassCount > 0 && (
+              <span className="status-pill neutral">
+                Teaches {taughtClassCount} class{taughtClassCount === 1 ? "" : "es"}
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="drawer-stats">
           <div>
@@ -232,8 +292,8 @@ export function StaffDrawer({
 
         <div className="drawer-stats">
           <div>
-            <span>Employee code</span>
-            <strong>{record?.employee_code ?? "—"}</strong>
+            <span>USN</span>
+            <strong>{record?.usn ?? staff.usn ?? "—"}</strong>
           </div>
           <div>
             <span>Joined</span>
@@ -246,15 +306,24 @@ export function StaffDrawer({
         </div>
 
         <div className="drawer-tabs scroll-x">
-          {visibleTabs.map((key) => (
-            <button
-              key={key}
-              className={tab === key ? "active" : ""}
-              onClick={() => setTab(key)}
-            >
-              {labels[key] ?? key}
-            </button>
-          ))}
+          {ALL_STAFF_SECTIONS.map((key) => {
+            const Icon = STAFF_SECTION_ICONS[key];
+            const locked = allowed !== null && !allowed.has(key);
+            return (
+              <button
+                key={key}
+                className={`${tab === key ? "active" : ""}${locked ? " locked" : ""}`.trim()}
+                onClick={() => setTab(key)}
+                disabled={locked}
+                title={locked ? withheldReason.get(key) ?? "Your role cannot read this section." : undefined}
+                aria-current={tab === key ? "page" : undefined}
+              >
+                <Icon size={14} aria-hidden="true" />
+                {labels[key] ?? key}
+                {locked && <Lock size={12} aria-hidden="true" />}
+              </button>
+            );
+          })}
         </div>
 
         <div className="pupil-drawer-body">
@@ -283,12 +352,22 @@ export function StaffDrawer({
           )}
 
           {!loading && !failed && detail && (
-            <StaffSectionBody
-              tab={tab}
-              detail={detail}
-              taughtClassCount={taughtClassCount}
-              onOpenAccountLogins={onOpenAccountLogins}
-            />
+            allowed?.has(tab) ? (
+              <StaffSectionBody
+                tab={tab}
+                detail={detail}
+                taughtClassCount={taughtClassCount}
+                onOpenAccountLogins={onOpenAccountLogins}
+              />
+            ) : (
+              <div className="empty-state">
+                <Lock size={20} />
+                <p className="panel-title">This section is locked</p>
+                <p className="panel-subtitle">
+                  {withheldReason.get(tab) ?? "Your role cannot read this section."}
+                </p>
+              </div>
+            )
           )}
         </div>
 
@@ -307,7 +386,7 @@ export function StaffDrawer({
               className="primary-button compact"
               onClick={() => setEditing(true)}
             >
-              <Check size={14} />
+              <Pencil size={14} />
               Edit details
             </button>
           ) : (
@@ -371,14 +450,14 @@ function StaffSectionBody({
 
   if (tab === "personal") {
     push("Full name", record.name);
+    push("USN", record.usn);
     push("Designation", record.designation);
     push("Department", record.department);
     push("Email", record.email);
     push("Phone", record.phone);
-    push("Employee code", record.employee_code);
     push("Status", record.active ? "Active" : "Inactive");
   } else if (tab === "employment") {
-    push("Employee code", record.employee_code);
+    push("USN", record.usn);
     push("Joined on", formatDate(record.joined_on));
     push("Tenure", tenureFrom(record.joined_on));
     push("Designation", record.designation);
@@ -444,7 +523,9 @@ function StaffSectionBody({
       rows.push(["Sign-in", "No account information available"]);
     } else {
       push("Portal access", account.has_account ? "Enabled" : "Not created");
-      push("Username", account.username);
+      /* Staff sign in with their USN. It is the username, so showing both here
+         implied two identifiers for one value. */
+      push("USN", record.usn ?? account.username);
       push("Sign-in email", account.email);
       push("Access level", account.role);
       push(
@@ -459,7 +540,7 @@ function StaffSectionBody({
       );
       push("Issued", account.issued_at ? formatDate(account.issued_at) : null);
       push(
-        "Username set",
+        "USN set",
         account.username_chosen_at ? formatDate(account.username_chosen_at) : null
       );
       push(
@@ -500,26 +581,66 @@ function StaffSectionBody({
         ))}
       </div>
 
+      {tab === "personal" && (
+        <div className="drawer-section">
+          <button
+            onClick={() =>
+              void copyText(
+                record.usn ?? "",
+                "USN copied",
+                "There is no USN on this record."
+              )
+            }
+          >
+            <UserRound size={15} />
+            Copy USN
+            <Copy size={14} aria-hidden="true" />
+          </button>
+          <button
+            onClick={() =>
+              void copyText(
+                record.email ?? "",
+                "Email address copied",
+                "There is no email address on this record."
+              )
+            }
+          >
+            <Mail size={15} />
+            Copy email
+            <Copy size={14} aria-hidden="true" />
+          </button>
+          {record.phone && (
+            <button
+              onClick={() => void copyText(record.phone ?? "", "Phone number copied")}
+            >
+              <Phone size={15} />
+              Copy phone
+              <Copy size={14} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
+
       {tab === "account" && detail.account && (
         <div className="drawer-section">
-          {detail.account.username && (
+          {(record.usn || detail.account.username) && (
             <button
               onClick={() =>
                 void copyText(
-                  detail.account?.username ?? "",
-                  "Username copied",
-                  "There is no username on this account yet."
+                  record.usn ?? detail.account?.username ?? "",
+                  "USN copied",
+                  "There is no USN on this account yet."
                 )
               }
             >
               <UserRound size={15} />
-              Copy username
+              Copy USN
               <Copy size={14} aria-hidden="true" />
             </button>
           )}
           {detail.viewer.is_manager && onOpenAccountLogins && (
             <button onClick={onOpenAccountLogins}>
-              Account logins
+              User management
               <ExternalLink size={14} aria-hidden="true" />
             </button>
           )}
@@ -555,8 +676,10 @@ function StaffEditDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const originalPhoto = record.photo_url ?? "";
   const [form, setForm] = useState({
     name: record.name ?? "",
+    usn: record.usn ?? "",
     email: record.email ?? "",
     phone: record.phone ?? "",
     designation: record.designation ?? "",
@@ -564,6 +687,7 @@ function StaffEditDialog({
     joined_on: record.joined_on ?? "",
     active: record.active,
     role: accessRole ?? "",
+    photo_url: originalPhoto,
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -582,6 +706,7 @@ function StaffEditDialog({
   const submit = async () => {
     const local: Record<string, string> = {};
     if (!form.name.trim()) local.name = "Enter a name.";
+    if (!form.usn.trim()) local.usn = "Enter a USN.";
     if (!form.email.trim())
       local.email = "Enter the address they sign in with.";
     if (form.joined_on && !/^\d{4}-\d{2}-\d{2}$/.test(form.joined_on))
@@ -593,6 +718,7 @@ function StaffEditDialog({
 
     const draft: StaffDraft = {
       name: form.name.trim(),
+      usn: form.usn.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
       designation: form.designation.trim(),
@@ -607,6 +733,9 @@ function StaffEditDialog({
      * edit would be an instruction to keep it, at best.
      */
     if (form.role && form.role !== (accessRole ?? "")) draft.role = form.role;
+    if (form.photo_url !== originalPhoto) {
+      draft.photo_url = form.photo_url.trim() || null;
+    }
 
     setSaving(true);
     setError(null);
@@ -657,6 +786,13 @@ function StaffEditDialog({
             </div>
           )}
 
+          <ProfilePhotoPicker
+            name={form.name || record.name || "Staff"}
+            photoUrl={form.photo_url || null}
+            folder={`staff-avatars/${record.id}`}
+            onChange={(url) => set("photo_url", url ?? "")}
+          />
+
           <div className="form-grid">
             <label>
               Full name
@@ -667,6 +803,17 @@ function StaffEditDialog({
               />
               {fieldErrors.name && (
                 <span className="field-error">{fieldErrors.name}</span>
+              )}
+            </label>
+            <label>
+              USN
+              <input
+                value={form.usn}
+                onChange={(event) => set("usn", event.target.value)}
+                placeholder="e.g. STF1001"
+              />
+              {fieldErrors.usn && (
+                <span className="field-error">{fieldErrors.usn}</span>
               )}
             </label>
             <label>
@@ -723,17 +870,16 @@ function StaffEditDialog({
             </label>
             <label>
               Access level
-              <select
+              <FormSelect
                 value={form.role}
-                onChange={(event) => set("role", event.target.value)}
-              >
-                {!form.role && <option value="">Not set</option>}
-                {roleOptions.map((role) => (
-                  <option key={role} value={role}>
-                    {ACCESS_LABELS[role] ?? role}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => set("role", val)}
+                options={roleOptions.map((role) => ({
+                  value: role,
+                  label: ACCESS_LABELS[role] ?? role,
+                }))}
+                placeholder="Not set"
+                error={fieldErrors.role}
+              />
               {fieldErrors.role && (
                 <span className="field-error">{fieldErrors.role}</span>
               )}

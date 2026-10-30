@@ -29,6 +29,22 @@ export function FormSelect({
 }: FormSelectProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<"bottom" | "top">("bottom");
+  const [maxHeight, setMaxHeight] = useState<number>(220);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+
+    const shouldFlip = spaceBelow < 220 && spaceAbove > spaceBelow;
+    setPlacement(shouldFlip ? "top" : "bottom");
+    const available = shouldFlip ? spaceAbove : spaceBelow;
+    setMaxHeight(Math.max(120, Math.min(240, available)));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,18 +132,19 @@ export function FormSelect({
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.98, y: -4 }}
+            initial={{ opacity: 0, scale: 0.98, y: placement === "top" ? 4 : -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -2 }}
+            exit={{ opacity: 0, scale: 0.98, y: placement === "top" ? 2 : -2 }}
             transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
             role="listbox"
             style={{
               position: "absolute",
-              top: "calc(100% + 5px)",
+              top: placement === "bottom" ? "calc(100% + 5px)" : "auto",
+              bottom: placement === "top" ? "calc(100% + 5px)" : "auto",
               left: 0,
               right: 0,
               zIndex: 9999,
-              maxHeight: 220,
+              maxHeight,
               overflowY: "auto",
               padding: 5,
               borderRadius: 12,
@@ -136,6 +153,7 @@ export function FormSelect({
               WebkitBackdropFilter: "blur(24px)",
               border: "1px solid var(--border-strong, rgba(255, 255, 255, 0.14))",
               boxShadow: "0 18px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08)",
+              transformOrigin: placement === "top" ? "bottom center" : "top center",
             }}
           >
             {options.map((opt) => {

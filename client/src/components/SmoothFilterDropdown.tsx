@@ -29,6 +29,31 @@ export function SmoothFilterDropdown({
 }: SmoothFilterDropdownProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<{
+    vertical: "bottom" | "top";
+    horizontal: "left" | "right";
+  }>({ vertical: "bottom", horizontal: align });
+
+  useEffect(() => {
+    if (!open) return;
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const vertical = spaceBelow < 260 && spaceAbove > spaceBelow ? "top" : "bottom";
+
+    const spaceRight = window.innerWidth - rect.left;
+    const spaceLeft = rect.right;
+    let horizontal: "left" | "right" = align;
+    if (align === "left" && spaceRight < 220 && spaceLeft > spaceRight) {
+      horizontal = "right";
+    } else if (align === "right" && spaceLeft < 220 && spaceRight > spaceLeft) {
+      horizontal = "left";
+    }
+
+    setPlacement({ vertical, horizontal });
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
@@ -72,11 +97,13 @@ export function SmoothFilterDropdown({
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.97, y: -2 }}
+            initial={{ opacity: 0, scale: 0.97, y: placement.vertical === "top" ? 2 : -2 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -1 }}
+            exit={{ opacity: 0, scale: 0.98, y: placement.vertical === "top" ? 1 : -1 }}
             transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
-            className={`smooth-filter-popover${align === "right" ? " smooth-filter-popover-right" : ""}`}
+            className={`smooth-filter-popover${
+              placement.vertical === "top" ? " smooth-filter-popover-top" : ""
+            }${placement.horizontal === "right" ? " smooth-filter-popover-right" : ""}`}
             role="listbox"
           >
             {options.map((opt) => {
