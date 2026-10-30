@@ -28,7 +28,6 @@
 import type {
   AttendanceDaily,
   Announcement,
-  Assignment,
   ClassAttendanceRow,
   Exam,
   ExamResult,
@@ -44,8 +43,6 @@ import type {
   Student,
   SubjectAverage,
   SubjectRow,
-  TransportRoute,
-  Vehicle,
 } from "./school-data";
 import type { ParentMessage } from "./school-data";
 import { aiRoleLabel, screenLabelByName, screensForRole } from "@shared/ai-access";
@@ -91,7 +88,6 @@ export interface BriefInput {
   financeMonths?: FinanceMonth[];
   exams?: Exam[];
   examResults?: ExamResult[];
-  assignments?: Assignment[];
   subjects?: SubjectRow[];
   subjectAverages?: SubjectAverage[];
   performanceTrend?: PerformanceTrend[];
@@ -99,8 +95,6 @@ export interface BriefInput {
   announcements?: Announcement[];
   messages?: ParentMessage[];
   notifications?: NotificationItem[];
-  transportRoutes?: TransportRoute[];
-  vehicles?: Vehicle[];
   libraryBooks?: import("./school-data").LibraryBook[];
   schedule?: ScheduleItem[];
   reportExports?: import("./school-data").ReportExport[];
@@ -111,11 +105,12 @@ export interface BriefInput {
 }
 
 /**
- * Areas the ERP genuinely does not track. Naming them up front is what stops
- * the model inventing a plausible number for, say, library loans.
+ * Areas the dashboard does not surface. Naming them up front stops the model
+ * inventing plausible answers from records that are not part of the UI.
  */
 const NOT_TRACKED = [
   "individual exam scores and marks by student",
+  "assignment queues and submissions",
   "library loans and book issues",
   "parent message history",
   "staff salary and payroll",
@@ -137,7 +132,6 @@ export function buildAssistantBrief(input: BriefInput): Record<string, unknown> 
     financeMonths = [],
     exams = [],
     examResults = [],
-    assignments = [],
     subjects = [],
     subjectAverages = [],
     performanceTrend = [],
@@ -145,8 +139,6 @@ export function buildAssistantBrief(input: BriefInput): Record<string, unknown> 
     announcements = [],
     messages = [],
     notifications = [],
-    transportRoutes = [],
-    vehicles = [],
     libraryBooks = [],
     schedule = [],
     reportExports = [],
@@ -500,20 +492,6 @@ export function buildAssistantBrief(input: BriefInput): Record<string, unknown> 
         ? `Exam results: each row is one exam paper — subject, grade, how many of the class are graded, and whether it is published. There are ${examResults.length} results.`
         : "No exam results loaded yet.",
 
-    assignments: assignments.map((a) => ({
-      title: a.title,
-      subject: a.subject,
-      grade: a.grade,
-      student: a.student,
-      submitted: a.submitted,
-      late: a.late,
-      graded: a.graded,
-    })),
-    assignments_note:
-      assignments.length > 0
-        ? `Assignments: each has a title, subject, grade, student, submission status, whether it is late and whether it is graded. There are ${assignments.length} assignments.`
-        : "No assignments loaded yet.",
-
     subjects: subjects.map((s) => ({
       name: s.name,
       teacher: s.teacher,
@@ -598,31 +576,6 @@ export function buildAssistantBrief(input: BriefInput): Record<string, unknown> 
         ? `Notifications: each has a title, detail, time, unread flag, tone, icon and kind. There are ${notifications.length} notifications.`
         : "No notifications loaded yet.",
 
-    transport_routes: transportRoutes.map((r) => ({
-      vehicle: r.vehicle,
-      driver: r.driver,
-      pickup: r.pickup,
-      students: r.students,
-      status: r.status,
-    })),
-    transport_routes_note:
-      transportRoutes.length > 0
-        ? `Transport routes: each has a vehicle, driver, pickup point, student count and status. There are ${transportRoutes.length} routes.`
-        : "No transport routes loaded yet.",
-
-    vehicles: vehicles.map((v) => ({
-      driver: v.driver,
-      driverPhone: v.driverPhone,
-      routeCode: v.routeCode,
-      routeName: v.routeName,
-      capacity: v.capacity,
-      status: v.status,
-    })),
-    vehicles_note:
-      vehicles.length > 0
-        ? `Vehicles: each has a driver, driver phone, route code, route name, capacity (nullable) and status. There are ${vehicles.length} vehicles.`
-        : "No vehicles loaded yet.",
-
     library_books: libraryBooks.map((b) => ({
       title: b.title,
       author: b.author,
@@ -657,14 +610,15 @@ export function buildAssistantBrief(input: BriefInput): Record<string, unknown> 
         ? `Report exports: each has a name, created date and size. There are ${reportExports.length} exports.`
         : "No report exports loaded yet.",
 
-    activity_feed: activityFeed.map((a) => ({
-      category: a.category,
-      time: a.time,
-      title: a.title,
-      detail: a.detail,
-      icon: a.icon,
-      color: a.color,
-    })),
+    activity_feed: activityFeed
+      .map((a) => ({
+        category: a.category,
+        time: a.time,
+        title: a.title,
+        detail: a.detail,
+        icon: a.icon,
+        color: a.color,
+      })),
     activity_feed_note:
       activityFeed.length > 0
         ? `Activity feed: each item has a category, time, title, detail, icon and color. There are ${activityFeed.length} items.`
@@ -828,8 +782,8 @@ function buildAccessNotes(
         name: "Staff",
         what_is_here: [
           "every staff member: name, role, department, email, status",
-          "timetable, exams, exam results, assignments visible to this role",
-          "subjects, transport routes and vehicles visible to this role",
+          "timetable, exams and exam results visible to this role",
+          "subjects on offer and term progress visible to this role",
         ],
         typical_questions: [
           "Who teaches Science?",
@@ -842,14 +796,12 @@ function buildAccessNotes(
         name: "Academics",
         what_is_here: [
           "timetable for the selected day",
-          "exams, exam results, assignments",
+          "exams and exam results",
           "subjects on offer",
-          "transport routes and vehicles relevant to this role",
         ],
         typical_questions: [
           "What is on the timetable today?",
           "Which exams are coming up?",
-          "Which assignments are still unsubmitted?",
         ],
       },
       {
@@ -857,39 +809,11 @@ function buildAccessNotes(
         what_is_here: [
           "exam schedule: name, subject, grade, date, time, venue, status",
           "exam results publishing queue",
-          "assignment queue relevant to this role",
-          "transport routes and vehicles relevant to this role",
         ],
         typical_questions: [
           "When is the next Grade 10 exam?",
           "Which exam results are still unpublished?",
           "What is the exam schedule this week?",
-        ],
-      },
-      {
-        name: "Assignments",
-        what_is_here: [
-          "assignment queue: title, subject, grade, student, submission status, late, graded",
-          "transport routes and vehicles relevant to this role",
-          "activity feed items for transport",
-        ],
-        typical_questions: [
-          "Which assignments are still unsubmitted?",
-          "Which students have late assignments?",
-          "Show me the assignments for Grade 7",
-        ],
-      },
-      {
-        name: "Transport",
-        what_is_here: [
-          "routes: vehicle, driver, pickup point, student count, status",
-          "vehicles: driver, driver phone, route code, route name, capacity, status",
-          "transport activity feed",
-        ],
-        typical_questions: [
-          "Which vehicle goes to a given pickup?",
-          "Who is the driver on route X?",
-          "Which routes are active?",
         ],
       },
       {

@@ -164,7 +164,7 @@ beforeEach(() => {
     phone: "9845012345",
     designation: "Mathematics Teacher",
     department: "Mathematics",
-    employee_code: "EMP-2022-058",
+    usn: "STF1003",
     joined_on: "2022-06-01",
     active: true,
     profile_id: TEACHER_PROFILE_ID,
@@ -176,6 +176,8 @@ beforeEach(() => {
     email: "anita.kulkarni@school.test",
     role: "teacher",
     username: "anita.kulkarni",
+    avatar_url:
+      "https://example.supabase.co/storage/v1/object/public/school-assets/staff-avatars/anita.jpg",
   });
   store.classrooms.push({
     id: CLASSROOM_ID,
@@ -227,7 +229,10 @@ describe("GET /api/staff-profile", () => {
     const body = (await res.json()) as Record<string, any>;
     expect(body.staff.name).toBe("Anita Kulkarni");
     expect(body.staff.designation).toBe("Mathematics Teacher");
-    expect(body.staff.employee_code).toBe("EMP-2022-058");
+    expect(body.staff.usn).toBe("STF1003");
+    expect(body.staff.photo_url).toBe(
+      "https://example.supabase.co/storage/v1/object/public/school-assets/staff-avatars/anita.jpg"
+    );
   });
 
   it("gives an administrator every section", async () => {

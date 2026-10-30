@@ -215,6 +215,26 @@ function stripHeaderDropdowns(html) {
 }
 
 /**
+ * Strip the template-only "Utility Pages" widget from the footer.
+ */
+function stripFooterUtilityPages(html) {
+  let out = html;
+  const marker = "Utility Pages";
+  const finder = /<div\b[^>]*\bclass="footer-widget(?:\s[^"]*)?"[^>]*>/gi;
+  let match;
+  while ((match = finder.exec(out)) !== null) {
+    const span = elementSpan(out, match.index, "div");
+    if (!span) continue;
+    const content = out.slice(span.start, span.end);
+    if (content.includes(marker)) {
+      out = out.slice(0, span.start) + out.slice(span.end);
+      finder.lastIndex = span.start;
+    }
+  }
+  return out;
+}
+
+/**
  * Re-brand the served copy.
  *
  * - Swaps the template's name for the school's. Only the capitalised "Joyloo"
@@ -222,13 +242,23 @@ function stripHeaderDropdowns(html) {
  *   attribute (the real stylesheet filename "joyloo.webflow.shared.css" and
  *   data-wf-domain), and rewriting those would break the stylesheet.
  * - Drops the vendor credit from the footer copyright ("Powered by Webflow").
+ * - Removes template sales phrases, typos and dummy vendor contacts.
  */
 function rebrand(html) {
   const credits = html.match(/ Powered by\s*<a\b[^>]*>\s*Webflow\s*<\/a>/g) || [];
   return {
     html: html
       .replace(/ Powered by\s*<a\b[^>]*>\s*Webflow\s*<\/a>/g, "")
+      .replace(/\s*-\s*Webflow\s*Html?\s*Website\s*Template/gi, "")
+      .replace(/Have questions about our online learning platform or how Skillfye works\?/gi, "Have questions about our school, admissions, or early education programs?")
+      .replace(/\+112 456 1234/g, "+91 (080) 2345-6789")
+      .replace(/Joyloo HQ — 221 Innovation Drive, San Francisco, CA 94103/g, "Global Kids Campus, Bengaluru, Karnataka, India")
+      .replace(/\b(?:hello|support)@Joyloo\.com\b/gi, "admissions@globalkids.edu.in")
       .replace(/Joyloo/g, "Global Kids")
+      .replace(/Contact\s*\+\s*Enorrlment/gi, "Contact & Enrollment")
+      .replace(/Daly Routine/g, "Daily Routine")
+      .replace(/A Day dull of learn/g, "A Day full of learning")
+      .replace(/Packiing lits/g, "Packing list")
       .replace(/<title>[\s\S]*?<\/title>/i, "<title>Global Kids</title>"),
     credits: credits.length,
   };
@@ -712,6 +742,14 @@ cpSync(resolve(EXPORT, "assets"), ASSET_MOUNT, { recursive: true });
 const repairedChunks = repairRuntimeOperators();
 const templateButton = /<a\b[^>]*class="template-button[^"]*"[\s\S]*?<\/a>/g;
 
+const IGNORED_PAGES = new Set([
+  "styleguide.html",
+  "license.html",
+  "changelog.html",
+  "documents.html",
+  "index.html.html",
+]);
+
 /** Every page in the export, as an export-relative path. */
 function exportPages(dir = EXPORT, base = "") {
   const found = [];
@@ -721,6 +759,7 @@ function exportPages(dir = EXPORT, base = "") {
       if (entry.name === "assets") continue;
       found.push(...exportPages(join(dir, entry.name), rel));
     } else if (entry.name.endsWith(".html")) {
+      if (IGNORED_PAGES.has(entry.name)) continue;
       found.push(rel);
     }
   }
@@ -753,7 +792,8 @@ for (const page of pages) {
   const noPrograms = stripNavLink(nav.html, "Programs");
   const withLogin = addLoginButton(noPrograms.html);
   const withMobileNavActions = addMobileNavActions(withLogin.html);
-  const rebranded = rebrand(withMobileNavActions);
+  const withoutUtilityPages = stripFooterUtilityPages(withMobileNavActions);
+  const rebranded = rebrand(withoutUtilityPages);
   totalCredits += rebranded.credits;
   const withBrandIcons = replaceBrandIcons(rebranded.html);
   const withDeferredVideos = deferExportVideos(withBrandIcons);

@@ -66,6 +66,17 @@ const MANAGERS = new Set(["super_admin", "admin", "principal"]);
 const GRANTABLE = ["admin", "staff", "teacher", "accountant"];
 
 /**
+ * The shape of a staff USN: a staff-specific prefix and four digits.
+ *
+ * `STF1001`. `STF` is deliberately not the pupils' `GGS`, so a staff number can
+ * never be mistaken for a pupil's and the two sequences do not have to share a
+ * counter. The first number is 1001 for the same reason as the pupil USN: a
+ * printed identifier should not look like a padded row index.
+ */
+const STAFF_USN_PREFIX = "STF";
+const STAFF_USN_FIRST_NUMBER = 1001;
+
+/**
  * Control characters are stripped from every value written by a form.
  *
  * Not cosmetic: a value carrying a NUL or a newline is spliced into a PostgREST
@@ -84,6 +95,21 @@ function clean(value: unknown, max = 120): string {
 
 function isIsoDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * The USN as it is stored: compact and upper-case, the way it is printed.
+ *
+ * Matches api/students.ts. The school may write it with a dash or a space, but
+ * those are presentation; the identifier is the letters and digits. Upper case
+ * is the stored form so the number on screen is the number on the slip.
+ */
+function normaliseUsn(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 40);
 }
 
 function headers(): Record<string, string> {
@@ -124,32 +150,43 @@ async function callerOrg(caller: Caller): Promise<string> {
 }
 
 /**
- * The next free employee code.
+ * The next free staff USN.
  *
- * `EMP-YYYY-NNN`, matching the shape the seed script already used, so the two
- * sources of staff records agree and a report does not have to cope with two
- * formats.
+ * The highest `STF` number already in use in this school, plus one. Every row
+ * is read and the numbers are compared numerically rather than taking the
+ * lexicographic maximum: a hand-written `STFABC` must not become the "highest"
+ * number and reset the sequence.
  */
-async function nextEmployeeCode(orgId: string): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `EMP-${year}-`;
+async function nextStaffUsn(orgId: string): Promise<string> {
   const existing = await readJson<Json>(
     await rest(
-      `staff?select=employee_code&organisation_id=eq.${orgId}` +
-        `&employee_code=like.${encodeURIComponent(prefix)}*&limit=200`
+      `staff?select=usn&organisation_id=eq.${orgId}` +
+        `&usn=ilike.${encodeURIComponent(STAFF_USN_PREFIX)}*&limit=1000`
     )
   ).catch(() => [] as Json[]);
-  let highest = 0;
+  let highest = STAFF_USN_FIRST_NUMBER - 1;
   for (const row of existing) {
-    const n = Number.parseInt(
-      String(row.employee_code ?? "")
-        .split("-")
-        .pop() ?? "0",
-      10
-    );
+    const match = /^STF(\d+)$/i.exec(String(row.usn ?? ""));
+    const n = match ? Number.parseInt(match[1], 10) : NaN;
     if (Number.isFinite(n) && n > highest) highest = n;
   }
-  return `${prefix}${String(highest + 1).padStart(3, "0")}`;
+  return `${STAFF_USN_PREFIX}${String(highest + 1).padStart(4, "0")}`;
+}
+
+/** Whether a USN is already used by another member of staff. */
+async function staffUsnTaken(
+  orgId: string,
+  usn: string,
+  exceptId = ""
+): Promise<boolean> {
+  if (!SERVICE_KEY) return false;
+  const rows = await readJson<Json>(
+    await rest(
+      `staff?select=id&organisation_id=eq.${orgId}` +
+        `&usn=ilike.${encodeURIComponent(normaliseUsn(usn))}&limit=5`
+    )
+  ).catch(() => [] as Json[]);
+  return rows.some(row => String(row.id) !== exceptId);
 }
 
 /**
@@ -182,6 +219,8 @@ async function ensureAccount(
       recordId: id,
       organisationId: orgId,
       email: staff.email,
+      // The USN is the staff sign-in name, not a separate username.
+      username: normaliseUsn(staff.usn).toLowerCase(),
       name: String(staff.name ?? staff.full_name ?? ""),
       // `staff` has no date of birth column and one cannot be added without a
       // migration, so the first password comes from the joining date. Left
@@ -236,6 +275,65 @@ async function setProfileRole(
   return res.ok;
 }
 
+async function setProfilePhoto(
+  profileId: string,
+  photo: string | null
+): Promise<boolean> {
+  if (!profileId || !SERVICE_KEY) return false;
+  const res = await rest(`profiles?id=eq.${encodeURIComponent(profileId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ avatar_url: photo }),
+  });
+  return res.ok;
+}
+
+function photoUrl(value: unknown): string | null {
+  const raw = clean(value, 500);
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+async function attachPhotos(rows: Json[]): Promise<Json[]> {
+  if (!rows.length) return rows;
+
+  const profileIds = Array.from(
+    new Set(
+      rows
+        .map((row) => String(row.profile_id ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+  if (!profileIds.length) {
+    return rows.map((row) => ({ ...row, photo_url: null }));
+  }
+
+  const profiles = await readJson<Json>(
+    await rest(
+      `profiles?select=id,avatar_url&id=in.(${profileIds
+        .map((id) => encodeURIComponent(id))
+        .join(",")})`
+    )
+  ).catch(() => [] as Json[]);
+
+  const byId = new Map(
+    profiles.map((profile) => [
+      String(profile.id),
+      photoUrl(profile.avatar_url),
+    ])
+  );
+  return rows.map((row) => ({
+    ...row,
+    photo_url: byId.get(String(row.profile_id ?? "").trim()) ?? null,
+  }));
+}
+
 export default async function handler(req: Request): Promise<Response> {
   if (!SERVICE_KEY) {
     return fail(
@@ -266,7 +364,7 @@ export default async function handler(req: Request): Promise<Response> {
       // another school returns 404 rather than leaking that it exists.
       const rows = await readJson<Json>(
         await rest(
-          `staff?select=id,organisation_id,name,email,phone,designation,department,employee_code,joined_on,active,profile_id` +
+          `staff?select=id,organisation_id,name,email,phone,designation,department,usn,joined_on,active,profile_id` +
             `&organisation_id=eq.${orgId}&id=eq.${encodeURIComponent(id)}&limit=1`
         )
       ).catch(() => [] as Json[]);
@@ -276,12 +374,13 @@ export default async function handler(req: Request): Promise<Response> {
           404,
           "not_found"
         );
-      return Response.json({ staff: rows[0] });
+      const [staff] = await attachPhotos(rows);
+      return Response.json({ staff });
     }
 
     const rows = await readJson<Json>(
       await rest(
-        `staff?select=id,organisation_id,name,email,phone,designation,department,employee_code,joined_on,active,profile_id` +
+        `staff?select=id,organisation_id,name,email,phone,designation,department,usn,joined_on,active,profile_id` +
           `&organisation_id=eq.${orgId}&order=name.asc&limit=500`
       )
     ).catch(() => [] as Json[]);
@@ -291,7 +390,7 @@ export default async function handler(req: Request): Promise<Response> {
      * audited place — api/credentials.ts, which the school owner alone can
      * reach — and a list of every member of staff is not that place.
      */
-    return Response.json({ staff: rows });
+    return Response.json({ staff: await attachPhotos(rows) });
   }
 
   /* ---------------------------- create ---------------------------- */
@@ -391,12 +490,28 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
+    /*
+     * The USN is either supplied or generated. A generated one continues the
+     * school's staff sequence (STF1001, STF1002), so a new colleague gets an
+     * identifier without somebody having to invent one, and two records cannot
+     * be handed the same number.
+     */
+    const usn = normaliseUsn(body.usn) || (await nextStaffUsn(orgId));
+    if (await staffUsnTaken(orgId, usn)) {
+      return Response.json(
+        {
+          error: "validation",
+          fieldErrors: { usn: "That USN is already in use." },
+        },
+        { status: 400 }
+      );
+    }
+
     const payload: Json = {
       organisation_id: orgId,
       name,
       email,
-      employee_code:
-        clean(body.employee_code, 40) || (await nextEmployeeCode(orgId)),
+      usn,
       active: body.active === false ? false : true,
       joined_on: isIsoDate(joinedOn)
         ? joinedOn
@@ -507,7 +622,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     const existing = await readJson<Json>(
       await rest(
-        `staff?select=id,profile_id,name,email,joined_on&organisation_id=eq.${orgId}` +
+        `staff?select=id,profile_id,name,email,usn,joined_on&organisation_id=eq.${orgId}` +
           `&id=eq.${encodeURIComponent(id)}&limit=1`
       )
     ).catch(() => [] as Json[]);
@@ -525,6 +640,12 @@ export default async function handler(req: Request): Promise<Response> {
      * written once the row itself has been saved.
      */
     let pendingRole = "";
+
+    /**
+     * The photo to write to the linked profile. `staff` has no photo column, so
+     * the image belongs on the account the record signs in with.
+     */
+    let pendingPhoto: string | null | undefined;
 
     const patch: Json = {};
     for (const field of ["name", "phone", "designation", "department"]) {
@@ -600,6 +721,25 @@ export default async function handler(req: Request): Promise<Response> {
       pendingRole = role;
     }
 
+    if (body.photo_url !== undefined) {
+      const raw = clean(body.photo_url, 500);
+      if (raw) {
+        const valid = photoUrl(raw);
+        if (!valid) {
+          return Response.json(
+            {
+              error: "validation",
+              fieldErrors: { photo_url: "Enter a valid image address." },
+            },
+            { status: 400 }
+          );
+        }
+        pendingPhoto = valid;
+      } else {
+        pendingPhoto = null;
+      }
+    }
+
     if (body.active !== undefined)
       patch.active = body.active === false ? false : true;
 
@@ -618,11 +758,43 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     /*
+     * A USN can be corrected, but it cannot be cleared: it is the record's
+     * identifier, and a staff member without one is a row nobody can refer to.
+     * A number that is already another colleague's is refused rather than
+     * written and caught by the unique index as a 500.
+     */
+    if (body.usn !== undefined) {
+      const usn = normaliseUsn(body.usn);
+      if (!usn) {
+        return Response.json(
+          {
+            error: "validation",
+            fieldErrors: { usn: "Enter a USN." },
+          },
+          { status: 400 }
+        );
+      }
+      if (
+        usn !== normaliseUsn(existing[0].usn) &&
+        (await staffUsnTaken(orgId, usn, id))
+      ) {
+        return Response.json(
+          {
+            error: "validation",
+            fieldErrors: { usn: "That USN is already in use." },
+          },
+          { status: 400 }
+        );
+      }
+      patch.usn = usn;
+    }
+
+    /*
      * A role is saved on the profile, not on the staff row, so a change of
      * role alone leaves the row itself with nothing to write. That is not a
      * request to do nothing, and it must not be refused as one.
      */
-    if (!Object.keys(patch).length && !pendingRole) {
+    if (!Object.keys(patch).length && !pendingRole && pendingPhoto === undefined) {
       return fail("There was nothing to save.", 400, "nothing_to_save");
     }
 
@@ -686,6 +858,24 @@ export default async function handler(req: Request): Promise<Response> {
       ).catch(() => null);
     }
 
+    if (pendingPhoto !== undefined) {
+      if (!linkProfileId) {
+        return fail(
+          "The photo needs a sign-in account. Save the record again first.",
+          409,
+          "photo_needs_profile"
+        );
+      }
+      const applied = await setProfilePhoto(linkProfileId, pendingPhoto);
+      if (!applied) {
+        return fail(
+          "That photo could not be saved. Please try again.",
+          500,
+          "photo_not_saved"
+        );
+      }
+    }
+
     /*
      * The role, on the profile.
      *
@@ -707,7 +897,14 @@ export default async function handler(req: Request): Promise<Response> {
 
     await writeAudit(orgId, caller.id, "update", id, saved);
 
-    return Response.json({ staff: saved, account, accountDetail: detail });
+    return Response.json({
+      staff:
+        pendingPhoto === undefined
+          ? saved
+          : { ...saved, photo_url: pendingPhoto },
+      account,
+      accountDetail: detail,
+    });
   }
 
   return new Response("Method not allowed", { status: 405 });

@@ -133,11 +133,26 @@ function stubNetwork() {
       }
       const byId = filterValue(url, "id");
       const byProfile = filterValue(url, "profile_id");
-      const rows = store.staff.filter(person => {
+      const usnMatch = /[?&]usn=ilike\.([^&]+)/.exec(url);
+      const usnLike = usnMatch
+        ? decodeURIComponent(usnMatch[1]).replace(/\*$/, "").toLowerCase()
+        : null;
+      const byUsn = filterValue(url, "usn")?.toLowerCase() ?? null;
+      const byEmail = filterValue(url, "email")?.toLowerCase() ?? null;
+      let rows = store.staff.filter(person => {
         if (byId && String(person.id) === byId) return true;
         if (byProfile && String(person.profile_id) === byProfile) return true;
-        return !byId && !byProfile;
+        if (usnLike && String(person.usn ?? "").toLowerCase().startsWith(usnLike)) return true;
+        if (byUsn && String(person.usn ?? "").toLowerCase() === byUsn) return true;
+        if (byEmail && String(person.email ?? "").toLowerCase() === byEmail) return true;
+        return !byId && !byProfile && !usnLike && !byUsn && !byEmail;
       });
+      if (url.includes("order=usn.desc")) {
+        rows = [...rows].sort((a, b) =>
+          String(b.usn ?? "").localeCompare(String(a.usn ?? ""))
+        );
+        if (url.includes("limit=1")) rows = rows.slice(0, 1);
+      }
       return Response.json(rows);
     }
 
@@ -202,7 +217,7 @@ describe("PATCH /api/staff — changing somebody's role", () => {
       name: "Rajesh Menon",
       email: "rajesh.menon@myschool.edu.in",
       designation: "Head of Physics",
-      employee_code: "EMP-2015-002",
+      usn: "STF1002",
       joined_on: "2015-03-01",
       active: true,
       profile_id: PROFILE_ID,
@@ -319,6 +334,47 @@ describe("PATCH /api/staff — changing somebody's role", () => {
       email: "rajesh.menon@myschool.edu.in",
     });
     expect(res.status).toBe(200);
+  });
+
+  it("stores a staff photo on the linked profile", async () => {
+    const photo =
+      "https://example.supabase.co/storage/v1/object/public/school-assets/staff-avatars/rajesh.jpg";
+    const res = await request("PATCH", {
+      id: STAFF_ID,
+      photo_url: photo,
+    });
+    expect(res.status).toBe(200);
+
+    const photoWrite = writesTo("profiles").find(
+      write => write.body.avatar_url !== undefined
+    );
+    expect(photoWrite?.url).toContain(`id=eq.${PROFILE_ID}`);
+    expect(photoWrite?.body.avatar_url).toBe(photo);
+  });
+
+  it("clears a staff photo without touching the staff row", async () => {
+    store.profiles[1].avatar_url =
+      "https://example.supabase.co/storage/v1/object/public/school-assets/staff-avatars/rajesh.jpg";
+    const res = await request("PATCH", {
+      id: STAFF_ID,
+      photo_url: null,
+    });
+    expect(res.status).toBe(200);
+
+    const photoWrite = writesTo("profiles").find(
+      write => write.body.avatar_url !== undefined
+    );
+    expect(photoWrite?.body.avatar_url).toBeNull();
+    expect(writesTo("staff")).toHaveLength(0);
+  });
+
+  it("refuses a photo address that is not a web address", async () => {
+    const res = await request("PATCH", {
+      id: STAFF_ID,
+      photo_url: "javascript:alert(1)",
+    });
+    expect(res.status).toBe(400);
+    expect(writesTo("profiles")).toHaveLength(0);
   });
 });
 
@@ -455,5 +511,120 @@ describe("GET /api/staff — reading the directory", () => {
     expect(res.status).toBe(200);
     expect(body.staff).toHaveLength(1);
     expect(body.staff[0]).not.toHaveProperty("password");
+  });
+});
+
+describe("USN — the staff identifier", () => {
+  it("generates the next staff number when none is supplied", async () => {
+    const res = await request("POST", {
+      name: "Anita Kulkarni",
+      email: "anita.kulkarni@myschool.edu.in",
+      role: "teacher",
+    });
+    expect(res.status).toBe(201);
+    const created = writesTo("staff").find(write => write.method === "POST");
+    expect(created?.body.usn).toBe("STF1001");
+  });
+
+  it("stores a supplied USN in the printed upper-case form", async () => {
+    const res = await request("POST", {
+      name: "Anita Kulkarni",
+      email: "anita.kulkarni@myschool.edu.in",
+      role: "teacher",
+      usn: " stf-2001 ",
+    });
+    expect(res.status).toBe(201);
+    const created = writesTo("staff").find(write => write.method === "POST");
+    expect(created?.body.usn).toBe("STF2001");
+  });
+
+  it("refuses a USN another member of staff already has", async () => {
+    store.staff.push({
+      id: "other-staff",
+      organisation_id: "org-1",
+      name: "Rajesh Menon",
+      email: "rajesh.menon@myschool.edu.in",
+      usn: "STF1001",
+    });
+
+    const res = await request("POST", {
+      name: "Anita Kulkarni",
+      email: "anita.kulkarni@myschool.edu.in",
+      role: "teacher",
+      usn: "STF1001",
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      fieldErrors?: Record<string, string>;
+    };
+    expect(body.fieldErrors?.usn).toBeTruthy();
+    expect(writesTo("staff")).toHaveLength(0);
+  });
+
+  it("can correct a USN, normalising it first", async () => {
+    store.staff.push({
+      id: STAFF_ID,
+      organisation_id: "org-1",
+      name: "Rajesh Menon",
+      email: "rajesh.menon@myschool.edu.in",
+      usn: "STF1001",
+      joined_on: "2015-03-01",
+      active: true,
+      profile_id: PROFILE_ID,
+    });
+    store.profiles.push({
+      id: PROFILE_ID,
+      organisation_id: "org-1",
+      full_name: "Rajesh Menon",
+      email: "rajesh.menon@myschool.edu.in",
+      role: "staff",
+      username: "rajesh.menon",
+    });
+    store.authUsers.push({
+      id: PROFILE_ID,
+      email: "rajesh.menon@myschool.edu.in",
+    });
+
+    const res = await request("PATCH", { id: STAFF_ID, usn: "stf-1010" });
+    expect(res.status).toBe(200);
+    const row = store.staff.find(person => person.id === STAFF_ID);
+    expect(row?.usn).toBe("STF1010");
+  });
+
+  it("will not move a USN onto a colleague's", async () => {
+    store.staff.push(
+      {
+        id: STAFF_ID,
+        organisation_id: "org-1",
+        name: "Rajesh Menon",
+        email: "rajesh.menon@myschool.edu.in",
+        usn: "STF1001",
+        profile_id: PROFILE_ID,
+      },
+      {
+        id: "other-staff",
+        organisation_id: "org-1",
+        name: "Anita Kulkarni",
+        email: "anita.kulkarni@myschool.edu.in",
+        usn: "STF1002",
+      }
+    );
+    store.profiles.push({
+      id: PROFILE_ID,
+      organisation_id: "org-1",
+      full_name: "Rajesh Menon",
+      email: "rajesh.menon@myschool.edu.in",
+      role: "staff",
+      username: "rajesh.menon",
+    });
+
+    const res = await request("PATCH", { id: STAFF_ID, usn: "STF1002" });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      fieldErrors?: Record<string, string>;
+    };
+    expect(body.fieldErrors?.usn).toBeTruthy();
+    const row = store.staff.find(person => person.id === STAFF_ID);
+    expect(row?.usn).toBe("STF1001");
   });
 });

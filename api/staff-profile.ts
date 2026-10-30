@@ -139,12 +139,19 @@ export default async function handler(req: Request): Promise<Response> {
    * that writes them.
    */
   const staff = await one(
-    "staff?select=id,organisation_id,name,email,phone,designation,department,employee_code,joined_on,active,profile_id" +
+    "staff?select=id,organisation_id,name,email,phone,designation,department,usn,joined_on,active,profile_id" +
       `&organisation_id=eq.${orgId}&id=eq.${encodeURIComponent(staffId)}&limit=1`
   );
   if (!staff) return fail("That member of staff could not be found.", 404, "not_found");
 
   const profileId = String(staff.profile_id ?? "").trim();
+  const avatar = profileId
+    ? await one(
+        `profiles?select=avatar_url&id=eq.${encodeURIComponent(profileId)}&limit=1`
+      )
+    : null;
+  const avatarUrl = String(avatar?.avatar_url ?? "").trim();
+  const photoUrl = /^https?:\/\//i.test(avatarUrl) ? avatarUrl : null;
   const isSelf = Boolean(profileId) && profileId === caller.id;
   const sections = sectionsForStaffRole(caller.role, isSelf);
   const has = (section: StaffSection) => sections.indexOf(section) !== -1;
@@ -309,10 +316,11 @@ export default async function handler(req: Request): Promise<Response> {
       phone: staff.phone ?? null,
       designation: staff.designation ?? null,
       department: staff.department ?? null,
-      employee_code: staff.employee_code ?? null,
+      usn: staff.usn ?? null,
       joined_on: staff.joined_on ?? null,
       active: staff.active !== false,
       profile_id: profileId || null,
+      photo_url: photoUrl,
     },
     sections,
     section_labels: STAFF_SECTION_LABELS,

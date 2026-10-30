@@ -43,13 +43,7 @@ export type StudentSection =
   | "attendance"
   | "fees"
   | "documents"
-  | "health"
-  | "transport"
-  | "activities"
-  | "observations"
-  | "communications"
   | "admission"
-  | "library"
   | "account";
 
 export const ALL_STUDENT_SECTIONS: StudentSection[] = [
@@ -59,13 +53,7 @@ export const ALL_STUDENT_SECTIONS: StudentSection[] = [
   "attendance",
   "fees",
   "documents",
-  "health",
-  "transport",
-  "activities",
-  "observations",
-  "communications",
   "admission",
-  "library",
   "account",
 ];
 
@@ -77,13 +65,7 @@ export const SECTION_LABELS: Record<StudentSection, string> = {
   attendance: "Attendance",
   fees: "Fees",
   documents: "Documents",
-  health: "Health",
-  transport: "Transport",
-  activities: "Activities",
-  observations: "Observations",
-  communications: "Communication",
   admission: "Admission",
-  library: "Library",
   account: "Account",
 };
 
@@ -244,11 +226,6 @@ export function canManageActivities(role: string): boolean {
   return SCHOOL_MANAGERS.has(norm(role));
 }
 
-/** May this role manage transport allocations? */
-export function canManageTransport(role: string): boolean {
-  return SCHOOL_MANAGERS.has(norm(role));
-}
-
 /** May this role manage the library loan register? */
 export function canManageLibrary(role: string): boolean {
   return SCHOOL_MANAGERS.has(norm(role));
@@ -284,30 +261,21 @@ export function sectionsForRole(
   // family's contact details.
   out.push("guardians");
 
-  // Academics, attendance and activities are the ordinary school record.
+  // Academics and attendance are the ordinary school record.
   if (SCHOOL_MANAGERS.has(r) || TEACHERS.has(r) || relatesTo === "guardian" || relatesTo === "self") {
-    out.push("academics", "attendance", "activities");
+    out.push("academics", "attendance");
   }
 
   // Admission history is administrative; a parent does not need to read their
   // own child's admission application.
   if (SCHOOL_MANAGERS.has(r)) out.push("admission");
 
-  // Transport: the front office and office staff need to know who is collected
-  // and by whom. A pupil may see their own route; everyone else sees only
-  // whether a child rides the bus.
-  if (SCHOOL_MANAGERS.has(r) || r === "staff" || relatesTo === "self") out.push("transport");
-
-  // A pupil may read their own money, paperwork, medical notes and bus details.
+  // A pupil may read their own money and paperwork.
   // Those sections stay closed to every other relationship: a guardian only gets
   // fees when their link row grants it, and a teacher does not need the family's
   // bank ledger or the child's identity documents.
   if (canViewFees(r) || relatesTo === "self") out.push("fees");
   if (canViewDocuments(r) || relatesTo === "self") out.push("documents");
-  if (canViewHealth(r) || relatesTo === "self") out.push("health");
-  if (canWriteObservations(r) || SCHOOL_MANAGERS.has(r)) out.push("observations");
-  if (SCHOOL_MANAGERS.has(r) || r === "staff") out.push("communications");
-  if (SCHOOL_MANAGERS.has(r) || r === "staff" || relatesTo === "self") out.push("library");
 
   // Account status. Never the credential itself — see `publicAccountFields`.
   if (SCHOOL_MANAGERS.has(r) || relatesTo === "self") out.push("account");

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   BookOpen,
-  Bus,
   CalendarDays,
   Check,
   ChevronLeft,
@@ -12,7 +11,6 @@ import {
   FileText,
   GraduationCap,
   Home,
-  Library,
   LogOut,
   Mail,
   MapPin,
@@ -24,11 +22,19 @@ import {
 } from "lucide-react";
 
 import { useAnnouncements } from "../lib/school-data";
+import { FeePaymentDialog } from "./FeePaymentDialog";
+import { MobileTabBar } from "./MobileTabBar";
 import { usePupilProfile, type Profile } from "./PupilOverview";
 
 type MobileTab = "home" | "academics" | "fees" | "profile";
+
+const PUPIL_TABS = [
+  { id: "home", label: "Home", icon: Home },
+  { id: "academics", label: "Academics", icon: BookOpen },
+  { id: "fees", label: "Fees", icon: Wallet },
+  { id: "profile", label: "Profile", icon: UserRound },
+];
 type ScheduleView = "day" | "week";
-type AssignmentFilter = "pending" | "submitted" | "graded";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -128,7 +134,7 @@ export function PupilMobileDashboard({
   onOpenSettings: () => void;
   onSignOut: () => void;
 }) {
-  const { profile, loading, error } = usePupilProfile();
+  const { profile, loading, error, reload } = usePupilProfile();
 
   if (loading) return <MobileLoading />;
   if (!profile?.student) return <MobileError message={error} onSignOut={onSignOut} />;
@@ -138,6 +144,7 @@ export function PupilMobileDashboard({
       profile={profile}
       onOpenSettings={onOpenSettings}
       onSignOut={onSignOut}
+      onReload={reload}
     />
   );
 }
@@ -146,19 +153,21 @@ function PupilMobileView({
   profile,
   onOpenSettings,
   onSignOut,
+  onReload,
 }: {
   profile: Profile;
   onOpenSettings: () => void;
   onSignOut: () => void;
+  onReload: () => void;
 }) {
   const [tab, setTab] = useState<MobileTab>("home");
+  const [payOpen, setPayOpen] = useState(false);
   const [academicsFocus, setAcademicsFocus] = useState<string | null>(null);
   const [scheduleView, setScheduleView] = useState<ScheduleView>("day");
   const [selectedDay, setSelectedDay] = useState(() => {
     const name = todayName();
     return WEEKDAYS.includes(name) ? name : "Monday";
   });
-  const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>("pending");
   const [resultExamId, setResultExamId] = useState<string>("");
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
@@ -175,7 +184,6 @@ function PupilMobileView({
   const attendance = profile.attendance?.summary;
   const attendancePct = typeof attendance?.percentage === "number" ? Math.round(attendance.percentage) : null;
   const subjects = profile.academics?.subjects ?? [];
-  const assignments = profile.academics?.assignments ?? [];
   const results = profile.academics?.results ?? [];
   const exams = profile.exams ?? [];
   const guardians = profile.guardians ?? [];
@@ -191,17 +199,13 @@ function PupilMobileView({
   const nextInstallment = (fees?.upcoming ?? [])
     .slice()
     .sort((a, b) => dayNumber(a.due_on) - dayNumber(b.due_on))[0] ?? null;
-  const health = profile.health;
-  const transport = profile.transport;
-  const activeTransport = (transport?.allocations ?? []).find((allocation) => allocation.active) ?? null;
-  const library = profile.library;
-  const loans = library?.loans ?? [];
+  const payableInvoice = invoices.find((invoice) => {
+    const total = Number(invoice.total ?? 0);
+    const paid = Number(invoice.paid_amount ?? 0);
+    return invoice.status !== "paid" && invoice.status !== "void" && total - paid > 0;
+  }) ?? null;
   const leaves = profile.attendance?.leaves ?? [];
   const now = Date.now();
-  const upcomingAssignments = assignments
-    .filter((assignment) => assignment.due_at && new Date(assignment.due_at).getTime() >= now)
-    .sort((a, b) => dayNumber(a.due_at) - dayNumber(b.due_at));
-  const overdueAssignments = assignments.filter((assignment) => assignment.due_at && new Date(assignment.due_at).getTime() < now);
   const upcomingExams = exams
     .filter((exam) => exam.starts_on && new Date(exam.starts_on).getTime() >= new Date(todayKey()).getTime())
     .sort((a, b) => dayNumber(a.starts_on) - dayNumber(b.starts_on));
@@ -257,12 +261,6 @@ function PupilMobileView({
     return { day, date, record: attendanceByDate.get(date) ?? null };
   });
 
-  const assignmentCounts = {
-    pending: assignments.length,
-    submitted: 0,
-    graded: 0,
-  };
-
   return (
     <div className="pupil-mobile">
       <div className="pupil-m-scroll" ref={scrollRef}>
@@ -292,10 +290,6 @@ function PupilMobileView({
             <button onClick={() => go("academics", "attendance")}>
               <ClipboardCheck size={18} />
               <span>Attendance</span>
-            </button>
-            <button onClick={() => go("academics", "assignments")}>
-              <FileText size={18} />
-              <span>Assignments</span>
             </button>
             <button onClick={() => go("academics", "results")}>
               <GraduationCap size={18} />
@@ -349,33 +343,6 @@ function PupilMobileView({
               <span><i className="bad" /> {attendance?.absent ?? 0} absent</span>
             </div>
           </section>
-
-          <MobileCard
-            title="Due assignments"
-            eyebrow={`${upcomingAssignments.length} upcoming${overdueAssignments.length ? ` · ${overdueAssignments.length} overdue` : ""}`}
-            action="View all"
-            onAction={() => go("academics", "assignments")}
-          >
-            {assignments.length ? (
-              <div className="pupil-m-list">
-                {[...overdueAssignments, ...upcomingAssignments].slice(0, 4).map((assignment) => {
-                  const late = assignment.due_at ? new Date(assignment.due_at).getTime() < now : false;
-                  return (
-                    <div className="pupil-m-row" key={assignment.id}>
-                      <span className={`pupil-m-row-icon ${late ? "bad" : "warn"}`}><FileText size={15} /></span>
-                      <div>
-                        <strong>{assignment.title ?? "Assignment"}</strong>
-                        <span>{assignment.subject ?? "Class work"} · {late ? "Was due" : "Due"} {formatShortDate(assignment.due_at)}</span>
-                      </div>
-                      <span className={`pupil-m-pill ${late ? "bad" : "warn"}`}>{late ? "Overdue" : "Pending"}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <MobileEmpty icon={FileText} title="Nothing due" detail="New homework will appear here when it is set." />
-            )}
-          </MobileCard>
 
           <MobileCard
             title="Upcoming exams"
@@ -476,77 +443,11 @@ function PupilMobileView({
               )}
             </section>
 
-            <section className="pupil-m-card" id="pupil-assignments">
-              <div className="pupil-m-card-head">
-                <div><p className="pupil-m-eyebrow">Learn</p><h2>Assignments and homework</h2></div>
-              </div>
-              <div className="pupil-m-segmented">
-                {(["pending", "submitted", "graded"] as AssignmentFilter[]).map((filter) => (
-                  <button
-                    key={filter}
-                    className={assignmentFilter === filter ? "active" : ""}
-                    onClick={() => setAssignmentFilter(filter)}
-                  >
-                    {filter[0].toUpperCase() + filter.slice(1)}
-                    <span>{assignmentCounts[filter]}</span>
-                  </button>
-                ))}
-              </div>
-              {assignmentFilter === "pending" && assignments.length ? (
-                <div className="pupil-m-list">
-                  {[...overdueAssignments, ...upcomingAssignments].map((assignment) => {
-                    const late = assignment.due_at ? new Date(assignment.due_at).getTime() < now : false;
-                    return (
-                      <div className="pupil-m-row" key={assignment.id}>
-                        <span className={`pupil-m-row-icon ${late ? "bad" : "warn"}`}><FileText size={15} /></span>
-                        <div>
-                          <strong>{assignment.title ?? "Assignment"}</strong>
-                          <span>{assignment.subject ?? "Class work"} · {late ? "Was due" : "Due"} {formatShortDate(assignment.due_at)}</span>
-                        </div>
-                        <span className={`pupil-m-pill ${late ? "bad" : "warn"}`}>{late ? "Overdue" : "Pending"}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : assignmentFilter === "pending" ? (
-                <MobileEmpty icon={FileText} title="Nothing pending" detail="New homework will appear here when it is set." />
-              ) : (
-                <MobileEmpty
-                  icon={FileText}
-                  title={`No ${assignmentFilter} work yet`}
-                  detail="Submission and grading status will appear here once your teacher records it."
-                />
-              )}
-            </section>
-
             <section className="pupil-m-card" id="pupil-materials">
               <div className="pupil-m-card-head">
                 <div><p className="pupil-m-eyebrow">Learn</p><h2>Study materials</h2></div>
               </div>
               <MobileEmpty icon={BookOpen} title="No materials shared yet" detail="Notes, worksheets and resources from your teachers will appear here." />
-            </section>
-
-            <section className="pupil-m-card" id="pupil-library">
-              <div className="pupil-m-card-head">
-                <div><p className="pupil-m-eyebrow">Learn</p><h2>Library</h2></div>
-                <span className="pupil-m-count">{library?.current_count ?? 0} out</span>
-              </div>
-              {loans.length ? (
-                <div className="pupil-m-list">
-                  {loans.slice(0, 6).map((loan) => (
-                    <div className="pupil-m-row" key={loan.id}>
-                      <span className="pupil-m-row-icon violet"><Library size={15} /></span>
-                      <div>
-                        <strong>{loan.book_title ?? "Library book"}</strong>
-                        <span>Issued {formatShortDate(loan.issued_on)} · Due {formatShortDate(loan.due_on)}</span>
-                      </div>
-                      <span className={`pupil-m-pill ${statusTone(loan.status)}`}>{String(loan.status ?? "—")}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <MobileEmpty icon={Library} title="No books issued" detail="Your library loans will appear here." />
-              )}
             </section>
           </MobileGroup>
 
@@ -757,11 +658,20 @@ function PupilMobileView({
               <div><p className="pupil-m-eyebrow">Pay</p><h2>Pay now</h2></div>
               <CreditCard size={18} />
             </div>
-            <div className="pupil-m-note">
-              <strong>Online payment is not enabled</strong>
-              <span>Please pay at the school office. Receipts are recorded against your fee account.</span>
-            </div>
-            <button className="pupil-m-primary" disabled>Pay online</button>
+            {payableInvoice ? (
+              <>
+                <div className="pupil-m-note">
+                  <strong>Pay {formatMoney(Number(payableInvoice.total ?? 0) - Number(payableInvoice.paid_amount ?? 0))} online</strong>
+                  <span>Use any UPI app. The receipt is posted automatically once the payment is verified.</span>
+                </div>
+                <button className="pupil-m-primary" onClick={() => setPayOpen(true)}>Pay now</button>
+              </>
+            ) : (
+              <div className="pupil-m-note">
+                <strong>No payment due</strong>
+                <span>Your invoices are settled. Receipts are in the history below.</span>
+              </div>
+            )}
           </section>
 
           <section className="pupil-m-card">
@@ -843,6 +753,15 @@ function PupilMobileView({
             </div>
             <MobileEmpty icon={Wallet} title="No refunds on record" detail="Refund requests and their status will appear here if the school supports them." />
           </section>
+
+          <FeePaymentDialog
+            open={payOpen && Boolean(payableInvoice)}
+            invoiceId={payableInvoice?.id ?? null}
+            invoiceNo={payableInvoice?.invoice_no ?? ""}
+            outstanding={Number(payableInvoice?.total ?? 0) - Number(payableInvoice?.paid_amount ?? 0)}
+            onOpenChange={setPayOpen}
+            onPaid={onReload}
+          />
         </div>
       )}
 
@@ -930,30 +849,6 @@ function PupilMobileView({
             )}
           </MobileCard>
 
-          <MobileCard title="Transport details" eyebrow="Travel">
-            {transport?.enrolled && activeTransport ? (
-              <div className="pupil-m-transport">
-                <div className="pupil-m-transport-top">
-                  <span className="pupil-m-row-icon teal"><Bus size={16} /></span>
-                  <div>
-                    <strong>{[activeTransport.route_code, activeTransport.route_name].filter(Boolean).join(" · ") || "School transport"}</strong>
-                    <span>{activeTransport.vehicle_no ?? "Vehicle not set"}</span>
-                  </div>
-                </div>
-                <div className="pupil-m-detail-grid">
-                  <MobileDetail label="Stop" value={activeTransport.stop_name} />
-                  <MobileDetail label="Pickup" value={activeTransport.pickup_time} />
-                  <MobileDetail label="Drop" value={activeTransport.drop_time} />
-                  <MobileDetail label="Driver" value={activeTransport.driver_name} />
-                  <MobileDetail label="Driver phone" value={activeTransport.driver_phone} />
-                  <MobileDetail label="Fare" value={activeTransport.fare_amount != null ? formatMoney(activeTransport.fare_amount) : null} />
-                </div>
-              </div>
-            ) : (
-              <MobileEmpty icon={Bus} title="Not enrolled in transport" detail="Route and pickup details will appear here if you use school transport." />
-            )}
-          </MobileCard>
-
           <MobileCard title="My requests" eyebrow="Leave applications">
             {leaves.length ? (
               <div className="pupil-m-list">
@@ -971,49 +866,6 @@ function PupilMobileView({
             ) : (
               <MobileEmpty icon={CalendarDays} title="No leave requests" detail="Your leave applications and their status will appear here." />
             )}
-          </MobileCard>
-
-          <MobileCard title="Medical and emergency info" eyebrow="View only">
-            <div className="pupil-m-note">
-              <strong>Private record</strong>
-              <span>This information is visible to you and authorised school staff. Contact the office to correct anything.</span>
-            </div>
-            {health?.record ? (
-              <div className="pupil-m-detail-grid">
-                <MobileDetail label="Blood group" value={health.record.blood_group} />
-                <MobileDetail label="Allergies" value={health.record.allergies} />
-                <MobileDetail label="Medical conditions" value={health.record.medical_conditions} />
-                <MobileDetail label="Medication" value={health.record.medications} />
-                <MobileDetail label="Emergency contact" value={health.record.emergency_contact_name ?? pupil.emergency_contact_name ?? emergencyGuardian?.full_name} />
-                <MobileDetail label="Emergency phone" value={health.record.emergency_contact_phone ?? pupil.emergency_contact_phone ?? emergencyGuardian?.phone} />
-                <MobileDetail label="Doctor" value={health.record.regular_doctor_name} />
-                <MobileDetail label="Doctor phone" value={health.record.regular_doctor_phone} />
-              </div>
-            ) : (
-              <MobileEmpty icon={AlertCircle} title="No medical record" detail="The school has not recorded medical details yet." />
-            )}
-            {health?.record?.emergency_instructions && (
-              <div className="pupil-m-note warn">
-                <strong>Emergency instructions</strong>
-                <span>{health.record.emergency_instructions}</span>
-              </div>
-            )}
-            {health?.incidents?.length ? (
-              <>
-                <div className="pupil-m-subhead">Medical incidents</div>
-                <div className="pupil-m-list">
-                  {health.incidents.slice(0, 5).map((incident) => (
-                    <div className="pupil-m-row" key={incident.id}>
-                      <span className={`pupil-m-row-icon ${statusTone(incident.severity)}`}><AlertCircle size={15} /></span>
-                      <div>
-                        <strong>{formatDate(incident.incident_date)} · {incident.summary ?? "Incident"}</strong>
-                        <span>{[incident.action_taken, incident.notified_guardian ? "Guardian notified" : null].filter(Boolean).join(" · ")}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : null}
           </MobileCard>
 
           <section className="pupil-m-card">
@@ -1038,27 +890,12 @@ function PupilMobileView({
 
       </div>
 
-      <nav className="pupil-bottom-nav" aria-label="Student sections">
-        {([
-          { id: "home" as const, label: "Home", icon: Home },
-          { id: "academics" as const, label: "Academics", icon: BookOpen },
-          { id: "fees" as const, label: "Fees", icon: Wallet },
-          { id: "profile" as const, label: "Profile", icon: UserRound },
-        ]).map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              className={tab === item.id ? "active" : ""}
-              onClick={() => go(item.id)}
-              aria-current={tab === item.id ? "page" : undefined}
-            >
-              <Icon size={20} strokeWidth={tab === item.id ? 2.2 : 1.8} />
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      <MobileTabBar
+        items={PUPIL_TABS}
+        active={tab}
+        onSelect={(id) => go(id as MobileTab)}
+        ariaLabel="Student sections"
+      />
     </div>
   );
 }
@@ -1172,19 +1009,12 @@ function MobileLoading() {
           ))}
         </div>
       </div>
-      <nav className="pupil-bottom-nav" aria-label="Student sections">
-        {([
-          { id: "home", label: "Home", icon: Home },
-          { id: "academics", label: "Academics", icon: BookOpen },
-          { id: "fees", label: "Fees", icon: Wallet },
-          { id: "profile", label: "Profile", icon: UserRound },
-        ] as const).map((item) => (
-          <span key={item.id} className={item.id === "home" ? "active" : ""}>
-            <item.icon size={20} strokeWidth={2.2} />
-            <span>{item.label}</span>
-          </span>
-        ))}
-      </nav>
+      <MobileTabBar
+        items={PUPIL_TABS}
+        active="home"
+        onSelect={() => {}}
+        ariaLabel="Student sections"
+      />
     </div>
   );
 }

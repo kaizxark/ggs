@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
-  Award,
   BookOpen,
   CalendarDays,
   ClipboardCheck,
@@ -75,14 +74,6 @@ type ExamResult = {
   max_marks?: number;
   percentage?: number | null;
   papers?: Paper[];
-};
-
-type Assignment = {
-  id: string;
-  title?: string | null;
-  subject?: string | null;
-  due_at?: string | null;
-  created_at?: string | null;
 };
 
 type Subject = {
@@ -179,7 +170,6 @@ export interface Profile {
       papers: number;
       average: number | null;
     }>;
-    assignments?: Assignment[];
     subjects?: Subject[];
   };
   activities?: Activity[];
@@ -188,7 +178,6 @@ export interface Profile {
   fees?: FeeSummary;
   documents?: StudentDocument[];
   health?: HealthSummary;
-  transport?: TransportSummary;
   library?: LibrarySummary;
   account?: {
     has_account?: boolean;
@@ -300,25 +289,6 @@ type HealthSummary = {
     action_taken?: string | null;
     severity?: string | null;
     notified_guardian?: boolean;
-  }>;
-};
-
-type TransportSummary = {
-  enrolled?: boolean;
-  allocations?: Array<{
-    id?: string;
-    active?: boolean;
-    route_code?: string | null;
-    route_name?: string | null;
-    vehicle_no?: string | null;
-    driver_name?: string | null;
-    driver_phone?: string | null;
-    stop_name?: string | null;
-    pickup_time?: string | null;
-    drop_time?: string | null;
-    fare_amount?: number | null;
-    is_authorized_pickup?: boolean;
-    ended_on?: string | null;
   }>;
 };
 
@@ -439,9 +409,12 @@ export function usePupilProfile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let live = true;
+    setLoading(true);
+    setError("");
     (async () => {
       const account = await readPortalAccount();
       if (!live) return;
@@ -483,9 +456,9 @@ export function usePupilProfile() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [reloadKey]);
 
-  return { profile, loading, error };
+  return { profile, loading, error, reload: () => setReloadKey((n) => n + 1) };
 }
 
 export default function PupilOverview({ onBack }: { onBack: () => void }) {
@@ -523,25 +496,6 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
       ? Math.round(latestExam.percentage)
       : subjectAverage;
 
-  const assignments = profile?.academics?.assignments ?? [];
-  const now = Date.now();
-  const upcomingAssignments = assignments
-    .filter(
-      assignment =>
-        assignment.due_at &&
-        new Date(assignment.due_at).getTime() >= now
-    )
-    .sort(
-      (a, b) =>
-        new Date(a.due_at ?? "").getTime() -
-        new Date(b.due_at ?? "").getTime()
-    );
-  const overdueAssignments = assignments.filter(
-    assignment =>
-      assignment.due_at && new Date(assignment.due_at).getTime() < now
-  );
-  const nextAssignment = upcomingAssignments[0] ?? null;
-  const activities = profile?.activities ?? [];
   const guardians = profile?.guardians ?? [];
   const primaryGuardian =
     guardians.find(guardian => guardian.is_primary) ?? guardians[0] ?? null;
@@ -573,7 +527,7 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
           </div>
         </section>
         <div className="pupil-metrics">
-          {Array.from({ length: 4 }, (_, index) => (
+          {Array.from({ length: 2 }, (_, index) => (
             <div className="panel pupil-metric" key={index}>
               <SkeletonText width="42%" />
               <SkeletonText
@@ -710,38 +664,6 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
           note={latestExam?.name ?? "No published results"}
           tone="violet"
         />
-        <PupilMetric
-          icon={FileText}
-          label={
-            overdueAssignments.length > 0
-              ? "Assignments overdue"
-              : "Assignments due"
-          }
-          value={String(
-            overdueAssignments.length > 0
-              ? overdueAssignments.length
-              : upcomingAssignments.length
-          )}
-          note={
-            overdueAssignments.length > 0
-              ? "Past the due date"
-              : nextAssignment?.due_at
-                ? `Next due ${formatDate(nextAssignment.due_at) ?? "soon"}`
-                : "Nothing due next"
-          }
-          tone="amber"
-        />
-        <PupilMetric
-          icon={Award}
-          label="Activities"
-          value={String(activities.length)}
-          note={
-            activities.some(activity => activity.award || activity.achievement)
-              ? "Includes achievements"
-              : "Clubs and participation"
-          }
-          tone="blue"
-        />
       </div>
 
       <div className="pupil-grid">
@@ -819,32 +741,6 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
             <CalendarDays size={18} className="text-[var(--text-muted)]" />
           </div>
           <div className="pupil-next-body">
-            {nextAssignment ? (
-              <div className="pupil-next-card">
-                <span className="pupil-next-icon amber">
-                  <FileText size={17} />
-                </span>
-                <div>
-                  <p>Next assignment</p>
-                  <strong>{nextAssignment.title ?? "Assignment"}</strong>
-                  <span>
-                    {nextAssignment.subject ?? "Class work"} · Due{" "}
-                    {formatDate(nextAssignment.due_at) ?? "soon"}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="pupil-next-card is-empty">
-                <span className="pupil-next-icon teal">
-                  <FileText size={17} />
-                </span>
-                <div>
-                  <p>Next assignment</p>
-                  <strong>Nothing due</strong>
-                  <span>New work will appear here when it is set.</span>
-                </div>
-              </div>
-            )}
             {latestExam ? (
               <div className="pupil-next-card">
                 <span className="pupil-next-icon violet">
@@ -871,15 +767,6 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
                   <strong>No results published</strong>
                   <span>Your marks will appear when a teacher publishes them.</span>
                 </div>
-              </div>
-            )}
-            {overdueAssignments.length > 0 && (
-              <div className="pupil-alert">
-                <AlertCircle size={16} />
-                <span>
-                  {overdueAssignments.length} assignment
-                  {overdueAssignments.length === 1 ? "" : "s"} past the due date
-                </span>
               </div>
             )}
           </div>
@@ -977,96 +864,6 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
               icon={GraduationCap}
               title="No subject averages yet"
               detail="Once published results are available, your subject averages will be compared here."
-            />
-          )}
-        </section>
-      </div>
-
-      <div className="pupil-grid even">
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Class work</p>
-              <h2 className="panel-title">Assignments</h2>
-            </div>
-            <span className="count-badge">
-              {upcomingAssignments.length} upcoming
-            </span>
-          </div>
-          {assignments.length > 0 ? (
-            <div className="pupil-list">
-              {assignments.slice(0, 6).map(assignment => {
-                const due = assignment.due_at
-                  ? new Date(assignment.due_at).getTime()
-                  : null;
-                const late = due !== null && due < now;
-                return (
-                  <div className="pupil-list-row" key={assignment.id}>
-                    <span
-                      className={`pupil-list-icon ${late ? "danger" : "teal"}`}
-                    >
-                      <FileText size={15} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <strong>{assignment.title ?? "Assignment"}</strong>
-                      <span>
-                        {assignment.subject ?? "Class work"} ·{" "}
-                        {assignment.due_at
-                          ? `Due ${formatDate(assignment.due_at) ?? "soon"}`
-                          : "No due date"}
-                      </span>
-                    </div>
-                    <span
-                      className={`status-pill ${late ? "warning" : "success"}`}
-                    >
-                      {late ? "Overdue" : "Open"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyPanel
-              icon={FileText}
-              title="No assignments set"
-              detail="Homework and class work for your class will appear here."
-            />
-          )}
-        </section>
-
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Beyond the classroom</p>
-              <h2 className="panel-title">Activities</h2>
-            </div>
-            <span className="count-badge">
-              {activities.length > 0 ? `${activities.length} records` : "No data"}
-            </span>
-          </div>
-          {activities.length > 0 ? (
-            <div className="pupil-list">
-              {activities.slice(0, 5).map(activity => (
-                <div className="pupil-list-row" key={activity.id}>
-                  <span className="pupil-list-icon violet">
-                    <Award size={15} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <strong>{activity.name ?? "Activity"}</strong>
-                    <span>
-                      {[activity.category, activity.role, activity.award]
-                        .filter(Boolean)
-                        .join(" · ") || "Participation recorded"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyPanel
-              icon={Award}
-              title="No activities recorded"
-              detail="Clubs, sports and achievements will appear here when they are added."
             />
           )}
         </section>

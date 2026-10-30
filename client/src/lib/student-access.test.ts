@@ -12,7 +12,6 @@ import {
   canManageFees,
   canManageGuardians,
   canManageLibrary,
-  canManageTransport,
   canRecordAttendance,
   canViewDocuments,
   canViewFees,
@@ -155,17 +154,16 @@ describe("section visibility", () => {
     expect(sections).toContain("guardians");
     expect(sections).toContain("academics");
     expect(sections).toContain("attendance");
-    expect(sections).toContain("activities");
+    expect(sections).not.toContain("activities");
   });
 
   it("withholds health from a parent by default", () => {
     expect(sectionsForRole("parent", "guardian")).not.toContain("health");
   });
 
-  it("gives a teacher the health tab but not the money", () => {
+  it("withholds the money and health sections from a teacher", () => {
     const sections = sectionsForRole("teacher", "teacher");
-    // A teacher needs allergies and medication to keep a child safe.
-    expect(sections).toContain("health");
+    expect(sections).not.toContain("health");
     expect(sections).not.toContain("fees");
   });
 
@@ -271,7 +269,6 @@ describe("the whole matrix holds together", () => {
       canWriteObservations("student"),
       canDecideLeave("student"),
       canManageActivities("student"),
-      canManageTransport("student"),
       canManageLibrary("student"),
       canManageAccount("student"),
     ];

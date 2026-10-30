@@ -30,7 +30,7 @@
  * another school's data.
  */
 
-export const config = { runtime: "edge" };
+export const config = { runtime: "nodejs" };
 
 import {
   resolveCaller,
@@ -38,6 +38,12 @@ import {
   SERVICE_KEY,
   type Caller,
 } from "../shared/ai-auth.js";
+import {
+  handleFeeConfirmRequest,
+  handleFeePaymentRequest,
+  handleFeeRecordRequest,
+  handleFeeWebhookRequest,
+} from "../shared/fee-payment-routes.js";
 import {
   sectionsForRole,
   SECTION_LABELS,
@@ -150,7 +156,16 @@ export function ageFrom(dob: unknown): number | null {
   return age >= 0 && age < 150 ? age : null;
 }
 
-export default async function handler(req: Request): Promise<Response> {
+async function handler(req: Request): Promise<Response> {
+  // Fee routes share this function to stay inside the Hobby plan's
+  // twelve-function limit. They are checked before the profile's own GET guard
+  // because all of them are POSTs.
+  const feeAction = new URL(req.url, "https://ggs-erp.vercel.app").searchParams.get("__fee");
+  if (feeAction === "payment") return handleFeePaymentRequest(req);
+  if (feeAction === "confirm") return handleFeeConfirmRequest(req);
+  if (feeAction === "webhook") return handleFeeWebhookRequest(req);
+  if (feeAction === "record") return handleFeeRecordRequest(req);
+
   if (!SERVICE_KEY) {
     return fail("The database is not configured on this deployment.", 503, "not_configured");
   }
@@ -160,7 +175,7 @@ export default async function handler(req: Request): Promise<Response> {
   const caller = await resolveCaller(req);
   if (!caller) return fail("Sign in to continue.", 401, "unauthenticated");
 
-  const url = new URL(req.url);
+  const url = new URL(req.url, "https://ggs-erp.vercel.app");
   const studentId = (url.searchParams.get("studentId") ?? "").trim();
   if (!UUID.test(studentId)) {
     return fail("That student could not be found.", 404, "not_found");
@@ -425,14 +440,7 @@ export default async function handler(req: Request): Promise<Response> {
       })
       .sort((a, b) => String(a.academic_year ?? "").localeCompare(String(b.academic_year ?? "")));
 
-    // Assignments for this pupil's classes.
     const currentClassroomId = currentEnrolment?.classroom_id ?? null;
-    const assignments = currentClassroomId
-      ? await rows(
-          `assignments?select=id,title,subject,due_at,created_at&organisation_id=eq.${orgId}` +
-            `&classroom_id=eq.${currentClassroomId}&order=due_at.desc&limit=20`
-        )
-      : [];
 
     const subjectTeachers = currentClassroomId
       ? await rows(
@@ -474,7 +482,6 @@ export default async function handler(req: Request): Promise<Response> {
       results: byExam,
       subject_performance: subjectPerformance,
       enrollment_history: enrollmentHistory,
-      assignments,
       subjects: subjectTeachers
         .map((st) => {
           const subject = stSubjectById.get(String(st.subject_id));
@@ -709,215 +716,12 @@ export default async function handler(req: Request): Promise<Response> {
     );
   }
 
-  /* ------------------------------ health ---------------------------- */
-  if (has("health")) {
-    const record = await one(
-      `student_health_records?select=*&organisation_id=eq.${orgId}&student_id=eq.${studentId}&limit=1`
-    );
-    const incidents = await rows(
-      `student_health_incidents?select=*&organisation_id=eq.${orgId}&student_id=eq.${studentId}` +
-        `&order=incident_date.desc&limit=25`
-    );
-
-    payload.health = record
-      ? {
-          record: {
-            blood_group: record.blood_group ?? null,
-            height_cm: record.height_cm ?? null,
-            weight_kg: record.weight_kg ?? null,
-            allergies: record.allergies ?? null,
-            medical_conditions: record.medical_conditions ?? null,
-            medications: record.medications ?? null,
-            emergency_instructions: record.emergency_instructions ?? null,
-            accessibility_needs: record.accessibility_needs ?? null,
-            emergency_contact_name: record.emergency_contact_name ?? null,
-            emergency_contact_phone: record.emergency_contact_phone ?? null,
-            regular_doctor_name: record.regular_doctor_name ?? null,
-            regular_doctor_phone: record.regular_doctor_phone ?? null,
-            checked_at: record.checked_at ?? null,
-          },
-          incidents: incidents.map((i) => ({
-            id: i.id,
-            incident_date: i.incident_date,
-            summary: i.summary,
-            action_taken: i.action_taken ?? null,
-            severity: i.severity,
-            notified_guardian: i.notified_guardian === true,
-          })),
-        }
-      : { record: null, incidents };
-  }
-
-  /* ----------------------------- transport -------------------------- */
-  if (has("transport")) {
-    const allocations = await rows(
-      `transport_allocations?select=*&organisation_id=eq.${orgId}&student_id=eq.${studentId}` +
-        `&order=ended_on.asc`
-    );
-    const routeIds = Array.from(new Set(allocations.map((a) => String(a.route_id ?? "")).filter(Boolean)));
-    const routes = routeIds.length
-      ? await rows(
-          `transport_routes?select=id,code,name,driver_name,driver_phone,vehicle_no` +
-            `&organisation_id=eq.${orgId}&id=in.(${routeIds.join(",")})`
-        )
-      : [];
-    const routeById = new Map(routes.map((r) => [String(r.id), r]));
-
-    payload.transport = {
-      enrolled: allocations.some((a) => a.active === true),
-      allocations: allocations.map((a) => {
-        const route = routeById.get(String(a.route_id));
-        return {
-          id: a.id,
-          active: a.active === true,
-          route_id: a.route_id,
-          route_code: route?.code ?? null,
-          route_name: route?.name ?? null,
-          vehicle_no: route?.vehicle_no ?? null,
-          driver_name: route?.driver_name ?? null,
-          driver_phone: route?.driver_phone ?? null,
-          stop_name: a.stop_name ?? null,
-          pickup_time: a.pickup_time ?? null,
-          drop_time: a.drop_time ?? null,
-          fare_amount: a.fare_amount ?? null,
-          is_authorized_pickup: a.is_authorized_pickup === true,
-          ended_on: a.ended_on ?? null,
-        };
-      }),
-    };
-  }
-
-  /* ---------------------------- activities -------------------------- */
-  if (has("activities")) {
-    const participations = await rows(
-      `activity_participations?select=*&organisation_id=eq.${orgId}&student_id=eq.${studentId}` +
-        `&order=started_on.desc`
-    );
-    const actIds = Array.from(
-      new Set(participations.map((p) => String(p.activity_id ?? "")).filter(Boolean))
-    );
-    const acts = actIds.length
-      ? await rows(`activities?select=id,name,category,description&organisation_id=eq.${orgId}&id=in.(${actIds.join(",")})`)
-      : [];
-    const actById = new Map(acts.map((a) => [String(a.id), a]));
-
-    payload.activities = participations
-      .map((p) => {
-        const activity = actById.get(String(p.activity_id));
-        return activity
-          ? {
-              id: p.id,
-              activity_id: activity.id,
-              name: activity.name,
-              category: activity.category,
-              role: p.role ?? null,
-              participation: p.participation,
-              award: p.award ?? null,
-              achievement: p.achievement ?? null,
-              certificate_ref: p.certificate_ref ?? null,
-              started_on: p.started_on ?? null,
-              ended_on: p.ended_on ?? null,
-            }
-          : null;
-      })
-      .filter(Boolean);
-  }
-
-  /* --------------------------- observations ------------------------- */
-  if (has("observations")) {
-    payload.observations = await rows(
-      `student_observations?select=id,category,body,classroom_participation,support_needed,` +
-        `action_taken,follow_up_on,follow_up_done,follow_up_notes,visible_to_guardians,observed_on` +
-        `&organisation_id=eq.${orgId}&student_id=eq.${studentId}&order=observed_on.desc&limit=50`
-    );
-  }
-
-  /* -------------------------- communications ----------------------- */
-  if (has("communications")) {
-    const comms = await rows(
-      `student_communications?select=id,kind,subject,notes,outcome,occurred_at,acknowledged_at,` +
-        `guardian_id,message_id&organisation_id=eq.${orgId}&student_id=eq.${studentId}` +
-        `&order=occurred_at.desc&limit=50`
-    );
-
-    // Referenced messages are fetched from the existing messages table rather
-    // than copied into a second store. This is the integration the brief asks
-    // for: the thread stays in one place.
-    const messageIds = Array.from(
-      new Set(comms.map((c) => String(c.message_id ?? "")).filter(Boolean))
-    );
-    const messages = messageIds.length
-      ? await rows(
-          `messages?select=id,subject,body,status,created_at,sender_id,recipient_id` +
-            `&organisation_id=eq.${orgId}&id=in.(${messageIds.join(",")})`
-        )
-      : [];
-    const messageById = new Map(messages.map((m) => [String(m.id), m]));
-
-    const guardianIds = Array.from(
-      new Set(comms.map((c) => String(c.guardian_id ?? "")).filter(Boolean))
-    );
-    const commGuardians = guardianIds.length
-      ? await rows(`guardians?select=id,full_name&organisation_id=eq.${orgId}&id=in.(${guardianIds.join(",")})`)
-      : [];
-    const commGuardianById = new Map(commGuardians.map((g) => [String(g.id), g]));
-
-    payload.communications = comms.map((c) => {
-      const message = c.message_id ? messageById.get(String(c.message_id)) : null;
-      return {
-        id: c.id,
-        kind: c.kind,
-        subject: c.subject ?? message?.subject ?? null,
-        notes: c.notes ?? null,
-        outcome: c.outcome ?? null,
-        occurred_at: c.occurred_at,
-        acknowledged_at: c.acknowledged_at ?? null,
-        guardian: c.guardian_id ? commGuardianById.get(String(c.guardian_id))?.full_name ?? null : null,
-        message: message
-          ? {
-              id: message.id,
-              subject: message.subject,
-              body: message.body,
-              status: message.status,
-              created_at: message.created_at,
-            }
-          : null,
-      };
-    });
-  }
-
   /* ---------------------------- admission --------------------------- */
   if (has("admission")) {
     payload.admission = await rows(
       `admission_records?select=*&organisation_id=eq.${orgId}&student_id=eq.${studentId}` +
         `&order=applied_on.desc`
     );
-  }
-
-  /* ----------------------------- library ---------------------------- */
-  if (has("library")) {
-    const loans = await rows(
-      `library_loans?select=*&organisation_id=eq.${orgId}&student_id=eq.${studentId}` +
-        `&order=issued_on.desc&limit=100`
-    );
-    const today = new Date().toISOString().slice(0, 10);
-    payload.library = {
-      loans: loans.map((l) => ({
-        id: l.id,
-        book_title: l.book_title,
-        book_isbn: l.book_isbn ?? null,
-        issued_on: l.issued_on,
-        due_on: l.due_on ?? null,
-        returned_on: l.returned_on ?? null,
-        fine_amount: num(l.fine_amount),
-        status: l.status,
-      })),
-      current_count: loans.filter((l) => ["issued", "overdue"].indexOf(String(l.status)) !== -1).length,
-      overdue_count: loans.filter(
-        (l) => ["issued", "overdue"].indexOf(String(l.status)) !== -1 && String(l.due_on ?? "") < today
-      ).length,
-      total_fines: round2(loans.reduce((sum, l) => sum + num(l.fine_amount), 0)),
-    };
   }
 
   /* ----------------------------- account ---------------------------- */
@@ -988,3 +792,6 @@ async function linkedParentCount(orgId: string, studentId: string): Promise<numb
   }
   return ids.size;
 }
+
+export const GET = handler;
+export const POST = handler;

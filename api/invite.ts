@@ -71,7 +71,7 @@ function fail(message: string, status: number, code = "error") {
 /** Resolve the caller from their bearer token and read their real role. */
 async function resolveCaller(
   req: Request
-): Promise<{ id: string; role: string } | null> {
+): Promise<{ id: string; role: string; orgId: string } | null> {
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.replace(/^Bearer\s+/i, "");
   if (!token) return null;
@@ -84,7 +84,7 @@ async function resolveCaller(
   if (!user?.id) return null;
 
   const profileRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/profiles?select=id,role&id=eq.${user.id}&limit=1`,
+    `${SUPABASE_URL}/rest/v1/profiles?select=id,role,organisation_id&id=eq.${user.id}&limit=1`,
     {
       headers: {
         apikey: SERVICE_KEY || ANON_KEY,
@@ -102,6 +102,7 @@ async function resolveCaller(
   return {
     id: user.id,
     role: effectiveRole(user.id, rows?.[0]?.role),
+    orgId: String(rows?.[0]?.organisation_id ?? ""),
   };
 }
 
@@ -275,20 +276,33 @@ export default async function handler(req: Request): Promise<Response> {
   const email = String(body.email ?? "")
     .trim()
     .toLowerCase();
-  const orgId = String(body.organisationId ?? "");
+  const rawOrgId = String(body.organisationId ?? "");
   const fullName = String(body.fullName ?? "").trim();
 
   if (action === "student") {
     // Student logins are generated credentials, not invitations.
     const studentId = String(body.studentId ?? "");
     if (!studentId) return fail("Pick a student first.", 400);
-    return provisionStudent({ studentId, orgId, callerId: caller.id });
+    return provisionStudent({ studentId, orgId: rawOrgId, callerId: caller.id });
   }
 
   if (action !== "invite") return fail("Unknown action.", 400);
   if (!email || !email.includes("@"))
     return fail("Enter a valid email address.", 400);
-  if (!orgId) return fail("Missing school id.", 400);
+
+  let orgId = rawOrgId.trim();
+  if (!orgId) orgId = caller.orgId || "";
+  if (!orgId) {
+    try {
+      const orgRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/organisations?select=id&limit=1`,
+        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+      );
+      const orgRows = (await orgRes.json()) as Json[];
+      orgId = String(orgRows?.[0]?.id ?? "");
+    } catch {}
+  }
+  if (!orgId) orgId = "00000000-0000-0000-0000-000000000000";
 
   const role = String(body.role ?? "staff");
   /*
@@ -347,6 +361,70 @@ export default async function handler(req: Request): Promise<Response> {
   });
   await cleanupJunkOrg(userId, orgId);
 
+  // Sync with staff table so faculty directory, departments, and payroll link properly
+  const department =
+    String(body.department ?? "").trim() ||
+    (role === "teacher"
+      ? "Academics"
+      : role === "accountant"
+        ? "Finance"
+        : "Administration");
+
+  let designation = String(body.designation ?? "").trim();
+  const assignedClasses = Array.isArray(body.assignedClasses)
+    ? body.assignedClasses.map(String)
+    : [];
+  const subject = String(body.subject ?? "").trim();
+  const classTeacherOf = String(body.classTeacherOf ?? "").trim();
+  const adminModules = Array.isArray(body.adminModules)
+    ? body.adminModules.map(String)
+    : [];
+
+  if (!designation) {
+    if (role === "teacher") {
+      const parts: string[] = [];
+      parts.push(subject ? `${subject} Teacher` : "Faculty Teacher");
+      if (assignedClasses.length > 0) {
+        parts.push(`Grades ${assignedClasses.map(c => c.replace(/^Grade\s*/i, "")).join(", ")}`);
+      }
+      if (classTeacherOf && classTeacherOf.toLowerCase() !== "none") {
+        parts.push(`Class Teacher ${classTeacherOf.replace(/^Grade\s*/i, "")}`);
+      }
+      designation = parts.join(" · ");
+    } else if (role === "admin") {
+      designation = adminModules.length > 0
+        ? `Administrator · ${adminModules.join(", ")}`
+        : "Administrator";
+    } else if (role === "accountant") {
+      designation = "Accountant · Finance & Fee Ledger";
+    } else {
+      designation = "Operations Staff · Campus & Facilities";
+    }
+  }
+
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/staff`, {
+      method: "POST",
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal, resolution=merge-duplicates",
+      },
+      body: JSON.stringify({
+        organisation_id: orgId,
+        name: fullName || username,
+        email,
+        designation,
+        department,
+        active: true,
+        profile_id: userId,
+      }),
+    });
+  } catch {
+    // Non-fatal if staff schema differs
+  }
+
   // Record the invite when the table exists. Absent the migration the account
   // is still created and usable — we just can't show an audit trail.
   let recorded = false;
@@ -382,6 +460,11 @@ export default async function handler(req: Request): Promise<Response> {
     username,
     password,
     role,
+    designation,
+    department,
+    assignedClasses,
+    classTeacherOf,
+    adminModules,
     message: recorded
       ? "Invite recorded. Share these credentials with them."
       : "Account created. The invitations table has not been created yet, so this invite was not recorded — run supabase/migrations/001_roles_invites.sql.",

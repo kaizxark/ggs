@@ -1,24 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
+  Archive,
   ArrowLeft,
-  Award,
   BookOpen,
-  Bus,
   CalendarDays,
   ClipboardCheck,
   Download,
   FileText,
-  HeartPulse,
-  Library,
   Lock,
-  MessageSquare,
   Pencil,
   Printer,
   ShieldAlert,
   UserRound,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
 
 import {
@@ -41,12 +37,15 @@ import {
   canDecideLeave,
   canEditStudent,
   canManageDocuments,
+  canManageFees,
   canRecordAttendance,
   canViewFees,
-  canWriteObservations,
   type StudentSection,
 } from "@shared/student-access";
 import { DocumentPanel } from "@/components/StudentDocumentPanel";
+import { FeePaymentDialog } from "@/components/FeePaymentDialog";
+import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
+import { RecordUpiPaymentDialog } from "@/components/RecordUpiPaymentDialog";
 
 /**
  * One pupil's complete record.
@@ -76,13 +75,7 @@ const SECTION_ICONS: Record<string, React.ElementType> = {
   attendance: ClipboardCheck,
   fees: Wallet,
   documents: FileText,
-  health: HeartPulse,
-  transport: Bus,
-  activities: Award,
-  observations: MessageSquare,
-  communications: MessageSquare,
   admission: CalendarDays,
-  library: Library,
   account: ShieldAlert,
 };
 
@@ -94,15 +87,21 @@ const SECTION_ORDER: StudentSection[] = [
   "attendance",
   "fees",
   "documents",
-  "health",
-  "transport",
-  "activities",
-  "observations",
-  "communications",
   "admission",
-  "library",
   "account",
 ];
+
+/** One line of context under each section heading. */
+const SECTION_BLURBS: Record<StudentSection, string> = {
+  personal: "Identity, contact details and the recent record trail.",
+  guardians: "Family contacts and who can see this record.",
+  academics: "Subjects, examination results and progression.",
+  attendance: "Session totals, trends, absences and leave.",
+  fees: "Invoices, instalments and payments.",
+  documents: "Files held for this student and their verification.",
+  admission: "Application, admission and withdrawal history.",
+  account: "Sign-in access and linked guardian accounts.",
+};
 
 export interface StudentProfileProps {
   studentId: string;
@@ -146,6 +145,13 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
     headingRef.current?.focus();
   }, [studentId]);
 
+  // Switching sections should start at the top of the new section even when the
+  // reader clicked from halfway down the previous one. The page scrolls inside
+  // `.main-area`, not the window.
+  useEffect(() => {
+    document.querySelector<HTMLElement>(".main-area")?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [tab]);
+
   const role = data?.viewer.role ?? "";
 
   if (loading && !data) {
@@ -154,9 +160,9 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
 
   if (error && !data) {
     return (
-      <div className="page-stack">
-        <BackLink onClick={onBack} />
-        <div className="panel empty-state">
+      <div className="page-stack student-profile-page">
+        <ProfileCrumbs name="Student record" onBack={onBack} />
+        <div className="panel empty-state profile-empty">
           <ShieldAlert size={22} />
           <h2 className="panel-title">This profile is not available</h2>
           <p className="panel-subtitle">{error}</p>
@@ -173,29 +179,11 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
   const visible = SECTION_ORDER.filter((s) => data.sections.indexOf(s) !== -1);
   const withheld = SECTION_ORDER.filter((s) => data.sections.indexOf(s) === -1);
   const current = visible.indexOf(tab) !== -1 ? tab : visible[0];
+  const currentLabel = data.sectionLabels[current] ?? current;
 
   return (
-    <div className="page-stack">
-      <BackLink onClick={onBack} />
-
-      <ProfileHeader
-        data={data}
-        role={role}
-        onEdit={() => setEditing(true)}
-        onArchive={async () => {
-          try {
-            await archiveStudent(studentId);
-            toast.success("Student archived", {
-              description: "Their academic, fee and attendance records are unchanged.",
-            });
-            onChanged?.();
-            onBack();
-          } catch (err) {
-            toast.error(err instanceof ApiError ? err.message : "Could not archive this student.");
-          }
-        }}
-        onPrint={() => window.print()}
-      />
+    <div className="page-stack student-profile-page">
+      <ProfileCrumbs name={data.student.name} onBack={onBack} />
 
       {error && (
         <div className="notice notice-warning" role="status">
@@ -203,44 +191,50 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
         </div>
       )}
 
-      <nav className="profile-tabs" aria-label="Profile sections">
-        {visible.map((section) => {
-          const Icon = SECTION_ICONS[section] ?? FileText;
-          return (
-            <button
-              key={section}
-              className={current === section ? "active" : ""}
-              onClick={() => setTab(section)}
-              aria-current={current === section ? "page" : undefined}
-            >
-              <Icon size={15} />
-              {data.sectionLabels[section] ?? section}
-            </button>
-          );
-        })}
-        {withheld.map((section) => (
-          <button key={section} className="locked" disabled title={`You do not have access to ${section}`}>
-            <Lock size={13} />
-            {data.sectionLabels[section] ?? section}
-          </button>
-        ))}
-      </nav>
+      <div className="student-profile-shell">
+        <ProfileRail
+          data={data}
+          role={role}
+          active={current}
+          visible={visible}
+          withheld={withheld}
+          headingRef={headingRef}
+          onSelect={setTab}
+          onEdit={() => setEditing(true)}
+          onArchive={async () => {
+            try {
+              await archiveStudent(studentId);
+              toast.success("Student archived", {
+                description: "Their academic, fee and attendance records are unchanged.",
+              });
+              onChanged?.();
+              onBack();
+            } catch (err) {
+              toast.error(err instanceof ApiError ? err.message : "Could not archive this student.");
+            }
+          }}
+          onPrint={() => window.print()}
+        />
 
-      <div className="profile-body">
-        {current === "personal" && <PersonalSection data={data} />}
-        {current === "guardians" && <GuardiansSection data={data} role={role} />}
-        {current === "academics" && <AcademicsSection data={data} />}
-        {current === "attendance" && <AttendanceSection data={data} />}
-        {current === "fees" && data.fees && <FeesSection data={data} />}
-        {current === "documents" && <DocumentPanel studentId={studentId} studentName={data.student.name} />}
-        {current === "health" && data.health && <HealthSection data={data} />}
-        {current === "transport" && data.transport && <TransportSection data={data} />}
-        {current === "activities" && <ActivitiesSection data={data} />}
-        {current === "observations" && data.observations && <ObservationsSection data={data} role={role} />}
-        {current === "communications" && data.communications && <CommunicationsSection data={data} />}
-        {current === "admission" && data.admission && <AdmissionSection data={data} />}
-        {current === "library" && data.library && <LibrarySection data={data} />}
-        {current === "account" && data.account && <AccountSection data={data} />}
+        <section className="student-profile-main" aria-label={`${data.student.name} record`}>
+          <header className="profile-section-heading">
+            <div>
+              <h2>{currentLabel}</h2>
+              <p>{SECTION_BLURBS[current]}</p>
+            </div>
+          </header>
+
+          <div className="profile-body">
+            {current === "personal" && <PersonalSection data={data} />}
+            {current === "guardians" && <GuardiansSection data={data} role={role} />}
+            {current === "academics" && <AcademicsSection data={data} />}
+            {current === "attendance" && <AttendanceSection data={data} />}
+            {current === "fees" && data.fees && <FeesSection data={data} onRefresh={load} />}
+            {current === "documents" && <DocumentPanel studentId={studentId} studentName={data.student.name} />}
+            {current === "admission" && data.admission && <AdmissionSection data={data} />}
+            {current === "account" && data.account && <AccountSection data={data} />}
+          </div>
+        </section>
       </div>
 
       {editing && (
@@ -271,202 +265,175 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
  * Header
  * ------------------------------------------------------------------ */
 
-function ProfileHeader({
+function ProfileCrumbs({ name, onBack }: { name: string; onBack: () => void }) {
+  return (
+    <nav className="profile-crumbs" aria-label="Breadcrumb">
+      <button className="back-link" onClick={onBack}>
+        <ArrowLeft size={15} />
+        Back to students
+      </button>
+      <span className="profile-crumb-sep" aria-hidden="true">
+        /
+      </span>
+      <span className="profile-crumb-current" aria-current="page">
+        {name}
+      </span>
+    </nav>
+  );
+}
+
+function ProfileRail({
   data,
   role,
+  active,
+  visible,
+  withheld,
+  headingRef,
+  onSelect,
   onEdit,
   onArchive,
   onPrint,
 }: {
   data: ProfilePayload;
   role: string;
+  active: StudentSection;
+  visible: StudentSection[];
+  withheld: StudentSection[];
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  onSelect: (section: StudentSection) => void;
   onEdit: () => void;
   onArchive: () => void;
   onPrint: () => void;
 }) {
   const { student, class: klass } = data;
+  const attendance = data.attendance?.summary;
+  const fees = data.fees?.summary;
+  const average = averageOfSubjects(data.academics?.subject_performance ?? []);
+  const mayEdit = canEditStudent(role);
 
   return (
-    <header className="profile-header">
-      <div className="profile-identity">
-        {student.photo_url ? (
-          <img className="avatar avatar-xl" src={student.photo_url} alt="" />
-        ) : (
-          <span className="avatar avatar-xl">{initialsFor(student.name)}</span>
-        )}
+    <aside className="profile-rail" aria-label={`${student.name} summary`}>
+      <div className="profile-rail-identity">
+        <div className="profile-rail-avatar">
+          {student.photo_url ? (
+            <img className="avatar avatar-xl" src={student.photo_url} alt="" />
+          ) : (
+            <span className="avatar avatar-xl">{initialsFor(student.name)}</span>
+          )}
+          <span
+            className={`profile-presence ${student.status === "active" ? "is-active" : "is-inactive"}`}
+            title={titleCase(student.status ?? "unknown")}
+          />
+        </div>
 
-        <div className="profile-identity-text">
-          <h1 ref={undefined} className="profile-name" tabIndex={-1}>
-            {student.name}
-          </h1>
-          <p className="profile-meta">
-            <span>{student.usn ?? "No USN"}</span>
-            {klass.grade && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {klass.grade}
-                  {klass.section ? ` · Section ${klass.section}` : ""}
-                  {klass.roll_no ? ` · Roll ${klass.roll_no}` : ""}
-                </span>
-              </>
-            )}
-            {klass.academic_year && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span>{klass.academic_year.name}</span>
-              </>
-            )}
-          </p>
-          <div className="profile-badges">
-            <span className={`status-pill ${student.status === "active" ? "success" : "warning"}`}>
-              <span className="status-dot" />
-              {titleCase(student.status ?? "unknown")}
-            </span>
-            <span className={`status-pill ${klass.enrolment_status === "active" ? "success" : "neutral"}`}>
-              {klass.enrolment_status === "active" ? "Enrolled" : "Not enrolled"}
-            </span>
-            {student.age !== null && <span className="status-pill neutral">{student.age} yrs</span>}
-          </div>
+        <h1 ref={headingRef} className="profile-name" tabIndex={-1}>
+          {student.name}
+        </h1>
+        <p className="profile-usn">{student.usn ?? "No USN"}</p>
+
+        <p className="profile-class">
+          {klass.grade ?? "Unassigned"}
+          {klass.section ? ` · Section ${klass.section}` : ""}
+          {klass.roll_no ? ` · Roll ${klass.roll_no}` : ""}
+        </p>
+        {klass.academic_year && <p className="profile-year">{klass.academic_year.name}</p>}
+
+        <div className="profile-badges">
+          <span className={`status-pill ${student.status === "active" ? "success" : "warning"}`}>
+            <span className="status-dot" />
+            {titleCase(student.status ?? "unknown")}
+          </span>
+          <span className={`status-pill ${klass.enrolment_status === "active" ? "success" : "neutral"}`}>
+            {klass.enrolment_status === "active" ? "Enrolled" : "Not enrolled"}
+          </span>
         </div>
       </div>
 
-      {/*
-        Quick actions are gated by the same helpers the API enforces. A button the
-        server would refuse is disabled with a reason rather than hidden, because
-        a missing button leaves the user wondering whether the action exists.
-      */}
-      <div className="profile-actions">
-        <QuickAction
-          label="Edit details"
-          icon={Pencil}
-          enabled={canEditStudent(role)}
-          disabledReason="Only an administrator can edit a student record."
-          onClick={onEdit}
-        />
-        <QuickAction
-          label="Take attendance"
-          icon={ClipboardCheck}
-          enabled={canRecordAttendance(role)}
-          disabledReason="Attendance is recorded by teachers and administrators."
-          onClick={() =>
-            toast("Attendance", {
-              description: `Open the Attendance screen to record ${data.student.name}'s register.`,
-            })
-          }
-        />
-        <QuickAction
-          label="Upload document"
-          icon={FileText}
-          enabled={canManageDocuments(role)}
-          disabledReason="Documents are handled by administrators."
-          onClick={() => toast("Documents", { description: "Use the Documents tab to upload a file." })}
-        />
-        <QuickAction
-          label="View results"
-          icon={BookOpen}
-          enabled={data.sections.indexOf("academics") !== -1}
-          disabledReason="You cannot view this student's academic record."
-          onClick={() => toast("Results", { description: "Subject-wise results are on the Academics tab." })}
-        />
-        <QuickAction
-          label="Contact guardian"
-          icon={MessageSquare}
-          enabled={data.sections.indexOf("guardians") !== -1}
-          disabledReason="You cannot view this student's guardians."
-          onClick={() =>
-            toast("Guardian contact", {
-              description: "Use Messages to contact the family, so the conversation is recorded.",
-            })
-          }
-        />
-        <button className="secondary-button compact" onClick={onPrint}>
-          <Printer size={14} />
-          Print
-        </button>
-        <button className="secondary-button compact" onClick={() => downloadSummary(data)}>
-          <Download size={14} />
-          Export
-        </button>
-        {canEditStudent(role) && (
-          <button className="secondary-button compact danger" onClick={onArchive}>
-            Archive
-          </button>
+      <dl className="profile-rail-stats">
+        <div>
+          <dt>Attendance</dt>
+          <dd className={toneForPercent(attendance?.percentage ?? null, 90)}>
+            {formatPercent(attendance?.percentage ?? null)}
+          </dd>
+          <small>{attendance ? `${attendance.marked_sessions} sessions` : "Not available"}</small>
+        </div>
+        <div>
+          <dt>Average</dt>
+          <dd>{formatPercent(average)}</dd>
+          <small>
+            {data.academics
+              ? `${data.academics.subject_performance.length} subjects`
+              : "Not available"}
+          </small>
+        </div>
+        {fees && (
+          <div>
+            <dt>Outstanding</dt>
+            <dd className={fees.outstanding > 0 ? "warning" : "positive"}>{formatMoney(fees.outstanding)}</dd>
+            <small>{fees.overdue_count > 0 ? `${fees.overdue_count} overdue` : "Nothing overdue"}</small>
+          </div>
         )}
+        <div>
+          <dt>Age</dt>
+          <dd>{student.age !== null ? `${student.age}` : "—"}</dd>
+          <small>{student.date_of_birth ? `Born ${formatDate(student.date_of_birth)}` : "Not recorded"}</small>
+        </div>
+      </dl>
+
+      <div className="profile-rail-actions">
+        <button className="primary-button" onClick={onEdit} disabled={!mayEdit} title={mayEdit ? undefined : "Only an administrator can edit a student record."}>
+          <Pencil size={14} />
+          Edit details
+        </button>
+        <div className="profile-rail-utility">
+          <button className="secondary-button compact" onClick={onPrint}>
+            <Printer size={14} />
+            Print
+          </button>
+          <button className="secondary-button compact" onClick={() => downloadSummary(data)}>
+            <Download size={14} />
+            Export
+          </button>
+          {mayEdit && (
+            <button className="secondary-button compact danger" onClick={onArchive}>
+              <Archive size={14} />
+              Archive
+            </button>
+          )}
+        </div>
       </div>
-    </header>
+
+      <nav className="profile-section-nav" aria-label="Profile sections">
+        {[...visible, ...withheld].map((section) => {
+          const Icon = SECTION_ICONS[section] ?? FileText;
+          const locked = withheld.indexOf(section) !== -1;
+          return (
+            <button
+              key={section}
+              className={`${active === section ? "active" : ""}${locked ? " locked" : ""}`.trim()}
+              onClick={() => onSelect(section)}
+              disabled={locked}
+              aria-current={active === section ? "page" : undefined}
+              title={locked ? `You do not have access to ${data.sectionLabels[section] ?? section}` : undefined}
+            >
+              <Icon size={15} />
+              <span>{data.sectionLabels[section] ?? section}</span>
+              {locked && <Lock size={12} className="profile-nav-lock" />}
+            </button>
+          );
+        })}
+      </nav>
+    </aside>
   );
 }
 
-function QuickAction({
-  label,
-  icon: Icon,
-  enabled,
-  disabledReason,
-  onClick,
-}: {
-  label: string;
-  icon: React.ElementType;
-  enabled: boolean;
-  disabledReason: string;
-  onClick: () => void;
-}) {
-  if (!enabled) {
-    return (
-      <button className="secondary-button compact" disabled title={disabledReason}>
-        <Icon size={14} />
-        {label}
-      </button>
-    );
-  }
-  return (
-    <button className="secondary-button compact" onClick={onClick}>
-      <Icon size={14} />
-      {label}
-    </button>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * Overview: the numbers a reader opens the profile for
- * ------------------------------------------------------------------ */
-
-function OverviewStrip({ data }: { data: ProfilePayload }) {
-  const attendance = data.attendance?.summary;
-  const fees = data.fees?.summary;
-
-  return (
-    <div className="metric-row">
-      <Metric
-        label="Attendance"
-        value={formatPercent(attendance?.percentage ?? null)}
-        note={attendance ? `${attendance.marked_sessions} sessions recorded` : "Not available to you"}
-        tone={toneForPercent(attendance?.percentage ?? null, 90)}
-      />
-      <Metric
-        label="Academic average"
-        value={formatPercent(data.academics?.subject_performance?.[0]?.average ?? null)}
-        note={
-          data.academics
-            ? `${data.academics.subject_performance.length} subject${data.academics.subject_performance.length === 1 ? "" : "s"}`
-            : "Not available to you"
-        }
-      />
-      {fees && (
-        <Metric
-          label="Outstanding fees"
-          value={formatMoney(fees.outstanding)}
-          note={fees.overdue_count > 0 ? `${fees.overdue_count} overdue invoice(s)` : "Nothing overdue"}
-          tone={fees.outstanding > 0 ? "warning" : "positive"}
-        />
-      )}
-      <Metric
-        label="Age"
-        value={data.student.age !== null ? `${data.student.age}` : "—"}
-        note={data.student.date_of_birth ? `Born ${formatDate(data.student.date_of_birth)}` : "Date of birth not recorded"}
-      />
-    </div>
-  );
+/** Mean of the subject averages the server published for this student. */
+function averageOfSubjects(subjects: Array<{ average: number | null }>): number | null {
+  const marks = subjects
+    .map((subject) => subject.average)
+    .filter((value): value is number => value !== null && Number.isFinite(value));
+  if (!marks.length) return null;
+  return marks.reduce((total, mark) => total + mark, 0) / marks.length;
 }
 
 function Metric({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: string }) {
@@ -485,47 +452,102 @@ function Metric({ label, value, note, tone }: { label: string; value: string; no
 
 function PersonalSection({ data }: { data: ProfilePayload }) {
   const s = data.student;
+  // City and district are often the same; keep the address from repeating it.
+  const locality = [s.address.city, s.address.district].filter(Boolean);
+  if (locality.length > 1 && locality[0] === locality[1]) locality.pop();
+  const address = [
+    [s.address.line1, s.address.line2].filter(Boolean).join(", "),
+    locality.join(", "),
+    [s.address.state, s.address.pincode].filter(Boolean).join(" "),
+    s.address.country,
+  ].filter(Boolean);
+
   return (
     <div className="section-stack">
-      <OverviewStrip data={data} />
+      <div className="profile-overview-grid">
+        <div className="panel profile-panel">
+          <div className="profile-panel-head">
+            <h2 className="panel-title">Personal details</h2>
+            <p>Core record held by the school.</p>
+          </div>
 
-      <div className="two-column">
-        <div className="panel">
-          <h2 className="panel-title">Personal information</h2>
-          <dl className="detail-list">
-            <Detail label="USN" value={s.usn} />
-            <Detail label="Full name" value={s.name} />
-            <Detail label="Date of birth" value={formatDate(s.date_of_birth)} />
-            <Detail label="Age" value={s.age !== null ? `${s.age} years` : "Not recorded"} />
-            <Detail label="Gender" value={titleCase(s.gender)} />
-            <Detail label="Blood group" value={s.blood_group} />
-            <Detail label="Nationality" value={s.nationality} />
-            <Detail label="Mother tongue" value={s.mother_tongue} />
-            <Detail label="Religion" value={s.religion} />
-            <Detail label="Admission date" value={formatDate(s.joined_on)} />
-            <Detail label="Status" value={titleCase(s.status)} />
-            <Detail label="Current year" value={data.class.academic_year?.name} />
-            <Detail label="Class" value={data.class.grade} />
-            <Detail label="Section" value={data.class.section} />
-            <Detail label="Roll number" value={data.class.roll_no} />
-            <Detail label="Class teacher" value={data.class.class_teacher?.name} />
-          </dl>
+          <div className="profile-fact-group">
+            <h3>Identity</h3>
+            <dl className="fact-grid">
+              <Fact label="USN" value={s.usn} mono />
+              <Fact label="Full name" value={s.name} />
+              <Fact label="Date of birth" value={formatDate(s.date_of_birth)} />
+              <Fact label="Age" value={s.age !== null ? `${s.age} years` : null} />
+              <Fact label="Gender" value={titleCase(s.gender)} />
+              <Fact label="Blood group" value={s.blood_group} />
+              <Fact label="Nationality" value={s.nationality} />
+              <Fact label="Mother tongue" value={s.mother_tongue} />
+              <Fact label="Religion" value={s.religion} />
+            </dl>
+          </div>
+
+          <div className="profile-fact-group">
+            <h3>School</h3>
+            <dl className="fact-grid">
+              <Fact label="Admission date" value={formatDate(s.joined_on)} />
+              <Fact label="Status" value={titleCase(s.status)} />
+              <Fact label="Academic year" value={data.class.academic_year?.name} />
+              <Fact label="Class" value={data.class.grade} />
+              <Fact label="Section" value={data.class.section} />
+              <Fact label="Roll number" value={data.class.roll_no} />
+              <Fact label="Class teacher" value={data.class.class_teacher?.name} />
+              <Fact label="Room" value={data.class.room} />
+            </dl>
+          </div>
         </div>
 
-        <div className="panel">
-          <h2 className="panel-title">Contact and address</h2>
-          <dl className="detail-list">
-            <Detail label="Student email" value={s.email} />
-            <Detail label="Student phone" value={s.phone} />
-            <Detail label="Address" value={joinLines([s.address.line1, s.address.line2])} />
-            <Detail label="City" value={s.address.city} />
-            <Detail label="District" value={s.address.district} />
-            <Detail label="State" value={s.address.state} />
-            <Detail label="PIN code" value={s.address.pincode} />
-            <Detail label="Country" value={s.address.country} />
-            <Detail label="Emergency contact" value={s.emergency_contact_name} />
-            <Detail label="Emergency phone" value={s.emergency_contact_phone} />
-          </dl>
+        <div className="profile-side-stack">
+          <div className="panel profile-panel">
+            <div className="profile-panel-head">
+              <h2 className="panel-title">Contact</h2>
+              <p>How the school reaches the student.</p>
+            </div>
+
+            <dl className="profile-contact-list">
+              <div>
+                <dt>Email</dt>
+                <dd>{s.email || "Not recorded"}</dd>
+              </div>
+              <div>
+                <dt>Phone</dt>
+                <dd>{s.phone || "Not recorded"}</dd>
+              </div>
+            </dl>
+
+            <div className="profile-address">
+              <h3>Address</h3>
+              {address.length ? (
+                <address>
+                  {address.map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                </address>
+              ) : (
+                <p className="profile-muted">Not recorded</p>
+              )}
+            </div>
+          </div>
+
+          <div className="panel profile-panel profile-emergency">
+            <div className="profile-panel-head">
+              <h2 className="panel-title">Emergency contact</h2>
+              <p>Used when a guardian must be reached urgently.</p>
+            </div>
+            <div className="profile-emergency-card">
+              <span className="profile-emergency-icon">
+                <UserRound size={17} />
+              </span>
+              <div>
+                <strong>{s.emergency_contact_name || "Not recorded"}</strong>
+                <span>{s.emergency_contact_phone || "No phone number"}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -555,9 +577,6 @@ function ProfileHistory({ data }: { data: ProfilePayload }) {
       const on = r.published ? "" : " (unpublished)";
       out.push({ when: r.starts_on ?? "", what: `${r.name}: ${formatPercent(r.percentage)}${on}`, kind: "exam" });
     }
-    for (const c of data.communications ?? []) {
-      out.push({ when: c.occurred_at.slice(0, 10), what: `${titleCase(c.kind)}: ${c.subject ?? "recorded"}`, kind: "message" });
-    }
 
     return out
       .filter((e) => e.when)
@@ -566,7 +585,7 @@ function ProfileHistory({ data }: { data: ProfilePayload }) {
   }, [data]);
 
   return (
-    <div className="panel">
+    <div className="panel profile-history-panel">
       <h2 className="panel-title">Recent activity</h2>
       {events.length === 0 ? (
         <p className="panel-subtitle">Nothing has been recorded against this student yet.</p>
@@ -769,23 +788,6 @@ function AcademicsSection({ data }: { data: ProfilePayload }) {
           </table>
         </div>
 
-        <div className="panel">
-          <h2 className="panel-title">Recent assignments</h2>
-          {academics.assignments.length === 0 ? (
-            <p className="panel-subtitle">No assignments set for this class.</p>
-          ) : (
-            <ul className="plain-list">
-              {academics.assignments.map((a) => (
-                <li key={a.id}>
-                  <span className="font-medium">{a.title}</span>
-                  <span className="muted-cell">
-                    {a.subject ?? "—"} · due {formatDate(a.due_at)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -956,8 +958,11 @@ function TrendChart({ points }: { points: Array<{ month: string; percentage: num
   );
 }
 
-function FeesSection({ data }: { data: ProfilePayload }) {
+function FeesSection({ data, onRefresh }: { data: ProfilePayload; onRefresh: () => void | Promise<void> }) {
   const f = data.fees;
+  const [payInvoice, setPayInvoice] = useState<{ id: string; invoiceNo: string; outstanding: number } | null>(null);
+  const [recordInvoice, setRecordInvoice] = useState<{ id: string; invoiceNo: string; outstanding: number } | null>(null);
+  const mayRecord = canManageFees(data.viewer.role);
   if (!f) return <Withheld />;
   const s = f.summary;
 
@@ -1043,6 +1048,36 @@ function FeesSection({ data }: { data: ProfilePayload }) {
                   {formatMoney(inv.paid_amount)} of {formatMoney(inv.total)}
                   {inv.due_on ? ` · due ${formatDate(inv.due_on)}` : ""}
                 </span>
+                {inv.status !== "paid" && inv.total - inv.paid_amount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="secondary-button compact"
+                      onClick={() =>
+                        setPayInvoice({
+                          id: inv.id,
+                          invoiceNo: inv.invoice_no,
+                          outstanding: inv.total - inv.paid_amount,
+                        })
+                      }
+                    >
+                      Pay {formatMoney(inv.total - inv.paid_amount)}
+                    </button>
+                    {mayRecord && (
+                      <button
+                        className="secondary-button compact"
+                        onClick={() =>
+                          setRecordInvoice({
+                            id: inv.id,
+                            invoiceNo: inv.invoice_no,
+                            outstanding: inv.total - inv.paid_amount,
+                          })
+                        }
+                      >
+                        Record UPI
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               {inv.items.length > 0 && (
                 <ul className="plain-list">
@@ -1082,300 +1117,37 @@ function FeesSection({ data }: { data: ProfilePayload }) {
           ))
         )}
       </div>
+
+      <FeePaymentDialog
+        open={Boolean(payInvoice)}
+        invoiceId={payInvoice?.id ?? null}
+        invoiceNo={payInvoice?.invoiceNo ?? ""}
+        outstanding={payInvoice?.outstanding ?? 0}
+        onOpenChange={(open) => {
+          if (!open) setPayInvoice(null);
+        }}
+        onPaid={async () => {
+          await onRefresh();
+        }}
+      />
+
+      <RecordUpiPaymentDialog
+        open={Boolean(recordInvoice)}
+        invoiceId={recordInvoice?.id ?? null}
+        invoiceNo={recordInvoice?.invoiceNo ?? ""}
+        outstanding={recordInvoice?.outstanding ?? 0}
+        onOpenChange={(open) => {
+          if (!open) setRecordInvoice(null);
+        }}
+        onRecorded={async () => {
+          await onRefresh();
+        }}
+      />
     </div>
   );
 }
 
-function HealthSection({ data }: { data: ProfilePayload }) {
-  const h = data.health;
-  if (!h) return <Withheld />;
-  const r = h.record;
 
-  if (!r) {
-    return (
-      <div className="panel empty-state">
-        <HeartPulse size={20} />
-        <h2 className="panel-title">No health record</h2>
-        <p className="panel-subtitle">
-          Nothing has been recorded. Only collect what is needed to keep this student safe and to contact the right
-          person in an emergency.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="section-stack">
-      <div className="notice notice-warning">
-        Medical information is restricted to authorised staff. Do not copy these details into a message to a wider
-        audience.
-      </div>
-
-      <div className="two-column">
-        <div className="panel">
-          <h2 className="panel-title">Medical</h2>
-          <dl className="detail-list">
-            <Detail label="Blood group" value={String(r.blood_group ?? "")} />
-            <Detail label="Known allergies" value={String(r.allergies ?? "")} />
-            <Detail label="Medical conditions" value={String(r.medical_conditions ?? "")} />
-            <Detail label="Medication" value={String(r.medications ?? "")} />
-            <Detail label="Emergency instructions" value={String(r.emergency_instructions ?? "")} />
-          </dl>
-        </div>
-
-        <div className="panel">
-          <h2 className="panel-title">Accessibility and contacts</h2>
-          <dl className="detail-list">
-            <Detail label="Accessibility needs" value={String(r.accessibility_needs ?? "")} />
-            <Detail label="Emergency contact" value={String(r.emergency_contact_name ?? "")} />
-            <Detail label="Emergency phone" value={String(r.emergency_contact_phone ?? "")} />
-            <Detail label="Regular doctor" value={String(r.regular_doctor_name ?? "")} />
-            <Detail label="Doctor phone" value={String(r.regular_doctor_phone ?? "")} />
-            <Detail label="Height" value={r.height_cm ? `${r.height_cm} cm` : ""} />
-            <Detail label="Weight" value={r.weight_kg ? `${r.weight_kg} kg` : ""} />
-          </dl>
-        </div>
-      </div>
-
-      <div className="panel">
-        <h2 className="panel-title">Medical incidents at school</h2>
-        {h.incidents.length === 0 ? (
-          <p className="panel-subtitle">No incidents recorded.</p>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>What happened</th>
-                <th>Action taken</th>
-                <th>Severity</th>
-                <th>Guardian told</th>
-              </tr>
-            </thead>
-            <tbody>
-              {h.incidents.map((i) => (
-                <tr key={i.id}>
-                  <td>{formatDate(i.incident_date)}</td>
-                  <td>{i.summary}</td>
-                  <td className="muted-cell">{i.action_taken ?? "—"}</td>
-                  <td>
-                    <span className={`status-pill ${i.severity === "critical" ? "danger" : "neutral"}`}>
-                      {titleCase(i.severity)}
-                    </span>
-                  </td>
-                  <td>{i.notified_guardian ? "Yes" : "No"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TransportSection({ data }: { data: ProfilePayload }) {
-  const t = data.transport;
-  if (!t) return <Withheld />;
-
-  if (!t.allocations.length) {
-    return (
-      <div className="panel empty-state">
-        <Bus size={20} />
-        <h2 className="panel-title">Not enrolled in transport</h2>
-        <p className="panel-subtitle">This student has no route allocation on record.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="section-stack">
-      {t.allocations.map((a) => (
-        <div className="panel" key={a.id}>
-          <div className="panel-header">
-            <h2 className="panel-title">
-              {a.route_name ?? "Route"}
-              <span className={`status-pill ${a.active ? "success" : "neutral"}`}>
-                <span className="status-dot" />
-                {a.active ? "Current" : a.ended_on ? `Ended ${formatDate(a.ended_on)}` : "Inactive"}
-              </span>
-            </h2>
-            {a.is_authorized_pickup && <span className="chip chip-accent">Authorised pickup</span>}
-          </div>
-          <dl className="detail-list detail-list-inline">
-            <Detail label="Route code" value={a.route_code} />
-            <Detail label="Vehicle" value={a.vehicle_no} />
-            <Detail label="Driver" value={a.driver_name} />
-            <Detail label="Driver phone" value={a.driver_phone} />
-            <Detail label="Pickup stop" value={a.stop_name} />
-            <Detail label="Pickup time" value={a.pickup_time ? a.pickup_time.slice(0, 5) : ""} />
-            <Detail label="Drop time" value={a.drop_time ? a.drop_time.slice(0, 5) : ""} />
-            <Detail label="Transport fee" value={a.fare_amount !== null ? formatMoney(a.fare_amount) : ""} />
-          </dl>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ActivitiesSection({ data }: { data: ProfilePayload }) {
-  const list = data.activities ?? [];
-  if (!list.length) {
-    return (
-      <div className="panel empty-state">
-        <Award size={20} />
-        <h2 className="panel-title">No activities recorded</h2>
-        <p className="panel-subtitle">Sports, clubs, competitions and events appear here once recorded.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="panel">
-      <h2 className="panel-title">Extracurricular activities</h2>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Activity</th>
-            <th>Category</th>
-            <th>Role</th>
-            <th>Participation</th>
-            <th>Award</th>
-            <th>Certificate</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.map((a) => (
-            <tr key={a.id}>
-              <td className="font-medium">{a.name}</td>
-              <td className="muted-cell">{titleCase(a.category)}</td>
-              <td>{a.role ?? "—"}</td>
-              <td>
-                <span className={`status-pill ${a.participation === "active" ? "success" : "neutral"}`}>
-                  <span className="status-dot" />
-                  {titleCase(a.participation)}
-                </span>
-              </td>
-              <td>{a.award ?? a.achievement ?? "—"}</td>
-              <td className="muted-cell">{a.certificate_ref ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ObservationsSection({ data, role }: { data: ProfilePayload; role: string }) {
-  const list = data.observations;
-  if (!list) return <Withheld />;
-
-  if (!list.length) {
-    return (
-      <div className="panel empty-state">
-        <MessageSquare size={20} />
-        <h2 className="panel-title">No observations recorded</h2>
-        <p className="panel-subtitle">
-          Observations are factual notes from teachers, kept here with their author and date.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="section-stack">
-      {canWriteObservations(role) && (
-        <div className="panel-header">
-          <button
-            className="primary-button compact"
-            onClick={() => toast("New observation", { description: "Observation recording is available to teachers and administrators." })}
-          >
-            Add observation
-          </button>
-        </div>
-      )}
-      {list.map((o) => (
-        <div className="panel" key={o.id}>
-          <div className="panel-header">
-            <h3 className="subsection-title">
-              {titleCase(o.category)}
-              <span className="chip">{formatDate(o.observed_on)}</span>
-              {o.visible_to_guardians ? (
-                <span className="chip chip-accent">Shared with family</span>
-              ) : (
-                <span className="chip chip-muted">Not shared</span>
-              )}
-            </h3>
-          </div>
-          <p className="body-text">{o.body}</p>
-          <dl className="detail-list detail-list-inline">
-            {o.classroom_participation !== null && (
-              <Detail label="Lessons participated in" value={String(o.classroom_participation)} />
-            )}
-            {o.action_taken && <Detail label="Action taken" value={o.action_taken} />}
-            {o.follow_up_on && (
-              <Detail
-                label="Follow-up"
-                value={`${formatDate(o.follow_up_on)}${o.follow_up_done ? " · done" : " · outstanding"}`}
-              />
-            )}
-            {o.follow_up_notes && <Detail label="Follow-up notes" value={o.follow_up_notes} />}
-          </dl>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CommunicationsSection({ data }: { data: ProfilePayload }) {
-  const list = data.communications;
-  if (!list) return <Withheld />;
-
-  if (!list.length) {
-    return (
-      <div className="panel empty-state">
-        <MessageSquare size={20} />
-        <h2 className="panel-title">No communication recorded</h2>
-        <p className="panel-subtitle">
-          Meetings and logged contacts about this student appear here. Messages stay in the Messages screen.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="panel">
-      <h2 className="panel-title">Communication history</h2>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>When</th>
-            <th>Type</th>
-            <th>Subject</th>
-            <th>Guardian</th>
-            <th>Acknowledged</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.map((c) => (
-            <tr key={c.id}>
-              <td>{formatDate(c.occurred_at)}</td>
-              <td>
-                <span className="chip">{titleCase(c.kind)}</span>
-              </td>
-              <td>
-                {c.subject ?? "—"}
-                {c.notes && <div className="muted-cell">{c.notes}</div>}
-              </td>
-              <td className="muted-cell">{c.guardian ?? "All guardians"}</td>
-              <td>{c.acknowledged_at ? formatDate(c.acknowledged_at) : "Not yet"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 function AdmissionSection({ data }: { data: ProfilePayload }) {
   const list = data.admission;
@@ -1425,57 +1197,7 @@ function AdmissionSection({ data }: { data: ProfilePayload }) {
   );
 }
 
-function LibrarySection({ data }: { data: ProfilePayload }) {
-  const l = data.library;
-  if (!l) return <Withheld />;
 
-  return (
-    <div className="section-stack">
-      <div className="metric-row">
-        <Metric label="Books out" value={String(l.current_count)} />
-        <Metric label="Overdue" value={String(l.overdue_count)} tone={l.overdue_count > 0 ? "warning" : undefined} />
-        <Metric label="Total fines" value={formatMoney(l.total_fines)} tone={l.total_fines > 0 ? "warning" : undefined} />
-      </div>
-
-      <div className="panel">
-        <h2 className="panel-title">Borrowing history</h2>
-        {l.loans.length === 0 ? (
-          <p className="panel-subtitle">No books have been issued to this student.</p>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Book</th>
-                <th>Issued</th>
-                <th>Due</th>
-                <th>Returned</th>
-                <th>Status</th>
-                <th>Fine</th>
-              </tr>
-            </thead>
-            <tbody>
-              {l.loans.map((b) => (
-                <tr key={b.id}>
-                  <td className="font-medium">{b.book_title}</td>
-                  <td>{formatDate(b.issued_on)}</td>
-                  <td>{formatDate(b.due_on)}</td>
-                  <td>{b.returned_on ? formatDate(b.returned_on) : "—"}</td>
-                  <td>
-                    <span className={`status-pill ${b.status === "returned" ? "success" : b.status === "overdue" ? "danger" : "warning"}`}>
-                      <span className="status-dot" />
-                      {titleCase(b.status)}
-                    </span>
-                  </td>
-                  <td>{formatMoney(b.fine_amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function AccountSection({ data }: { data: ProfilePayload }) {
   const a = data.account;
@@ -1502,7 +1224,9 @@ function AccountSection({ data }: { data: ProfilePayload }) {
       <div className="panel">
         <h2 className="panel-title">Account</h2>
         <dl className="detail-list detail-list-inline">
-          <Detail label="Login identifier" value={a.login_identifier} />
+          {/* The USN is the sign-in username for pupils. Showing both as separate
+              fields implied two identifiers where the school only has one. */}
+          <Detail label="USN" value={data.student.usn ?? a.login_identifier} />
           <Detail label="Full name" value={a.full_name} />
           <Detail label="Email" value={a.email} />
           <Detail label="Role" value={titleCase(a.role)} />
@@ -1551,6 +1275,7 @@ function EditStudentDialog({
     emergency_contact_name: s.emergency_contact_name ?? "",
     emergency_contact_phone: s.emergency_contact_phone ?? "",
     status: s.status ?? "active",
+    photo_url: s.photo_url ?? "",
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -1559,7 +1284,8 @@ function EditStudentDialog({
     () =>
       form.first_name !== (s.first_name ?? "") ||
       form.last_name !== (s.last_name ?? "") ||
-      form.usn !== (s.usn ?? ""),
+      form.usn !== (s.usn ?? "") ||
+      form.photo_url !== (s.photo_url ?? ""),
     // Recomputed only when the record itself changes, not on every keystroke:
     // the dirty flag guards the close handler, not the form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1606,6 +1332,9 @@ function EditStudentDialog({
         status: form.status,
         emergency_contact_name: form.emergency_contact_name,
         emergency_contact_phone: form.emergency_contact_phone,
+        ...(form.photo_url !== (s.photo_url ?? "")
+          ? { photo_url: form.photo_url }
+          : {}),
         address: {
           line1: form.line1,
           line2: form.line2,
@@ -1628,12 +1357,19 @@ function EditStudentDialog({
         <div className="modal-header">
           <h2 className="panel-title">Edit {s.name}</h2>
           <button className="secondary-button compact" onClick={onClose}>
-            <Activity size={14} />
+            <X size={14} />
             Close
           </button>
         </div>
 
         <div className="modal-body">
+          <ProfilePhotoPicker
+            name={[form.first_name, form.last_name].filter(Boolean).join(" ") || s.name}
+            photoUrl={form.photo_url || null}
+            folder={`student-avatars/${s.id}`}
+            onChange={(url) => set("photo_url")(url ?? "")}
+          />
+
           <fieldset>
             <legend>Identity</legend>
             <div className="form-grid">
@@ -1774,14 +1510,6 @@ function EditStudentDialog({
  * Supporting pieces
  * ------------------------------------------------------------------ */
 
-function BackLink({ onClick }: { onClick: () => void }) {
-  return (
-    <button className="back-link" onClick={onClick}>
-      <ArrowLeft size={15} />
-      Back to students
-    </button>
-  );
-}
 
 function Withheld() {
   return (
@@ -1807,15 +1535,45 @@ function Detail({ label, value }: { label: string; value: string | number | null
   );
 }
 
+function Fact({
+  label,
+  value,
+  mono = false,
+  wide = false,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  mono?: boolean;
+  wide?: boolean;
+}) {
+  const empty = value === null || value === undefined || value === "" || value === "—";
+  return (
+    <div className={`fact${wide ? " fact-wide" : ""}`}>
+      <dt>{label}</dt>
+      <dd className={`${empty ? "empty" : ""}${mono ? " mono" : ""}`.trim() || undefined}>
+        {empty ? "Not recorded" : String(value)}
+      </dd>
+    </div>
+  );
+}
+
 function ProfileSkeleton({ name, onBack }: { name: string; onBack: () => void }) {
   return (
-    <div className="page-stack">
-      <BackLink onClick={onBack} />
-      <div className="panel skeleton-panel" role="status" aria-busy="true">
-        <span className="sr-only">{name}</span>
-        <div className="skeleton-line skeleton-line-wide" />
-        <div className="skeleton-line" />
-        <div className="skeleton-line skeleton-line-short" />
+    <div className="page-stack student-profile-page">
+      <ProfileCrumbs name="Student record" onBack={onBack} />
+      <div className="student-profile-shell">
+        <aside className="profile-rail profile-rail-skeleton" aria-hidden="true">
+          <div className="skeleton-avatar" />
+          <div className="skeleton-line skeleton-line-wide" />
+          <div className="skeleton-line skeleton-line-short" />
+          <div className="skeleton-line" />
+        </aside>
+        <div className="panel skeleton-panel" role="status" aria-busy="true">
+          <span className="sr-only">{name}</span>
+          <div className="skeleton-line skeleton-line-wide" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line skeleton-line-short" />
+        </div>
       </div>
     </div>
   );

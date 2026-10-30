@@ -114,6 +114,7 @@ client/public/__manus__/version.json
 .project-config.json
 .vercel
 .env*
+supabase/.temp/
 
 # The Webflow export the landing page is built from. Only its index.html is a
 # build input - scripts/build-landing.mjs reads that one file - so the other 30

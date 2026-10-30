@@ -268,6 +268,20 @@ describe("resolveEmails", () => {
     ).toHaveLength(1);
   });
 
+  it("finds a member of staff by the USN on the staff record", async () => {
+    const spy = mockFetchSequence([
+      json([]),
+      json([]),
+      json([]),
+      json([{ profile_id: "staff-profile-1" }]),
+      json([{ email: "eklavya@myschool.edu.in" }]),
+    ]);
+    expect(await resolveEmails("STF1001")).toEqual(["eklavya@myschool.edu.in"]);
+    expect(
+      callsTo(spy, "/rest/v1/staff?select=profile_id&usn=ilike.stf1001")
+    ).toHaveLength(1);
+  });
+
   it("does not match a username that is only the tail of an address", async () => {
     mockFetchSequence([
       json([]),
@@ -283,6 +297,7 @@ describe("resolveEmails", () => {
     const spy = mockFetchSequence([
       json([]),
       json([{ email: "santosh.nair@myschool.edu.in" }]),
+      json([]),
       json([]),
       json({
         users: [

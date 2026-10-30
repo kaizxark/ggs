@@ -19,10 +19,11 @@ export interface StaffProfileStaff {
   phone: string | null;
   designation: string | null;
   department: string | null;
-  employee_code: string | null;
+  usn: string | null;
   joined_on: string | null;
   active: boolean;
   profile_id: string | null;
+  photo_url: string | null;
 }
 
 export interface StaffClass {
@@ -81,6 +82,7 @@ export interface StaffProfilePayload {
 /** The editable fields on a staff record. */
 export interface StaffDraft {
   name?: string;
+  usn?: string;
   email?: string;
   phone?: string;
   designation?: string;
@@ -89,6 +91,8 @@ export interface StaffDraft {
   active?: boolean;
   /** Written to the linked profile, not the staff row. Managers only. */
   role?: string;
+  /** Written to the linked profile, not the staff row. Managers only. */
+  photo_url?: string | null;
 }
 
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {

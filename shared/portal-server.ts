@@ -199,6 +199,12 @@ export interface ProvisionInput {
   organisationId: string;
   /** The address typed on the record. Falls back to a placeholder. */
   email?: unknown;
+  /**
+   * What the person types to sign in. Defaults to the address for older
+   * callers, but pupils and staff use their USN so the sign-in name matches the
+   * identifier printed on their record.
+   */
+  username?: unknown;
   name: string;
   /**
    * The app_role to give the linked profile.
@@ -262,11 +268,12 @@ export async function provisionPortalAccount(
   const email = signInEmail(input.subject, input.recordId, input.email);
 
   /*
-   * The username is the address, which is what the school asked for and what
-   * `/api/login` already accepts — so no mapping table is needed to get from a
-   * typed name to a mailbox.
+   * Pupils and staff sign in with their USN, not their mailbox. The address is
+   * still what receives the one-time code; the username is the identifier the
+   * school prints on the record.
    */
-  const username = email;
+  const wantedUsername = String(input.username ?? "").trim().toLowerCase();
+  const username = isValidUsername(wantedUsername) ? wantedUsername : email;
 
   /*
    * The first password is derived from the record, so it is never written
@@ -849,7 +856,7 @@ export async function changePortalCredentials(
       await insert(CREDENTIAL_TABLE.staff, {
         staff_id: input.staffId,
         organisation_id: input.organisationId ?? null,
-        username: email,
+        username: username ?? email,
         email,
         password,
         issued_at: new Date().toISOString(),

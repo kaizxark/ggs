@@ -25,14 +25,21 @@ const ROLES = [
 ];
 
 describe("screen matrix and route permissions agree", () => {
-  it("offers the Documents screen to exactly the roles that may use the route", () => {
+  it("does not offer a separate Documents screen to any role (documents live under students)", () => {
     for (const role of ROLES) {
-      const offered = screensForRole(role).indexOf("documents") !== -1;
-      const allowed = canViewDocuments(role);
-      // super_admin is the only role the route admits that the screen matrix
-      // would otherwise call "admin", so compare against that spelling too.
-      expect(offered, `${role}: Documents screen`).toBe(allowed);
+      const offered = screensForRole(role).indexOf("documents" as any) !== -1;
+      expect(offered, `${role}: Documents screen should not be in navigation`).toBe(false);
     }
+  });
+
+  it("restricts canViewDocuments to administrators", () => {
+    expect(canViewDocuments("super_admin")).toBe(true);
+    expect(canViewDocuments("admin")).toBe(true);
+    expect(canViewDocuments("teacher")).toBe(false);
+    expect(canViewDocuments("principal")).toBe(false);
+    expect(canViewDocuments("staff")).toBe(false);
+    expect(canViewDocuments("student")).toBe(false);
+    expect(canViewDocuments("parent")).toBe(false);
   });
 
   it("offers the Students screen to exactly the roles that may list students", () => {

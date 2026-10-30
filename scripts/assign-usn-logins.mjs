@@ -3,9 +3,9 @@
  * One-off: give every student and member of staff a USN login, a test mailbox,
  * a date-of-birth password and (for staff) a test date of birth.
  *
- * The USN is the existing USN / employee code with punctuation
- * removed, lowercased: adm26270001 -> adm26270001, EMP-2012-026 ->
- * emp2012026. Existing values are kept; nothing is renumbered.
+ * The USN is the existing pupil or staff USN with punctuation removed,
+ * lowercased: GGS1001 -> ggs1001, STF1001 -> stf1001. Existing values are
+ * kept; nothing is renumbered.
  *
  * Supabase auth addresses must stay unique, so `profiles.email` and the auth
  * user's email are left alone. The address on the student/staff record is set
@@ -94,7 +94,7 @@ async function main() {
     ),
     req(
       "GET",
-      `/rest/v1/staff?select=id,employee_code,name,email,profile_id,organisation_id&organisation_id=eq.${ORG_ID}&order=employee_code.asc&limit=5000`
+      `/rest/v1/staff?select=id,usn,name,email,profile_id,organisation_id&organisation_id=eq.${ORG_ID}&order=usn.asc&limit=5000`
     ),
     req(
       "GET",
@@ -131,9 +131,9 @@ async function main() {
       kind: "staff",
       index,
       record: person,
-      usn: compact(person.employee_code),
+      usn: compact(person.usn),
       name: person.name,
-      code: person.employee_code,
+      code: person.usn,
       profile: person.profile_id ? profileById.get(person.profile_id) ?? null : null,
     })),
   ];

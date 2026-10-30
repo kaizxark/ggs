@@ -76,7 +76,6 @@ const DATASET_SCREENS: Record<string, string> = {
   health_metrics: "analytics",
   exams: "examinations",
   exam_results: "examinations",
-  assignments: "assignments",
   subjects: "academics",
   library_books: "academics",
   schedule: "academics",
@@ -84,9 +83,6 @@ const DATASET_SCREENS: Record<string, string> = {
   announcements: "overview",
   messages: "overview",
   notifications: "overview",
-  transport_routes: "transport",
-  vehicles: "transport",
-  activity_feed: "transport",
   report_exports: "reports",
   people: "users",
 };

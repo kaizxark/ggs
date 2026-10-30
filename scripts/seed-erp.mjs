@@ -492,7 +492,7 @@ async function main() {
   const staffRows = STAFF.map(([name, designation, department], i) => ({
     id: staffJobs[i].id,
     organisation_id: ORG_ID,
-    employee_code: `EMP-${int(2012, 2024)}-${pad(int(1, 60), 3)}`,
+    usn: `STF${pad(1001 + i, 4)}`,
     name,
     designation,
     department,

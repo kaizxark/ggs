@@ -50,11 +50,6 @@ export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
     blurb:
       "every enrolled pupil: name, grade, section, USN, attendance, academic average, status",
   },
-  documents: {
-    label: "Documents",
-    blurb:
-      "the student document checklist: what each pupil has submitted and what is still missing",
-  },
   attendance: {
     label: "Attendance",
     blurb:
@@ -85,16 +80,6 @@ export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
     blurb:
       "the exam schedule, results publishing state and per-paper marking progress",
   },
-  assignments: {
-    label: "Assignments",
-    blurb:
-      "homework set per class, who has submitted, what is late and what is still ungraded",
-  },
-  transport: {
-    label: "Transport",
-    blurb:
-      "routes, vehicles, drivers, pickup points and how many pupils ride each",
-  },
   reports: {
     label: "Reports",
     blurb: "exported reports and the principal's review list",
@@ -103,11 +88,6 @@ export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
     label: "User management",
     blurb:
       "who can sign in, their role and access level, invitations, and student portal logins",
-  },
-  credentials: {
-    label: "Account logins",
-    blurb:
-      "every pupil and staff account, its username, whether it still needs a password chosen, and the backfill that gives unrecorded addresses a working one",
   },
   settings: {
     label: "Settings",
@@ -196,15 +176,7 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
   // Every other role below — including `admin` — deliberately drops the key.
   super_admin: ALL_SCREEN_KEYS,
 
-  // Runs the school day to day: everything an administrator needs to run the
-  // school, and nothing more. An admin outranks every other account except the
-  // super admin and needs the same view of the data — but not the passwords.
-  //
-  // Written as ALL_SCREEN_KEYS minus `credentials` rather than as a literal
-  // list, so a screen added later reaches this role too. Spelling it out would
-  // mean the next screen had to be remembered in two places, and the one time
-  // somebody forgot, an admin quietly could not open something they should.
-  admin: ALL_SCREEN_KEYS.filter(key => key !== "credentials"),
+  admin: ALL_SCREEN_KEYS,
 
   // The academic head. Sees pupils, teaching and results in depth; the money
   // and the accounts are not theirs to read.
@@ -221,8 +193,6 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
     "staff",
     "academics",
     "examinations",
-    "assignments",
-    "transport",
     "reports",
     "settings",
   ],
@@ -236,13 +206,11 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
     "attendance",
     "academics",
     "examinations",
-    "assignments",
-    "transport",
     "settings",
   ],
 
   // Non-teaching staff. Enough to help a visitor, nothing that is a ledger.
-  staff: ["overview", "students", "attendance", "transport", "settings"],
+  staff: ["overview", "students", "attendance", "settings"],
 
   // The accounts desk. Money in full; nothing about other people's accounts.
   accountant: [
@@ -250,7 +218,6 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
     "students",
     "attendance",
     "finance",
-    "transport",
     "reports",
     "settings",
   ],
@@ -267,10 +234,8 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
   // A parent reaches their own child through /api/student-profile, which
   // resolves the guardian link server-side and returns 404 for anything else.
   parent: ["overview", "attendance", "finance", "settings"],
-};
-
-/**
- * Screens a role can open, by stored role name.
+};  /**
+   * Screens a role can open, by stored role name.
  *
  * Unknown roles get the narrowest sensible default rather than the widest.
  * Failing open on an unrecognised role is how a future role nobody has thought
@@ -398,18 +363,6 @@ const BRIEF_SCOPES: Array<{ keys: string[]; screens: AiScreenKey[] }> = [
   {
     keys: ["exams", "exams_note", "exam_results", "exam_results_note"],
     screens: ["examinations"],
-  },
-  { keys: ["assignments", "assignments_note"], screens: ["assignments"] },
-  {
-    keys: [
-      "transport_routes",
-      "transport_routes_note",
-      "vehicles",
-      "vehicles_note",
-      "activity_feed",
-      "activity_feed_note",
-    ],
-    screens: ["transport"],
   },
   { keys: ["people", "people_note"], screens: ["users"] },
   { keys: ["settings_snapshot", "settings_note"], screens: ["settings"] },
@@ -662,7 +615,7 @@ export function sanitiseSuggestion(
 export function emptySuggestion(): AiSuggestion {
   return {
     answer:
-      "Ask me anything about this school — attendance, fees, results, staff or transport.",
+      "Ask me anything about this school — attendance, fees, results or staff.",
     bullets: [],
     actions: [],
     followUps: [],

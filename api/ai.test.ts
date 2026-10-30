@@ -95,7 +95,6 @@ describe("scopeDatasets", () => {
     invoices: [{ family: "Menon family" }],
     people: [{ email: "kaizxark@gmail.com" }],
     staff: [{ name: "Priya Shah" }],
-    transport_routes: [{ vehicle: "KA-01" }],
   };
 
   it("gives a teacher the teaching data and nothing financial", () => {
@@ -103,31 +102,20 @@ describe("scopeDatasets", () => {
     // A teacher cannot open the Staff screen either, so the staff directory is
     // scoped out with everything else — the assistant is deliberately no more
     // generous than the dashboard it lives in.
-    expect(Object.keys(scoped).sort()).toEqual([
-      "students",
-      "transport_routes",
-    ]);
+    expect(Object.keys(scoped).sort()).toEqual(["students"]);
     // The ledger must not be anywhere in what reaches the provider.
     expect(JSON.stringify(scoped)).not.toContain("Menon");
   });
 
   it("gives an accountant the money but not other people's accounts", () => {
     const scoped = scopeDatasets(ALL, "accountant");
-    expect(Object.keys(scoped).sort()).toEqual([
-      "invoices",
-      "students",
-      "transport_routes",
-    ]);
+    expect(Object.keys(scoped).sort()).toEqual(["invoices", "students"]);
     expect(JSON.stringify(scoped)).not.toContain("kaizxark@gmail.com");
   });
 
   it("gives a principal results and staffing but no ledger and no accounts", () => {
     const scoped = scopeDatasets(ALL, "principal");
-    expect(Object.keys(scoped).sort()).toEqual([
-      "staff",
-      "students",
-      "transport_routes",
-    ]);
+    expect(Object.keys(scoped).sort()).toEqual(["staff", "students"]);
   });
 
   it("gives the super admin everything", () => {
@@ -237,13 +225,10 @@ describe("screensForRole", () => {
     );
   });
 
-  it("keeps the credential screen away from every role but the owner's", () => {
-    // `credentials` is the only screen that reads the password column. It must
-    // not reach an ordinary admin, who otherwise gets everything, nor any of
-    // the teaching, office or family roles.
-    expect(screensForRole("super_admin")).toContain("credentials");
+  it("keeps the users screen away from non-admin roles", () => {
+    expect(screensForRole("super_admin")).toContain("users");
+    expect(screensForRole("admin")).toContain("users");
     for (const role of [
-      "admin",
       "principal",
       "teacher",
       "staff",
@@ -251,7 +236,7 @@ describe("screensForRole", () => {
       "student",
       "parent",
     ]) {
-      expect(screensForRole(role)).not.toContain("credentials");
+      expect(screensForRole(role)).not.toContain("users");
     }
   });
 
@@ -368,7 +353,6 @@ describe("fitBrief", () => {
       ready_made_answers: { fees: "keep me" },
       headline: { active_students: 10 },
       generated_at: "now",
-      transport_routes: [{ vehicle: "x".repeat(4000) }],
       announcements: [{ body: "y".repeat(4000) }],
     };
     const fitted = fitBrief(brief, 500);

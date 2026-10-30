@@ -141,6 +141,9 @@ export async function resolveEmails(username: string): Promise<string[]> {
   const byUsn = await emailsForUsn(wanted);
   if (byUsn.length > 0) return byUsn;
 
+  const byStaffUsn = await emailsForStaffUsn(wanted);
+  if (byStaffUsn.length > 0) return byStaffUsn;
+
   /*
    * Neither source in `profiles` matched, so consult the auth user list — the
    * authority for what can actually receive a recovery email.
@@ -181,6 +184,63 @@ async function emailsForUsn(usn: string): Promise<string[]> {
 
     const profileRes = await fetch(
       `${SUPABASE_URL}/rest/v1/profiles?select=email&student_id=in.(${ids
+        .map(id => encodeURIComponent(id))
+        .join(",")})&limit=10`,
+      {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+      }
+    );
+    if (!profileRes.ok) return [];
+    const profiles = (await profileRes.json()) as { email?: string | null }[];
+    return Array.from(
+      new Set(
+        profiles
+          .map(profile =>
+            String(profile?.email ?? "")
+              .trim()
+              .toLowerCase()
+          )
+          .filter(email => isValidEmail(email))
+      )
+    );
+  } catch {
+    return [];
+  }
+}
+
+
+/**
+ * The account addresses of the staff member whose USN this is.
+ *
+ * Staff sign in with the identifier on their record, so this path has to exist
+ * alongside the pupil one even when a profile still carries an older username.
+ */
+async function emailsForStaffUsn(usn: string): Promise<string[]> {
+  if (!SERVICE_KEY) return [];
+  try {
+    const staffRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/staff?select=profile_id&usn=ilike.${encodeURIComponent(
+        usn
+      )}&limit=10`,
+      {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        },
+      }
+    );
+    if (!staffRes.ok) return [];
+    const staff = (await staffRes.json()) as { profile_id?: string | null }[];
+    const ids = staff
+      .map(person => String(person.profile_id ?? ""))
+      .filter(Boolean);
+    if (!ids.length) return [];
+
+    const profileRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/profiles?select=email&id=in.(${ids
         .map(id => encodeURIComponent(id))
         .join(",")})&limit=10`,
       {

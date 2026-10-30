@@ -4,6 +4,7 @@ import {
   Baby,
   CheckCircle2,
   Download,
+  Eye,
   FileSignature,
   FileText,
   Globe,
@@ -11,6 +12,7 @@ import {
   Loader2,
   LogOut,
   Paperclip,
+  Plus,
   Syringe,
   Ticket,
   Trash2,
@@ -95,6 +97,7 @@ export function StudentDocumentsPanel({
   }, [load]);
 
   const byType = new Map(documents.map((doc) => [doc.docType, doc]));
+  const otherDocs = documents.filter((doc) => !DOC_TYPES.some((t) => t.id === doc.docType));
 
   const pick = (docType: string) => {
     inputs.current[docType]?.click();
@@ -107,7 +110,7 @@ export function StudentDocumentsPanel({
       const saved = await uploadStudentDocument(studentId, docType, file);
       setDocuments((current) => [
         saved,
-        ...current.filter((doc) => doc.docType !== docType),
+        ...current.filter((doc) => doc.key !== saved.key && doc.docType !== docType),
       ]);
       toast.success(`${docTypeById(docType)?.short ?? "Document"} saved`, {
         description: `${file.name} · ${formatBytes(saved.sizeBytes)}`,
@@ -124,18 +127,55 @@ export function StudentDocumentsPanel({
     }
   };
 
-  const open = async (doc: StudentDocument) => {
+  const view = async (doc: StudentDocument) => {
     // key is "<studentId>/<file>"; the route wants just the file part.
     const file = doc.key.split("/").slice(1).join("/");
     try {
       const url = await getDocumentUrl(studentId, file);
-      window.open(url, "_blank", "noopener");
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "That document could not be opened."
       );
     }
   };
+
+  const download = async (doc: StudentDocument) => {
+    const file = doc.key.split("/").slice(1).join("/");
+    try {
+      const url = await getDocumentUrl(studentId, file);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Download request failed.");
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = doc.fileName || `${doc.docType}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      toast.success(`Downloaded ${doc.fileName}`);
+    } catch {
+      try {
+        const url = await getDocumentUrl(studentId, file);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = doc.fileName || `${doc.docType}.pdf`;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Could not download document."
+        );
+      }
+    }
+  };
+
+  const open = view;
 
   const remove = async (doc: StudentDocument) => {
     const label = docTypeById(doc.docType)?.short ?? "Document";
@@ -224,29 +264,36 @@ export function StudentDocumentsPanel({
                 )}
               </div>
               <div className="doc-actions">
-                <button
-                  className="tiny-action"
-                  onClick={() => pick(type.id)}
-                  disabled={busy}
-                >
-                  {busy ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : held ? (
-                    <Upload size={13} />
-                  ) : (
-                    <Paperclip size={13} />
-                  )}
-                  {held ? "Replace" : "Upload"}
-                </button>
-                {held && (
+                {held ? (
                   <>
                     <button
                       className="doc-icon-button"
-                      onClick={() => void open(held)}
-                      aria-label={`Open ${type.short} for ${studentName}`}
-                      title="Open"
+                      onClick={() => void view(held)}
+                      aria-label={`View ${type.short} for ${studentName}`}
+                      title="View"
+                    >
+                      <Eye size={15} />
+                    </button>
+                    <button
+                      className="doc-icon-button"
+                      onClick={() => void download(held)}
+                      aria-label={`Download ${type.short} for ${studentName}`}
+                      title="Download"
                     >
                       <Download size={15} />
+                    </button>
+                    <button
+                      className="tiny-action"
+                      onClick={() => pick(type.id)}
+                      disabled={busy}
+                      title="Replace file"
+                    >
+                      {busy ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Upload size={13} />
+                      )}
+                      Replace
                     </button>
                     <button
                       className="doc-icon-button danger"
@@ -258,6 +305,19 @@ export function StudentDocumentsPanel({
                       <Trash2 size={15} />
                     </button>
                   </>
+                ) : (
+                  <button
+                    className="tiny-action"
+                    onClick={() => pick(type.id)}
+                    disabled={busy}
+                  >
+                    {busy ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Upload size={13} />
+                    )}
+                    Upload
+                  </button>
                 )}
               </div>
               <input
@@ -274,6 +334,81 @@ export function StudentDocumentsPanel({
             </div>
           );
         })}
+
+        {otherDocs.map((doc) => {
+          const busy = busyType === doc.docType;
+          return (
+            <div className="doc-row held" key={doc.key}>
+              <span className="doc-icon held">
+                <FileText size={16} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="doc-name">
+                  {doc.docType ? docTypeById(doc.docType)?.short ?? doc.docType : "Document"}
+                  <CheckCircle2 size={13} className="doc-onfile" />
+                </div>
+                <div className="doc-meta">
+                  {doc.fileName} · {formatBytes(doc.sizeBytes)} ·{" "}
+                  {formatIssuedAt(doc.issuedAt)}
+                </div>
+              </div>
+              <div className="doc-actions">
+                <button
+                  className="doc-icon-button"
+                  onClick={() => void view(doc)}
+                  aria-label={`View ${doc.fileName}`}
+                  title="View"
+                >
+                  <Eye size={15} />
+                </button>
+                <button
+                  className="doc-icon-button"
+                  onClick={() => void download(doc)}
+                  aria-label={`Download ${doc.fileName}`}
+                  title="Download"
+                >
+                  <Download size={15} />
+                </button>
+                <button
+                  className="doc-icon-button danger"
+                  onClick={() => void remove(doc)}
+                  disabled={busy}
+                  aria-label={`Remove ${doc.fileName}`}
+                  title="Remove"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-[var(--border)] flex justify-between items-center">
+        <span className="text-xs text-[var(--text-muted)]">Upload additional document</span>
+        <button
+          className="tiny-action"
+          onClick={() => inputs.current["other"]?.click()}
+          disabled={busyType === "other"}
+        >
+          {busyType === "other" ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <Plus size={13} />
+          )}
+          Upload other file
+        </button>
+        <input
+          ref={(node) => {
+            inputs.current["other"] = node;
+          }}
+          type="file"
+          className="hidden"
+          accept=".pdf,application/pdf,image/png,image/jpeg,image/webp"
+          onChange={(event) =>
+            void onFile("other", event.target.files?.[0])
+          }
+        />
       </div>
     </div>
   );
