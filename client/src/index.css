@@ -32,13 +32,13 @@
 
   /* ---------- Apple Dark Surfaces & Frosted Materials ---------- */
   --bg-page: #08090a;                  /* pure deep dark canvas */
-  --bg-sidebar: rgba(16, 17, 20, 0.78);/* frosted glass sidebar */
-  --bg-panel: rgba(24, 25, 29, 0.72);  /* translucent frosted card/panel */
+  --bg-sidebar: rgba(16, 17, 20, 0.88);/* frosted glass sidebar */
+  --bg-panel: rgba(22, 23, 28, 0.88);  /* frosted card/panel */
   --bg-panel-solid: #151619;           /* solid fallback surface */
   --bg-input: rgba(255, 255, 255, 0.05);/* recessed input background */
   --bg-hover: rgba(255, 255, 255, 0.08);/* surface hover */
   --bg-raised: rgba(255, 255, 255, 0.035);/* subtle recessed container */
-  --bg-card: rgba(24, 25, 29, 0.65);   /* floating pill container */
+  --bg-card: rgba(22, 23, 28, 0.84);   /* floating pill container */
 
   /* ---------- Specular Apple Borders & Dividers ---------- */
   --border: rgba(255, 255, 255, 0.08);        /* default specular border */
@@ -1756,17 +1756,20 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .modal-scrim {
   position: fixed; inset: 0; z-index: 100;
   display: grid; place-items: center;
-  background: rgba(3,6,8,.62); padding: 22px;
-  backdrop-filter: blur(5px);
+  background: rgba(0, 0, 0, 0.72); padding: 22px;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   animation: fade-in .16s ease-out;
 }
 
 .modal {
   display: flex; flex-direction: column;
   width: min(560px, 100%); max-height: min(88vh, 900px);
-  border: 1px solid var(--border-strong); border-radius: 13px;
-  background: var(--bg-panel);
-  box-shadow: 0 26px 70px rgba(0,0,0,.62);
+  border: 1px solid var(--border-strong); border-radius: 18px;
+  background: rgba(20, 21, 26, 0.94);
+  backdrop-filter: blur(36px) saturate(190%);
+  -webkit-backdrop-filter: blur(36px) saturate(190%);
+  box-shadow: 0 28px 72px rgba(0,0,0,.75), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   animation: dialog-in .18s var(--ease-out) both;
 }
 .modal-wide { width: min(880px, 100%); }
@@ -2243,14 +2246,30 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .detail dd { text-align: left; }
   .bar-chart li { grid-template-columns: 1fr auto; }
   .bar-chart li .bar-track { grid-column: 1 / -1; }
-  .modal-scrim { padding: 0; }
+  .modal-scrim {
+    padding: 0;
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(32px) saturate(190%);
+    -webkit-backdrop-filter: blur(32px) saturate(190%);
+  }
   /* A phone gets the whole screen, but the sheet must not grow past it: with
      `height: 100%` the grid row sized itself to the form's content, which put
      the footer below the viewport with no way to scroll to it. The viewport
      unit keeps the sheet fixed to the screen so `.modal-body` scrolls, and the
      footer stays visible. */
-  .modal { max-height: calc(100vh / var(--ui-zoom)); height: calc(100vh / var(--ui-zoom)); border-radius: 0; }
-  .modal { max-height: calc(100dvh / var(--ui-zoom)); height: calc(100dvh / var(--ui-zoom)); }
+  .modal {
+    max-height: calc(100vh / var(--ui-zoom));
+    height: calc(100vh / var(--ui-zoom));
+    border-radius: 0;
+    border: 0;
+    background: rgba(18, 19, 24, 0.96);
+    backdrop-filter: blur(40px) saturate(190%);
+    -webkit-backdrop-filter: blur(40px) saturate(190%);
+  }
+  .modal {
+    max-height: calc(100dvh / var(--ui-zoom));
+    height: calc(100dvh / var(--ui-zoom));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2498,7 +2517,9 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   border-bottom: 1px solid var(--border-subtle);
   background:
     radial-gradient(120% 90% at 12% 0%, rgba(10, 132, 255, .16), transparent 62%),
-    var(--bg-page);
+    rgba(16, 17, 21, 0.92);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
 }
 
 .pupil-m-photo {
@@ -2583,8 +2604,11 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   gap: 12px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: var(--bg-panel);
+  background: rgba(22, 23, 28, 0.88);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   padding: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .pupil-m-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
@@ -3150,11 +3174,13 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   width: min(430px, calc(100% - 24px));
   grid-template-columns: repeat(var(--tab-count), minmax(0, 1fr));
   transform: translateX(-50%);
-  border: 1px solid var(--border-strong);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
-  background: var(--bg-sidebar);
+  background: rgba(18, 19, 24, 0.88);
+  backdrop-filter: blur(32px) saturate(190%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
   padding: 6px;
-  box-shadow: 0 18px 40px rgba(0,0,0,.48), 0 1px 0 rgba(255,255,255,.04) inset;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.65), 0 1px 0 rgba(255, 255, 255, 0.1) inset;
   overflow: hidden;
 }
 
@@ -3240,10 +3266,10 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   flex: 0 0 auto;
   align-items: center;
   gap: 9px;
-  border-bottom: 1px solid var(--border-subtle);
-  background:
-    radial-gradient(120% 150% at 0% 0%, rgba(10, 132, 255, .14), transparent 60%),
-    var(--bg-page);
+  border-bottom: 1px solid var(--border);
+  background: rgba(16, 17, 22, 0.90);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
   padding: 10px 14px;
 }
 
@@ -3350,7 +3376,9 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   position: absolute;
   inset: 0;
   z-index: 40;
-  background: rgba(0, 0, 0, .58);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   animation: staff-scrim-in .2s ease-out;
 }
 
@@ -3361,14 +3389,16 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   bottom: 0;
   left: 0;
   display: flex;
-  max-height: min(82%, 640px);
+  max-height: min(85%, 640px);
   flex-direction: column;
   overflow-y: auto;
-  border-top: 1px solid var(--border-strong);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 24px 24px 0 0;
-  background: var(--bg-panel);
+  background: rgba(20, 21, 26, 0.94);
+  backdrop-filter: blur(36px) saturate(190%);
+  -webkit-backdrop-filter: blur(36px) saturate(190%);
   padding: 18px 16px calc(24px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -24px 60px rgba(0, 0, 0, .5);
+  box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   animation: staff-sheet-in .32s cubic-bezier(.22, 1, .36, 1);
 }
 

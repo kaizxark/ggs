@@ -1424,12 +1424,22 @@ function StudentDialog({
           flexDirection: "column",
           borderRadius: 18,
           overflow: "hidden",
-          background: "var(--bg-raised)",
+          background: "rgba(20, 21, 26, 0.94)",
+          backdropFilter: "blur(36px) saturate(190%)",
+          WebkitBackdropFilter: "blur(36px) saturate(190%)",
           border: "1px solid var(--border-strong)",
           boxShadow: "0 28px 72px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
         }}
       >
-        <div className="modal-header" style={{ padding: "16px 22px 12px", flexShrink: 0 }}>
+        <div
+          className="modal-header"
+          style={{
+            padding: "16px 22px 12px",
+            flexShrink: 0,
+            background: "rgba(24, 25, 32, 0.88)",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
           <div>
             <h2 className="panel-title">{title}</h2>
             <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>{description}</p>
@@ -1446,7 +1456,7 @@ function StudentDialog({
         </div>
 
         {/* Apple Segmented Section Tabs */}
-        <div style={{ padding: "0 22px 14px", background: "var(--bg-raised)", flexShrink: 0 }}>
+        <div style={{ padding: "0 22px 14px", background: "rgba(24, 25, 32, 0.88)", flexShrink: 0 }}>
           <div className="segmented-control" style={{ width: "100%", height: 34 }}>
             <button
               type="button"
@@ -1837,7 +1847,7 @@ function StudentDialog({
             borderTop: "1px solid var(--border)",
             padding: "14px 22px",
             flexShrink: 0,
-            background: "var(--bg-raised)",
+            background: "rgba(24, 25, 32, 0.88)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",

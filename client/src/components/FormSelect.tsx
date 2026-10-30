@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Check } from "lucide-react";
 
@@ -18,6 +19,14 @@ export interface FormSelectProps {
   disabled?: boolean;
 }
 
+interface Coords {
+  top?: number;
+  bottom?: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+}
+
 export function FormSelect({
   value,
   onChange,
@@ -28,48 +37,121 @@ export function FormSelect({
   disabled = false,
 }: FormSelectProps) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<"bottom" | "top">("bottom");
-  const [maxHeight, setMaxHeight] = useState<number>(220);
+  const [coords, setCoords] = useState<Coords | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    if (!containerRef.current) return;
+  const updateCoords = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom - 12;
-    const spaceAbove = rect.top - 12;
+    if (rect.width === 0 && rect.height === 0) {
+      setOpen(false);
+      return;
+    }
 
-    const shouldFlip = spaceBelow < 220 && spaceAbove > spaceBelow;
-    setPlacement(shouldFlip ? "top" : "bottom");
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    const margin = 8;
+    const spaceBelow = vh - rect.bottom - margin;
+    const spaceAbove = rect.top - margin;
+
+    const shouldFlip = spaceBelow < 200 && spaceAbove > spaceBelow;
+    const nextPlacement = shouldFlip ? "top" : "bottom";
+    setPlacement(nextPlacement);
+
     const available = shouldFlip ? spaceAbove : spaceBelow;
-    setMaxHeight(Math.max(120, Math.min(240, available)));
-  }, [open]);
+    const maxHeight = Math.max(120, Math.min(260, available - 8));
+
+    // Match button width, clamped to viewport with 8px margins
+    const width = Math.min(Math.max(rect.width, 160), vw - margin * 2);
+    let left = rect.left;
+    if (left + width > vw - margin) {
+      left = vw - width - margin;
+    }
+    if (left < margin) {
+      left = margin;
+    }
+
+    if (shouldFlip) {
+      setCoords({
+        bottom: vh - rect.top + 6,
+        left,
+        width,
+        maxHeight,
+      });
+    } else {
+      setCoords({
+        top: rect.bottom + 6,
+        left,
+        width,
+        maxHeight,
+      });
+    }
+  }, []);
+
+  const handleToggle = () => {
+    if (disabled) return;
+    if (!open) {
+      updateCoords();
+      setOpen(true);
+    } else {
+      setOpen(false);
+    }
+  };
+
+  useLayoutEffect(() => {
+    if (open) {
+      updateCoords();
+    }
+  }, [open, updateCoords]);
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+
+    const handleScroll = (e: Event) => {
+      // If the scroll target is inside the popover list itself, ignore so it scrolls smoothly
+      if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        return;
+      }
+      updateCoords();
+    };
+
+    const handleResize = () => updateCoords();
+
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
         setOpen(false);
+        triggerRef.current?.focus();
       }
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+
+    window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
+    window.addEventListener("resize", handleResize);
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("scroll", handleScroll, { capture: true });
+      window.removeEventListener("resize", handleResize);
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [open, updateCoords]);
 
   const selectedOption = options.find((o) => o.value === value);
   const hasValue = Boolean(value !== undefined && value !== null && value !== "");
 
   return (
     <div
-      ref={containerRef}
       style={{
         position: "relative",
         width: "100%",
@@ -77,9 +159,10 @@ export function FormSelect({
       }}
     >
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={handleToggle}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel || placeholder}
@@ -92,9 +175,17 @@ export function FormSelect({
           padding: "0 12px",
           borderRadius: 10,
           background: "var(--bg-input)",
-          border: error ? "1px solid var(--danger, #ff453a)" : open ? "1px solid var(--brand, #0a84ff)" : "1px solid var(--border-strong)",
-          boxShadow: open ? "0 0 0 3px var(--brand-soft, rgba(10, 132, 255, 0.15))" : "none",
-          color: hasValue ? "var(--text-primary, #ffffff)" : "var(--text-muted, rgba(255, 255, 255, 0.45))",
+          border: error
+            ? "1px solid var(--danger, #ff453a)"
+            : open
+            ? "1px solid var(--brand, #0a84ff)"
+            : "1px solid var(--border-strong)",
+          boxShadow: open
+            ? "0 0 0 3px var(--brand-soft, rgba(10, 132, 255, 0.15))"
+            : "none",
+          color: hasValue
+            ? "var(--text-primary, #ffffff)"
+            : "var(--text-muted, rgba(255, 255, 255, 0.45))",
           fontSize: 13,
           fontWeight: 400,
           cursor: disabled ? "not-allowed" : "pointer",
@@ -129,97 +220,126 @@ export function FormSelect({
         />
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98, y: placement === "top" ? 4 : -4 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: placement === "top" ? 2 : -2 }}
-            transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
-            role="listbox"
-            style={{
-              position: "absolute",
-              top: placement === "bottom" ? "calc(100% + 5px)" : "auto",
-              bottom: placement === "top" ? "calc(100% + 5px)" : "auto",
-              left: 0,
-              right: 0,
-              zIndex: 9999,
-              maxHeight,
-              overflowY: "auto",
-              padding: 5,
-              borderRadius: 12,
-              background: "rgba(24, 25, 30, 0.96)",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-              border: "1px solid var(--border-strong, rgba(255, 255, 255, 0.14))",
-              boxShadow: "0 18px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08)",
-              transformOrigin: placement === "top" ? "bottom center" : "top center",
-            }}
-          >
-            {options.map((opt) => {
-              const active = opt.value === value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt.value);
-                    setOpen(false);
-                  }}
-                  role="option"
-                  aria-selected={active}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    width: "100%",
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    background: active ? "rgba(255, 255, 255, 0.1)" : "transparent",
-                    color: active ? "var(--text-primary, #ffffff)" : "var(--text-secondary, rgba(255, 255, 255, 0.8))",
-                    fontSize: 13,
-                    border: "none",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    outline: "none",
-                    transition: "background 0.1s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!active) e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active) e.currentTarget.style.background = "transparent";
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {opt.icon}
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{opt.label}</span>
-                  </span>
-                  {active && (
-                    <Check
-                      size={14}
-                      style={{
-                        color: "var(--brand, #0a84ff)",
-                        flexShrink: 0,
-                        marginLeft: 8,
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {open && coords && (
+              <motion.div
+                ref={popoverRef}
+                initial={{
+                  opacity: 0,
+                  scale: 0.98,
+                  y: placement === "top" ? 4 : -4,
+                }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{
+                  opacity: 0,
+                  scale: 0.98,
+                  y: placement === "top" ? 2 : -2,
+                }}
+                transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                role="listbox"
+                style={{
+                  position: "fixed",
+                  top: coords.top !== undefined ? coords.top : "auto",
+                  bottom: coords.bottom !== undefined ? coords.bottom : "auto",
+                  left: coords.left,
+                  width: coords.width,
+                  maxHeight: coords.maxHeight,
+                  zIndex: 99999,
+                  overflowY: "auto",
+                  padding: 5,
+                  borderRadius: 12,
+                  background: "rgba(20, 21, 26, 0.96)",
+                  backdropFilter: "blur(32px) saturate(190%)",
+                  WebkitBackdropFilter: "blur(32px) saturate(190%)",
+                  border: "1px solid rgba(255, 255, 255, 0.14)",
+                  boxShadow:
+                    "0 24px 64px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+                  transformOrigin:
+                    placement === "top" ? "bottom center" : "top center",
+                }}
+              >
+                {options.map((opt) => {
+                  const active = opt.value === value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        onChange(opt.value);
+                        setOpen(false);
                       }}
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </motion.div>
+                      role="option"
+                      aria-selected={active}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        width: "100%",
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        background: active
+                          ? "rgba(255, 255, 255, 0.1)"
+                          : "transparent",
+                        color: active
+                          ? "var(--text-primary, #ffffff)"
+                          : "var(--text-secondary, rgba(255, 255, 255, 0.8))",
+                        fontSize: 13,
+                        border: "none",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        outline: "none",
+                        transition: "background 0.1s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active)
+                          e.currentTarget.style.background =
+                            "rgba(255, 255, 255, 0.05)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active)
+                          e.currentTarget.style.background = "transparent";
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {opt.icon}
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {opt.label}
+                        </span>
+                      </span>
+                      {active && (
+                        <Check
+                          size={14}
+                          style={{
+                            color: "var(--brand, #0a84ff)",
+                            flexShrink: 0,
+                            marginLeft: 8,
+                          }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
     </div>
   );
 }

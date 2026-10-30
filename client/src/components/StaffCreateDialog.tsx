@@ -176,7 +176,9 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
           flexDirection: "column",
           borderRadius: 18,
           overflow: "hidden",
-          background: "var(--bg-raised)",
+          background: "rgba(20, 21, 26, 0.94)",
+          backdropFilter: "blur(36px) saturate(190%)",
+          WebkitBackdropFilter: "blur(36px) saturate(190%)",
           border: "1px solid var(--border-strong)",
           boxShadow: "0 28px 72px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
         }}
@@ -189,6 +191,8 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            background: "rgba(24, 25, 32, 0.88)",
+            borderBottom: "1px solid var(--border)",
           }}
         >
           <div>
@@ -310,7 +314,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
             borderTop: "1px solid var(--border)",
             padding: "14px 22px",
             flexShrink: 0,
-            background: "var(--bg-raised)",
+            background: "rgba(24, 25, 32, 0.88)",
             display: "flex",
             justifyContent: "flex-end",
             gap: 10,
