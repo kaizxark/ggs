@@ -429,6 +429,25 @@ describe("GET /api/students — pagination, sorting and search", () => {
     const body = (await res.json()) as { page: number };
     expect(body.page).toBe(1);
   });
+
+  it("smart-matches class and grade filter regardless of prefix", async () => {
+    const res = await handler(req("/api/students?grade=Grade%205"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { students: Row[] };
+    expect(body.students.every(s => String(s.grade).includes("5"))).toBe(true);
+
+    const resRaw = await handler(req("/api/students?grade=5"));
+    expect(resRaw.status).toBe(200);
+    const bodyRaw = (await resRaw.json()) as { students: Row[] };
+    expect(bodyRaw.students.length).toBe(body.students.length);
+  });
+
+  it("returns natural numerically sorted grade options", async () => {
+    const res = await handler(req("/api/students?options=1"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { grades: string[] };
+    expect(Array.isArray(body.grades)).toBe(true);
+  });
 });
 
 describe("GET /api/students — export", () => {

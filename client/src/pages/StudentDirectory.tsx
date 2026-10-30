@@ -7,6 +7,7 @@ import {
   Maximize2,
   Minimize2,
   Plus,
+  RotateCcw,
   Search,
   Loader2,
   Users,
@@ -39,6 +40,7 @@ import {
 } from "@/lib/student-directory";
 import { toast } from "@/lib/toast";
 import { StudentProfile } from "@/pages/StudentProfile";
+import { StudentDocumentsPanel } from "@/components/StudentDocuments";
 import { canEditStudent, canManageFees, ALL_STUDENT_SECTIONS, type StudentSection } from "@shared/student-access";
 import { supabase } from "@/lib/supabase";
 
@@ -108,6 +110,16 @@ export interface StudentDirectoryProps {
   className?: string;
 }
 
+export function formatGradeLabel(g?: string | null): string {
+  if (!g) return "";
+  const trimmed = String(g).trim();
+  if (/^(unassigned|all)/i.test(trimmed)) return trimmed;
+  if (/^(lkg|ukg|nursery|pre-kg|kg)/i.test(trimmed)) return trimmed.toUpperCase();
+  if (/^\d+$/.test(trimmed)) return `Class ${trimmed}`;
+  if (!/^(class|grade)\b/i.test(trimmed)) return `Class ${trimmed}`;
+  return trimmed;
+}
+
 export function StudentDirectory({ openStudentId, openMode = "drawer", onStudentOpened, onBack }: StudentDirectoryProps) {
   const [page, setPage] = useState<DirectoryPage | null>(null);
   const [options, setOptions] = useState<DirectoryOptions | null>(null);
@@ -120,6 +132,9 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
     grade: "",
     section: "",
     status: "",
+    year: "",
+    attendance: "",
+    fees: "",
     admissionFrom: "",
     admissionTo: "",
     sort: "name",
@@ -278,11 +293,82 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
     }));
   };
 
-  const activeFilterCount = useMemo(
-    () =>
-      [filters.grade, filters.section, filters.status, filters.admissionFrom, filters.admissionTo].filter(Boolean).length,
-    [filters]
-  );
+  const activeFilters = useMemo(() => {
+    const list: Array<{ id: string; label: string; onRemove: () => void }> = [];
+    if (filters.search) {
+      list.push({
+        id: "search",
+        label: `"${filters.search}"`,
+        onRemove: () => {
+          setSearchDraft("");
+          setFilter({ search: "" });
+        },
+      });
+    }
+    if (filters.grade) {
+      list.push({
+        id: "grade",
+        label: formatGradeLabel(filters.grade),
+        onRemove: () => setFilter({ grade: "" }),
+      });
+    }
+    if (filters.section) {
+      list.push({
+        id: "section",
+        label: `Section ${filters.section}`,
+        onRemove: () => setFilter({ section: "" }),
+      });
+    }
+    if (filters.status && filters.status !== "all") {
+      list.push({
+        id: "status",
+        label: `Status: ${filters.status.charAt(0).toUpperCase() + filters.status.slice(1)}`,
+        onRemove: () => setFilter({ status: "" }),
+      });
+    }
+    if (filters.attendance) {
+      list.push({
+        id: "attendance",
+        label: filters.attendance === "at_risk" ? "Attendance: < 75% (At risk)" : "Attendance: ≥ 90% (Good)",
+        onRemove: () => setFilter({ attendance: "" }),
+      });
+    }
+    if (filters.fees) {
+      list.push({
+        id: "fees",
+        label: filters.fees === "unpaid" ? "Fees: Pending dues" : "Fees: Paid in full",
+        onRemove: () => setFilter({ fees: "" }),
+      });
+    }
+    if (filters.year) {
+      const yr = options?.years?.find((y) => y.id === filters.year);
+      list.push({
+        id: "year",
+        label: `Year: ${yr?.name ?? filters.year}`,
+        onRemove: () => setFilter({ year: "" }),
+      });
+    }
+    return list;
+  }, [filters, options]);
+
+  const activeFilterCount = activeFilters.length;
+
+  const clearAllFilters = () => {
+    setSearchDraft("");
+    setFilters((prev) => ({
+      ...prev,
+      search: "",
+      grade: "",
+      section: "",
+      status: "",
+      year: "",
+      attendance: "",
+      fees: "",
+      admissionFrom: "",
+      admissionTo: "",
+      page: 1,
+    }));
+  };
 
   const exportCsv = async () => {
     setExporting(true);
@@ -394,8 +480,34 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
           </div>
 
           <div className="toolbar-actions">
-            <div className="filter-select">
-              <Filter size={14} />
+            {/* Quick Status Segmented Pills */}
+            <div className="segmented-control" role="group" aria-label="Filter by enrollment status">
+              <button
+                type="button"
+                className={!filters.status || filters.status === "all" ? "active" : ""}
+                onClick={() => setFilter({ status: "" })}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={filters.status === "active" ? "active" : ""}
+                onClick={() => setFilter({ status: "active" })}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                className={filters.status === "withdrawn" ? "active" : ""}
+                onClick={() => setFilter({ status: "withdrawn" })}
+              >
+                Withdrawn
+              </button>
+            </div>
+
+            {/* Smart Class Filter */}
+            <div className={`filter-select${filters.grade ? " active" : ""}`}>
+              <Filter size={13} />
               <select
                 value={filters.grade ?? ""}
                 onChange={(event) => setFilter({ grade: event.target.value })}
@@ -404,14 +516,15 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
                 <option value="">All classes</option>
                 {(options?.grades ?? []).map((g) => (
                   <option key={g} value={g}>
-                    {g}
+                    {formatGradeLabel(g)}
                   </option>
                 ))}
               </select>
-              <ChevronDown size={14} />
+              <ChevronDown size={13} className="filter-chevron" />
             </div>
 
-            <div className="filter-select">
+            {/* Section Filter */}
+            <div className={`filter-select${filters.section ? " active" : ""}`}>
               <select
                 value={filters.section ?? ""}
                 onChange={(event) => setFilter({ section: event.target.value })}
@@ -424,57 +537,85 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
                   </option>
                 ))}
               </select>
-              <ChevronDown size={14} />
+              <ChevronDown size={13} className="filter-chevron" />
             </div>
 
-            <div className="filter-select">
+            {/* Smart Attendance Compliance Filter */}
+            <div className={`filter-select${filters.attendance ? " active" : ""}`}>
               <select
-                value={filters.status ?? ""}
-                onChange={(event) => setFilter({ status: event.target.value })}
-                aria-label="Filter by status"
+                value={filters.attendance ?? ""}
+                onChange={(event) => setFilter({ attendance: event.target.value })}
+                aria-label="Filter by attendance"
               >
-                <option value="">All statuses</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="graduated">Graduated</option>
-                <option value="withdrawn">Withdrawn</option>
+                <option value="">All attendance</option>
+                <option value="at_risk">⚠️ At risk (&lt; 75%)</option>
+                <option value="good">✅ Good (≥ 90%)</option>
               </select>
-              <ChevronDown size={14} />
+              <ChevronDown size={13} className="filter-chevron" />
             </div>
 
-            <div className="filter-select">
-              <input
-                type="date"
-                value={filters.admissionFrom ?? ""}
-                onChange={(event) => setFilter({ admissionFrom: event.target.value })}
-                aria-label="Admitted from"
-                title="Admitted on or after"
-              />
-            </div>
+            {/* Fees Filter (for authorized accounts) */}
+            {maySeeFees && (
+              <div className={`filter-select${filters.fees ? " active" : ""}`}>
+                <select
+                  value={filters.fees ?? ""}
+                  onChange={(event) => setFilter({ fees: event.target.value })}
+                  aria-label="Filter by fee status"
+                >
+                  <option value="">All fees</option>
+                  <option value="unpaid">Pending dues</option>
+                  <option value="paid">Paid in full</option>
+                </select>
+                <ChevronDown size={13} className="filter-chevron" />
+              </div>
+            )}
 
-            {activeFilterCount > 0 && (
-              <button
-                className="secondary-button compact"
-                onClick={() => {
-                  setSearchDraft("");
-                  setFilters((prev) => ({
-                    ...prev,
-                    search: "",
-                    grade: "",
-                    section: "",
-                    status: "",
-                    admissionFrom: "",
-                    admissionTo: "",
-                    page: 1,
-                  }));
-                }}
-              >
-                <X size={14} />
-                Clear {activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"}
-              </button>
+            {/* Academic Year Filter */}
+            {options?.years && options.years.length > 1 && (
+              <div className={`filter-select${filters.year ? " active" : ""}`}>
+                <select
+                  value={filters.year ?? ""}
+                  onChange={(event) => setFilter({ year: event.target.value })}
+                  aria-label="Filter by academic year"
+                >
+                  <option value="">All years</option>
+                  {options.years.map((y) => (
+                    <option key={y.id} value={y.id}>
+                      {y.name}{y.is_current ? " (Current)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={13} className="filter-chevron" />
+              </div>
             )}
           </div>
         </div>
+
+        {/* Active Filter Badges Bar */}
+        {activeFilterCount > 0 && (
+          <div className="active-filters-bar">
+            <span className="active-filters-label">Active filters:</span>
+            {activeFilters.map((f) => (
+              <span key={f.id} className="active-filter-chip">
+                <span>{f.label}</span>
+                <button
+                  type="button"
+                  onClick={f.onRemove}
+                  aria-label={`Remove filter ${f.label}`}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              className="clear-all-filters-btn"
+              onClick={clearAllFilters}
+            >
+              Reset all ({activeFilterCount})
+            </button>
+          </div>
+        )}
 
         {selected.size > 0 && (
           <div className="bulk-bar">
@@ -547,12 +688,28 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
 
           {!loading && rows.length === 0 && (
             <div className="empty-state">
-              <Users size={20} />
+              <Users size={22} className="text-[var(--text-muted)]" />
+              <p className="panel-title" style={{ fontSize: 15, marginTop: 6 }}>
+                {activeFilterCount || searchDraft
+                  ? "No students match these filters"
+                  : "No students have been registered yet"}
+              </p>
               <p className="panel-subtitle">
                 {activeFilterCount || searchDraft
-                  ? "No students match these filters."
-                  : "No students have been registered yet."}
+                  ? "Try adjusting your class, section, attendance, or status filters."
+                  : "Get started by registering the first pupil to the roll call."}
               </p>
+              {Boolean(activeFilterCount || searchDraft) && (
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  onClick={clearAllFilters}
+                  style={{ marginTop: 10 }}
+                >
+                  <RotateCcw size={13} />
+                  Reset all filters
+                </button>
+              )}
               {mayEdit && !searchDraft && !activeFilterCount && (
                 <button className="primary-button" onClick={() => setShowAdd(true)}>
                   <Plus size={15} />
@@ -718,7 +875,7 @@ function StudentRow({
       </td>
       <td className="muted-cell">{student.usn || "—"}</td>
       <td>
-        <span className="grade-chip">{student.grade ?? "Unassigned"}</span>
+        <span className="grade-chip">{formatGradeLabel(student.grade) || "Unassigned"}</span>
       </td>
       <td className="muted-cell">{student.section || "—"}</td>
       <td className="muted-cell">{student.roll_no ?? "—"}</td>
@@ -772,12 +929,7 @@ const DRAWER_TABS: Record<StudentSection, string> = {
   attendance: "Attendance",
   fees: "Fees",
   documents: "Documents",
-  health: "Health",
-  activities: "Activities",
-  observations: "Observations",
-  communications: "Messages",
   admission: "Admission",
-  library: "Library",
   account: "Account",
 };
 
@@ -924,28 +1076,36 @@ function StudentDrawer({
       </div>
 
       <div className="pupil-drawer-body">
-        {loading && (
+        {tab === "documents" ? (
           <div className="drawer-section">
-            <div className="skeleton-line" style={{ width: "70%" }} />
-            <div className="skeleton-line" style={{ width: "90%" }} />
-            <div className="skeleton-line" style={{ width: "60%" }} />
+            <StudentDocumentsPanel studentId={student.id} studentName={student.name} />
           </div>
-        )}
+        ) : (
+          <>
+            {loading && (
+              <div className="drawer-section">
+                <div className="skeleton-line" style={{ width: "70%" }} />
+                <div className="skeleton-line" style={{ width: "90%" }} />
+                <div className="skeleton-line" style={{ width: "60%" }} />
+              </div>
+            )}
 
-        {!loading && failed && (
-          <div className="empty-state">
-            <p className="panel-title">Record unavailable</p>
-            <p className="panel-subtitle">
-              The full record could not be loaded. The summary above is from the roll call and is still accurate.
-            </p>
-            <button className="secondary-button compact" onClick={onOpenProfile}>
-              Open full profile page
-            </button>
-          </div>
-        )}
+            {!loading && failed && (
+              <div className="empty-state">
+                <p className="panel-title">Record unavailable</p>
+                <p className="panel-subtitle">
+                  The full record could not be loaded. The summary above is from the roll call and is still accurate.
+                </p>
+                <button className="secondary-button compact" onClick={onOpenProfile}>
+                  Open full profile page
+                </button>
+              </div>
+            )}
 
-        {!loading && !failed && detail && (
-          <DrawerSection tab={tab} detail={detail} student={student} />
+            {!loading && !failed && detail && (
+              <DrawerSection tab={tab} detail={detail} student={student} />
+            )}
+          </>
         )}
       </div>
 
@@ -978,6 +1138,14 @@ function DrawerSection({
   detail: ProfilePayload;
   student: DirectoryStudent;
 }) {
+  if (tab === "documents") {
+    return (
+      <div className="drawer-section">
+        <StudentDocumentsPanel studentId={student.id} studentName={student.name} />
+      </div>
+    );
+  }
+
   const s = detail.student;
   const rows: Array<[string, string]> = [];
   const push = (label: string, value: string | number | null | undefined) => {
@@ -1082,45 +1250,6 @@ function DrawerSection({
         `${formatMoney(i.total)}, paid ${formatMoney(i.paid_amount)} \u00b7 ${i.status}`,
       );
     });
-  } else if (tab === "documents") {
-    if (!detail.documents.length) rows.push(["Documents", "None uploaded"]);
-    detail.documents.forEach((d) => {
-      push(d.title || d.file_name, d.category);
-      push("  Status", `${d.verification_status}${d.expires_on ? ` \u00b7 expires ${formatDate(d.expires_on)}` : ""}`);
-      push("  Uploaded", formatDate(d.uploaded_on));
-    });
-  } else if (tab === "health") {
-    const record = detail.health.record;
-    if (!record) rows.push(["Health record", "Not recorded"]);
-    else Object.entries(record).forEach(([key, value]) => push(key.replace(/_/g, " "), value));
-    detail.health.incidents.forEach((i) => {
-      push(
-        `${formatDate(i.incident_date)} \u00b7 ${i.severity}`,
-        [i.summary, i.action_taken, i.notified_guardian ? "Guardian notified" : null].filter(Boolean).join(" \u00b7 "),
-      );
-    });
-  } else if (tab === "activities") {
-    if (!detail.activities.length) rows.push(["Activities", "None recorded"]);
-    detail.activities.forEach((a) => {
-      push(a.name, [a.category, a.role, a.participation].filter(Boolean).join(" \u00b7 "));
-      push("  Achievement", a.achievement ?? a.award);
-      push("  Dates", [formatDate(a.started_on), formatDate(a.ended_on)].filter((x) => x !== "\u2014").join(" \u2192 "));
-    });
-  } else if (tab === "observations") {
-    if (!detail.observations.length) rows.push(["Observations", "None recorded"]);
-    detail.observations.forEach((o) => {
-      push(`${formatDate(o.observed_on)} \u00b7 ${o.category}`, o.body);
-      if (o.classroom_participation !== null) push("  Participation", formatPercent(o.classroom_participation));
-      push("  Action taken", o.action_taken);
-      push("  Support needed", o.support_needed ? "Yes" : "No");
-      push("  Shared with guardian", o.visible_to_guardians ? "Yes" : "No");
-    });
-  } else if (tab === "communications") {
-    if (!detail.communications.length) rows.push(["Messages", "No correspondence"]);
-    detail.communications.forEach((c) => {
-      push(c.subject ?? c.kind, `${c.guardian ?? "School"} \u00b7 ${formatDate(c.occurred_at)}`);
-      push("  Outcome", c.outcome ?? c.notes);
-    });
   } else if (tab === "admission") {
     if (!detail.admission.length) rows.push(["Admission", "No application history"]);
     detail.admission.forEach((a) => {
@@ -1133,17 +1262,6 @@ function DrawerSection({
       push("  Remarks", a.remarks);
       if (a.withdrawn_on) push("Withdrawn", `${formatDate(a.withdrawn_on)} \u00b7 ${a.withdrawal_reason ?? ""}`);
       if (a.graduated_on) push("Graduated", formatDate(a.graduated_on));
-    });
-  } else if (tab === "library") {
-    const l = detail.library;
-    push("Books currently issued", l.current_count);
-    push("Overdue", l.overdue_count);
-    push("Outstanding fines", formatMoney(l.total_fines));
-    l.loans.forEach((loan) => {
-      push(
-        loan.book_title,
-        `${formatDate(loan.issued_on)} \u00b7 ${loan.status}${loan.due_on ? ` \u00b7 due ${formatDate(loan.due_on)}` : ""}`,
-      );
     });
   } else if (tab === "account") {
     const a = detail.account;

@@ -66,6 +66,8 @@ interface Filter {
   section: string;
   year: string;
   status: string;
+  attendance: string;
+  fees: string;
   admissionFrom: string;
   admissionTo: string;
   sort: string;
@@ -87,6 +89,8 @@ function parseFilters(url: URL): Filter {
     section: (p.get("section") ?? "").trim().slice(0, 20),
     year: (p.get("year") ?? "").trim().slice(0, 64),
     status: (p.get("status") ?? "").trim().slice(0, 20),
+    attendance: (p.get("attendance") ?? "").trim().slice(0, 20),
+    fees: (p.get("fees") ?? "").trim().slice(0, 20),
     admissionFrom: (p.get("admissionFrom") ?? "").trim().slice(0, 10),
     admissionTo: (p.get("admissionTo") ?? "").trim().slice(0, 10),
     sort: (p.get("sort") ?? "name").trim().slice(0, 20),
@@ -482,26 +486,32 @@ async function loadDirectory(
   });
 
   // Class and section filters, applied after the join because those columns
-  // come from classrooms.
+  // come from classrooms. Smart match handles both raw "6" and "Class 6".
   let filteredRows = baseRows;
   if (filter.grade) {
-    filteredRows = filteredRows.filter(r => String(r.grade) === filter.grade);
+    const targetGrade = filter.grade.trim().toLowerCase().replace(/^(class|grade)\s+/i, "");
+    filteredRows = filteredRows.filter(r => {
+      const rowGrade = String(r.grade ?? "").trim().toLowerCase().replace(/^(class|grade)\s+/i, "");
+      return rowGrade === targetGrade || String(r.grade ?? "").toLowerCase() === filter.grade.toLowerCase();
+    });
   }
   if (filter.section) {
-    filteredRows = filteredRows.filter(
-      r => String(r.section) === filter.section
-    );
+    const targetSection = filter.section.trim().toLowerCase().replace(/^section\s+/i, "");
+    filteredRows = filteredRows.filter(r => {
+      const rowSection = String(r.section ?? "").trim().toLowerCase().replace(/^section\s+/i, "");
+      return rowSection === targetSection || String(r.section ?? "").toLowerCase() === filter.section.toLowerCase();
+    });
   }
 
   // Attendance and academic average stats are only needed across the entire scanned
-  // dataset if sorting by those computed fields, or if exporting the entire roll call.
-  // For standard browsing and searching (sorted by name, usn, class, etc.), we can
-  // paginate first and fetch statistics for ONLY the page's ~20 pupils. This turns an
-  // 8-second query scanning 50,000 joined records into a 200ms sub-second response.
+  // dataset if sorting by those computed fields, or if exporting the entire roll call,
+  // or if filtering by attendance compliance or fee payment status.
   const needsAllStats =
     isExport ||
     filter.sort === "attendance" ||
-    filter.sort === "average";
+    filter.sort === "average" ||
+    Boolean(filter.attendance) ||
+    Boolean(filter.fees);
 
   if (needsAllStats) {
     // Fetch full stats in parallel
@@ -530,6 +540,26 @@ async function loadDirectory(
 
     enrichWithStats(filteredRows, attendance, results, invoices, maySeeFees);
     enrichWithContacts(filteredRows, students, maySeeContacts);
+
+    if (filter.attendance === "at_risk") {
+      filteredRows = filteredRows.filter(
+        r => typeof r.attendance_percentage === "number" && r.attendance_percentage < 75
+      );
+    } else if (filter.attendance === "good") {
+      filteredRows = filteredRows.filter(
+        r => typeof r.attendance_percentage === "number" && r.attendance_percentage >= 90
+      );
+    }
+
+    if (filter.fees === "unpaid") {
+      filteredRows = filteredRows.filter(
+        r => r.fees !== null && r.fees !== "Paid"
+      );
+    } else if (filter.fees === "paid") {
+      filteredRows = filteredRows.filter(
+        r => r.fees === "Paid"
+      );
+    }
 
     sortRows(filteredRows, filter.sort, filter.direction);
 
@@ -745,7 +775,15 @@ async function filterOptions(orgId: string): Promise<Json> {
     new Set(classrooms.map(c => String(c.section ?? "")).filter(Boolean))
   );
 
-  return { grades: grades.sort(), sections: sections.sort(), years };
+  return {
+    grades: grades.sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true })
+    ),
+    sections: sections.sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true })
+    ),
+    years,
+  };
 }
 
 /** CSV cell quoting. Leading =, +, - and @ are escaped so Excel treats them as text. */

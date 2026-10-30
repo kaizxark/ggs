@@ -91,6 +91,9 @@ export interface DirectoryFilters {
   grade?: string;
   section?: string;
   status?: string;
+  year?: string;
+  attendance?: string;
+  fees?: string;
   admissionFrom?: string;
   admissionTo?: string;
   sort?: string;
