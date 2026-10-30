@@ -1024,7 +1024,7 @@ export default async function handler(req: Request): Promise<Response> {
       "emergency_contact_phone",
     ];
     for (const field of optional) {
-      const value = clean(body[field], field === "photo_url" ? 400 : 200);
+      const value = clean(body[field], field === "photo_url" ? 2048 : 200);
       if (value) payload[field] = value;
     }
 
@@ -1170,7 +1170,7 @@ export default async function handler(req: Request): Promise<Response> {
       ["nationality", 60],
       ["mother_tongue", 60],
       ["religion", 60],
-      ["photo_url", 400],
+      ["photo_url", 2048],
       ["emergency_contact_name", 120],
       ["emergency_contact_phone", 40],
     ];

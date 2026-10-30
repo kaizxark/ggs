@@ -178,7 +178,6 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
   const [profileId, setProfileId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<DirectoryStudent | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -336,30 +335,8 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
         onRemove: () => setFilter({ status: "" }),
       });
     }
-    if (filters.attendance) {
-      list.push({
-        id: "attendance",
-        label: filters.attendance === "at_risk" ? "Attendance: < 75% (At risk)" : "Attendance: ≥ 90% (Good)",
-        onRemove: () => setFilter({ attendance: "" }),
-      });
-    }
-    if (filters.fees) {
-      list.push({
-        id: "fees",
-        label: filters.fees === "unpaid" ? "Fees: Pending dues" : "Fees: Paid in full",
-        onRemove: () => setFilter({ fees: "" }),
-      });
-    }
-    if (filters.year) {
-      const yr = options?.years?.find((y) => y.id === filters.year);
-      list.push({
-        id: "year",
-        label: `Year: ${yr?.name ?? filters.year}`,
-        onRemove: () => setFilter({ year: "" }),
-      });
-    }
     return list;
-  }, [filters, options]);
+  }, [filters]);
 
   const activeFilterCount = activeFilters.length;
 
@@ -390,24 +367,6 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
       toast.error(err instanceof Error ? err.message : "The export could not be produced.");
     } finally {
       setExporting(false);
-    }
-  };
-
-  const bulkArchive = async () => {
-    const ids = Array.from(selected);
-    if (!ids.length) return;
-    const ok = window.confirm(
-      `Archive ${ids.length} student${ids.length === 1 ? "" : "s"}?\n\n` +
-        "Their records are kept — nothing is deleted. They will be marked withdrawn and stop appearing in the active list."
-    );
-    if (!ok) return;
-    try {
-      for (const id of ids) await archiveStudent(id);
-      toast.success(`${ids.length} student${ids.length === 1 ? "" : "s"} archived`);
-      setSelected(new Set());
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Those students could not be archived.");
     }
   };
 
@@ -546,55 +505,6 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
                 })),
               ]}
             />
-
-            {/* Smart Attendance Compliance Filter */}
-            <SmoothFilterDropdown
-              label="All attendance"
-              icon={<Activity size={14} />}
-              value={filters.attendance ?? ""}
-              onChange={(val) => setFilter({ attendance: val })}
-              ariaLabel="Filter by attendance compliance"
-              options={[
-                { value: "", label: "All attendance" },
-                { value: "at_risk", label: "⚠️ At risk (< 75%)" },
-                { value: "good", label: "✅ Good (≥ 90%)" },
-              ]}
-            />
-
-            {/* Fees Filter (for authorized accounts) */}
-            {maySeeFees && (
-              <SmoothFilterDropdown
-                label="All fees"
-                icon={<CreditCard size={14} />}
-                value={filters.fees ?? ""}
-                onChange={(val) => setFilter({ fees: val })}
-                ariaLabel="Filter by fee status"
-                options={[
-                  { value: "", label: "All fees" },
-                  { value: "unpaid", label: "Pending dues" },
-                  { value: "paid", label: "Paid in full" },
-                ]}
-              />
-            )}
-
-            {/* Academic Year Filter */}
-            {options?.years && options.years.length > 1 && (
-              <SmoothFilterDropdown
-                label="All years"
-                icon={<CalendarDays size={14} />}
-                value={filters.year ?? ""}
-                onChange={(val) => setFilter({ year: val })}
-                ariaLabel="Filter by academic year"
-                align="right"
-                options={[
-                  { value: "", label: "All academic years" },
-                  ...(options?.years ?? []).map((y) => ({
-                    value: y.id,
-                    label: `${y.name}${y.is_current ? " (Current)" : ""}`,
-                  })),
-                ]}
-              />
-            )}
           </div>
         </div>
 
@@ -624,37 +534,11 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
           </div>
         )}
 
-        {selected.size > 0 && (
-          <div className="bulk-bar">
-            <span className="font-medium">{selected.size} selected</span>
-            <button className="secondary-button compact" onClick={() => setSelected(new Set())}>
-              Clear
-            </button>
-            {mayEdit && (
-              <button className="secondary-button compact danger" onClick={() => void bulkArchive()}>
-                Archive selected
-              </button>
-            )}
-          </div>
-        )}
-
         <div className="table-scroll" role="region" aria-busy={loading} aria-label="Student list" tabIndex={0}>
           {loading && <span className="sr-only">Loading students</span>}
           <table className="data-table">
             <thead>
               <tr>
-                {mayEdit && (
-                  <th className="checkbox-cell">
-                    <input
-                      type="checkbox"
-                      checked={selected.size > 0 && selected.size === rows.length}
-                      onChange={(event) =>
-                        setSelected(event.target.checked ? new Set(rows.map((r) => r.id)) : new Set())
-                      }
-                      aria-label="Select all on this page"
-                    />
-                  </th>
-                )}
                 <SortableHeader label="Student" column="name" sort={filters.sort} direction={filters.direction} onSort={toggleSort} />
                 <SortableHeader label="USN" column="usn" sort={filters.sort} direction={filters.direction} onSort={toggleSort} />
                 <SortableHeader label="Class" column="grade" sort={filters.sort} direction={filters.direction} onSort={toggleSort} />
@@ -668,7 +552,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
             </thead>
             <tbody>
               {loading && !rows.length
-                ? Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} mayEdit={mayEdit} maySeeFees={maySeeFees} />)
+                ? Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} maySeeFees={maySeeFees} />)
                 : rows.map((student) => (
                     <StudentRow
                       key={student.id}
@@ -676,16 +560,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
                       mayEdit={mayEdit}
                       maySeeFees={maySeeFees}
                       open={drawerId === student.id}
-                      selected={selected.has(student.id)}
                       onOpenDrawer={() => setDrawerId(student.id)}
-                      onToggleSelect={() => {
-                        setSelected((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(student.id)) next.delete(student.id);
-                          else next.add(student.id);
-                          return next;
-                        });
-                      }}
                       onOpenProfile={() => setProfileId(student.id)}
                       onEdit={() => setEditing(student)}
                     />
@@ -838,9 +713,7 @@ function StudentRow({
   mayEdit,
   maySeeFees,
   open,
-  selected,
   onOpenDrawer,
-  onToggleSelect,
   onOpenProfile,
   onEdit,
 }: {
@@ -848,9 +721,7 @@ function StudentRow({
   mayEdit: boolean;
   maySeeFees: boolean;
   open: boolean;
-  selected: boolean;
   onOpenDrawer: () => void;
-  onToggleSelect: () => void;
   onOpenProfile: () => void;
   onEdit: () => void;
 }) {
@@ -860,16 +731,6 @@ function StudentRow({
       onClick={onOpenDrawer}
       aria-expanded={open}
     >
-      {mayEdit && (
-        <td className="checkbox-cell" onClick={(event) => event.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelect}
-            aria-label={`Select ${student.name}`}
-          />
-        </td>
-      )}
       <td>
         <div className="flex items-center gap-3">
           {student.photo_url ? (
@@ -1305,10 +1166,10 @@ function DrawerSection({
   );
 }
 
-function SkeletonRow({ mayEdit, maySeeFees }: { mayEdit: boolean; maySeeFees: boolean }) {
+function SkeletonRow({ maySeeFees }: { maySeeFees: boolean }) {
   // Must match the header: Student, USN, Class, Section, Roll, Attendance,
-  // Average, Guardian — plus Fees and the checkbox when the role may see them.
-  const cells = 8 + (maySeeFees ? 1 : 0) + (mayEdit ? 1 : 0);
+  // Average, Guardian — plus Fees when the role may see them.
+  const cells = 8 + (maySeeFees ? 1 : 0);
   return (
     <tr>
       {Array.from({ length: cells }).map((_, i) => (
