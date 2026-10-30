@@ -50,6 +50,8 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Sun,
+  Moon,
   Target,
   TrendingDown,
   TrendingUp,
@@ -166,6 +168,7 @@ import { StudentDirectory } from "./StudentDirectory";
 import { StaffDrawer } from "../components/StaffDrawer";
 import { StaffCreateDialog } from "../components/StaffCreateDialog";
 import SmoothScroll, { smoothScrollTo } from "../components/SmoothScroll";
+import { useTheme } from "../contexts/ThemeContext";
 import {
   effectiveRole,
   isSuperAdminId,
@@ -6598,6 +6601,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
 }
 
 export default function Home() {
+  const { theme, toggleTheme } = useTheme();
   const [activeView, setActiveView] = useState("Overview");
   // Bumped on every targeted arrival so the directory remounts its open effect
   // even when the view is already "Students".
@@ -7086,6 +7090,15 @@ export default function Home() {
               )}
             </div>
             <div className="topbar-actions">
+              {toggleTheme && (
+                <IconButton
+                  label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+                  onClick={toggleTheme}
+                  className="theme-toggle-btn"
+                >
+                  {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+                </IconButton>
+              )}
               <div className="topbar-profile-wrap" ref={profileWrapRef}>
                 <button
                   className="topbar-profile"
@@ -7185,6 +7198,18 @@ export default function Home() {
                         <UserCog size={15} />
                         User management
                       </button>
+                      {toggleTheme && (
+                        <button
+                          role="menuitem"
+                          className="profile-menu-item"
+                          onClick={() => {
+                            toggleTheme();
+                          }}
+                        >
+                          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+                          {theme === "dark" ? "Light theme" : "Dark theme"}
+                        </button>
+                      )}
                       <div className="profile-menu-divider" />
                       <button
                         role="menuitem"
