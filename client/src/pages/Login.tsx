@@ -163,7 +163,7 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen bg-[var(--bg-page)] relative flex items-center justify-center px-4 overflow-hidden"
+      className="min-h-screen bg-[#0b0c10] relative flex items-center justify-center px-4 overflow-hidden"
       style={{ fontFamily: "system-ui, sans-serif" }}
     >
       <div className="pointer-events-none absolute inset-0">
@@ -181,7 +181,7 @@ export default function Login() {
           />
         </div>
 
-        <div className="bg-[var(--bg-panel)] border border-[var(--border)] rounded-2xl p-8 shadow-xl shadow-black/5 backdrop-blur">
+        <div className="bg-[#121419]/90 border border-[#232830] rounded-2xl p-8 shadow-2xl shadow-black/50 backdrop-blur">
           <h2
             className={`text-lg font-bold text-[var(--text-primary)] ${
               heading[mode].blurb ? "mb-1" : "mb-6"
@@ -271,14 +271,14 @@ export default function Login() {
             )}
 
             {error && (
-              <div className="flex items-center gap-2 text-[var(--danger)] text-[12.5px] bg-[var(--danger-soft)] border border-[var(--danger-border)] rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 text-[var(--danger)] text-[12.5px] bg-[#2a1a18]/60 border border-[#3a2020] rounded-lg px-3 py-2">
                 <AlertCircle size={14} className="flex-shrink-0" />
                 {error}
               </div>
             )}
 
             {notice && (
-              <div className="flex items-start gap-2 text-[var(--brand)] text-[12.5px] bg-[var(--brand-soft)] border border-[var(--brand-soft)] rounded-lg px-3 py-2">
+              <div className="flex items-start gap-2 text-[var(--brand-strong)] text-[12.5px] bg-indigo-950/60 border border-indigo-900/60 rounded-lg px-3 py-2">
                 <Check size={14} className="flex-shrink-0 mt-px" />
                 {notice}
               </div>
@@ -287,7 +287,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[var(--brand)] hover:opacity-90 disabled:opacity-70 text-white font-semibold py-2.5 rounded-lg transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full bg-[var(--brand)] hover:bg-[#4338ca] disabled:opacity-70 text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(79,70,229,.35)] flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
                 <>
