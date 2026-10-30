@@ -84,6 +84,7 @@ export interface DirectoryPage {
   scanned: number;
   /** True when the list hit the server's scan ceiling and is not exhaustive. */
   truncated: boolean;
+  role?: string;
 }
 
 export interface DirectoryFilters {
@@ -245,11 +246,15 @@ export interface StudentDraft {
   first_name: string;
   last_name: string;
   usn?: string;
+  grade?: string;
+  section?: string;
+  roll_no?: string;
   date_of_birth?: string;
   gender?: string;
   email?: string;
   phone?: string;
   guardian_name?: string;
+  guardian_relation?: string;
   guardian_phone?: string;
   guardian_email?: string;
   blood_group?: string;

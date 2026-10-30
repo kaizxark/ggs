@@ -50,6 +50,8 @@ import { StudentProfile } from "@/pages/StudentProfile";
 import { StudentDocumentsPanel } from "@/components/StudentDocuments";
 import { canEditStudent, canManageFees, ALL_STUDENT_SECTIONS, type StudentSection } from "@shared/student-access";
 import { supabase } from "@/lib/supabase";
+import { useCurrentUser } from "@/lib/erp-views";
+import { SmoothFilterDropdown } from "@/components/SmoothFilterDropdown";
 
 /**
  * The student directory.
@@ -127,118 +129,13 @@ export function formatGradeLabel(g?: string | null): string {
   return trimmed;
 }
 
-interface SmoothSelectOption {
-  value: string;
-  label: string;
-  icon?: React.ReactNode;
-}
-
-interface SmoothFilterDropdownProps {
-  label: string;
-  icon?: React.ReactNode;
-  value: string;
-  options: SmoothSelectOption[];
-  onChange: (val: string) => void;
-  align?: "left" | "right";
-  ariaLabel: string;
-}
-
-function SmoothFilterDropdown({
-  label,
-  icon,
-  value,
-  options,
-  onChange,
-  align = "left",
-  ariaLabel,
-}: SmoothFilterDropdownProps) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
-
-  const selectedOption = options.find((o) => o.value === value);
-  const hasValue = Boolean(value && value !== "");
-
-  return (
-    <div className="smooth-filter-container" ref={containerRef}>
-      <button
-        type="button"
-        className={`smooth-filter-trigger${hasValue ? " has-value" : ""}`}
-        onClick={() => setOpen((prev) => !prev)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={ariaLabel}
-      >
-        {icon}
-        <span>{hasValue ? selectedOption?.label ?? value : label}</span>
-        <ChevronDown
-          size={13}
-          className={`smooth-filter-chevron${open ? " open" : ""}`}
-        />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97, y: -2 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -1 }}
-            transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
-            className={`smooth-filter-popover${align === "right" ? " smooth-filter-popover-right" : ""}`}
-            role="listbox"
-          >
-            {options.map((opt) => {
-              const active = opt.value === value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  className={`smooth-filter-item${active ? " active" : ""}`}
-                  onClick={() => {
-                    onChange(opt.value);
-                    setOpen(false);
-                  }}
-                  role="option"
-                  aria-selected={active}
-                >
-                  <span className="flex items-center gap-2 min-w-0 truncate">
-                    {opt.icon}
-                    <span className="truncate">{opt.label}</span>
-                  </span>
-                  {active && <Check size={13} className="smooth-check-icon shrink-0" />}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 export function StudentDirectory({ openStudentId, openMode = "drawer", onStudentOpened, onBack }: StudentDirectoryProps) {
+  const currentUser = useCurrentUser();
   const [page, setPage] = useState<DirectoryPage | null>(null);
   const [options, setOptions] = useState<DirectoryOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [role, setRole] = useState("");
+  const role = page?.role || currentUser?.role || "administrator";
 
   const [filters, setFilters] = useState<DirectoryFilters>({
     search: "",
@@ -871,8 +768,9 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
       {showAdd && (
         <StudentDialog
           title="Add a student"
-          description="Create a student record. You can fill in guardians and documents afterwards."
+          description="Create a comprehensive student record with academic placement, personal, guardian, and emergency details."
           submitLabel="Create student"
+          options={options}
           onClose={() => setShowAdd(false)}
           onSubmit={async (draft) => {
             const result = await createStudent(draft);
@@ -890,6 +788,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
           title={`Edit ${editing.name}`}
           description="Changes are recorded in the audit history with your name against them."
           submitLabel="Save changes"
+          options={options}
           student={editing}
           onClose={() => setEditing(null)}
           onSubmit={async (draft) => {
@@ -1429,6 +1328,7 @@ function StudentDialog({
   title,
   description,
   submitLabel,
+  options,
   student,
   onClose,
   onSubmit,
@@ -1436,26 +1336,54 @@ function StudentDialog({
   title: string;
   description: string;
   submitLabel: string;
+  options?: DirectoryOptions | null;
   student?: DirectoryStudent;
   onClose: () => void;
   onSubmit: (draft: StudentDraft) => Promise<void>;
 }) {
+  const [activeTab, setActiveTab] = useState<"academic" | "personal" | "guardian" | "address">("academic");
   const [form, setForm] = useState({
     first_name: student?.first_name ?? "",
     last_name: student?.last_name ?? "",
     usn: student?.usn ?? "",
+    grade: student?.grade ?? "",
+    section: student?.section ?? "",
+    roll_no: student?.roll_no ? String(student.roll_no) : "",
+    status: student?.status ?? "active",
+    joined_on: student?.joined_on ?? new Date().toISOString().slice(0, 10),
+    photo_url: student?.photo_url ?? "",
     date_of_birth: student?.date_of_birth ?? "",
     gender: student?.gender ?? "",
-    status: student?.status ?? "active",
+    blood_group: "",
+    nationality: "Indian",
+    mother_tongue: "",
+    religion: "",
+    email: student?.email ?? "",
+    phone: student?.phone ?? "",
     guardian_name: student?.guardian_name ?? "",
-    guardian_phone: "",
-    guardian_email: "",
-    joined_on: student?.joined_on ?? "",
-    photo_url: student?.photo_url ?? "",
+    guardian_relation: "Parent",
+    guardian_phone: student?.guardian_phone ?? "",
+    guardian_email: student?.guardian_email ?? "",
+    emergency_contact_name: "",
+    emergency_contact_phone: "",
+    address_line1: "",
+    address_line2: "",
+    city: "Bengaluru",
+    district: "Bengaluru Urban",
+    state: "Karnataka",
+    pincode: "",
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const set = (key: keyof typeof form) => (value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -1467,14 +1395,23 @@ function StudentDialog({
     });
   };
 
+  const availableGrades = useMemo(() => {
+    if (options?.grades && options.grades.length > 0) return options.grades;
+    return ["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+  }, [options]);
+
+  const availableSections = useMemo(() => {
+    if (options?.sections && options.sections.length > 0) return options.sections;
+    return ["A", "B", "C", "D"];
+  }, [options]);
+
   const submit = async () => {
-    // Checked here so the user is told before a round trip, and again by the
-    // server, which is the copy that matters.
     const local: Record<string, string> = {};
     if (!form.first_name.trim()) local.first_name = "Enter a first name.";
     if (!form.last_name.trim()) local.last_name = "Enter a last name.";
     if (Object.keys(local).length) {
       setFieldErrors(local);
+      setActiveTab("academic");
       return;
     }
 
@@ -1485,23 +1422,44 @@ function StudentDialog({
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         usn: form.usn.trim() || undefined,
+        grade: form.grade || undefined,
+        section: form.section || undefined,
+        roll_no: form.roll_no.trim() || undefined,
         date_of_birth: form.date_of_birth || undefined,
         gender: form.gender || undefined,
         status: form.status,
+        joined_on: form.joined_on || undefined,
+        blood_group: form.blood_group || undefined,
+        nationality: form.nationality.trim() || undefined,
+        mother_tongue: form.mother_tongue.trim() || undefined,
+        religion: form.religion.trim() || undefined,
+        email: form.email.trim() || undefined,
+        phone: form.phone.trim() || undefined,
         guardian_name: form.guardian_name.trim() || undefined,
+        guardian_relation: form.guardian_relation.trim() || undefined,
         guardian_phone: form.guardian_phone.trim() || undefined,
         guardian_email: form.guardian_email.trim() || undefined,
-        joined_on: form.joined_on || undefined,
-        ...(form.photo_url !== (student?.photo_url ?? "")
-          ? { photo_url: form.photo_url }
-          : {}),
+        emergency_contact_name: form.emergency_contact_name.trim() || undefined,
+        emergency_contact_phone: form.emergency_contact_phone.trim() || undefined,
+        ...(form.photo_url !== (student?.photo_url ?? "") ? { photo_url: form.photo_url } : {}),
+        address: form.address_line1.trim()
+          ? {
+              line1: form.address_line1.trim(),
+              line2: form.address_line2.trim() || undefined,
+              city: form.city.trim() || undefined,
+              district: form.district.trim() || undefined,
+              state: form.state.trim() || undefined,
+              pincode: form.pincode.trim() || undefined,
+              country: "India",
+            }
+          : undefined,
       });
     } catch (err) {
       if (err instanceof ApiError) {
         setFieldErrors(err.fieldErrors);
         if (!Object.keys(err.fieldErrors).length) setError(err.message);
       } else {
-        setError("That student could not be saved.");
+        setError(err instanceof Error ? err.message : "That student could not be saved.");
       }
     } finally {
       setSaving(false);
@@ -1509,101 +1467,376 @@ function StudentDialog({
   };
 
   return (
-    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal modal-wide">
+    <div className="modal-scrim" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }}>
+      <div className="modal modal-wide" style={{ maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
         <div className="modal-header">
-          <h2 className="panel-title">{title}</h2>
+          <div>
+            <h2 className="panel-title">{title}</h2>
+            <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>{description}</p>
+          </div>
+          <button
+            type="button"
+            className="search-clear"
+            onClick={onClose}
+            aria-label="Close dialog"
+            style={{ padding: 4 }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="modal-body">
-          <p className="panel-subtitle">{description}</p>
+        {/* Apple Segmented Section Tabs */}
+        <div style={{ padding: "12px 21px 0", background: "var(--bg-raised)" }}>
+          <div className="segmented-control" style={{ width: "100%", height: 34 }}>
+            <button
+              type="button"
+              className={activeTab === "academic" ? "active" : ""}
+              onClick={() => setActiveTab("academic")}
+              style={{ flex: 1 }}
+            >
+              Academic & Bio
+            </button>
+            <button
+              type="button"
+              className={activeTab === "personal" ? "active" : ""}
+              onClick={() => setActiveTab("personal")}
+              style={{ flex: 1 }}
+            >
+              Personal & Contact
+            </button>
+            <button
+              type="button"
+              className={activeTab === "guardian" ? "active" : ""}
+              onClick={() => setActiveTab("guardian")}
+              style={{ flex: 1 }}
+            >
+              Guardian & Family
+            </button>
+            <button
+              type="button"
+              className={activeTab === "address" ? "active" : ""}
+              onClick={() => setActiveTab("address")}
+              style={{ flex: 1 }}
+            >
+              Address & Emergency
+            </button>
+          </div>
+        </div>
 
+        <div className="modal-body" style={{ flex: 1, overflowY: "auto", padding: "18px 21px" }}>
           {error && (
-            <div className="notice notice-danger" role="alert">
+            <div className="notice notice-danger" role="alert" style={{ marginBottom: 16 }}>
               {error}
             </div>
           )}
 
-          <ProfilePhotoPicker
-            name={[form.first_name, form.last_name].filter(Boolean).join(" ") || "Student"}
-            photoUrl={form.photo_url || null}
-            folder={`student-avatars/${student?.id ?? "new"}`}
-            onChange={(url) => set("photo_url")(url ?? "")}
-          />
+          {activeTab === "academic" && (
+            <div>
+              <div style={{ marginBottom: 18 }}>
+                <ProfilePhotoPicker
+                  name={[form.first_name, form.last_name].filter(Boolean).join(" ") || "Student"}
+                  photoUrl={form.photo_url || null}
+                  folder={`student-avatars/${student?.id ?? "new"}`}
+                  onChange={(url) => set("photo_url")(url ?? "")}
+                />
+              </div>
 
-          <div className="form-grid">
-            <label>
-              First name
-              <input value={form.first_name} onChange={(e) => set("first_name")(e.target.value)} autoFocus />
-              {fieldErrors.first_name && <span className="field-error">{fieldErrors.first_name}</span>}
-            </label>
-            <label>
-              Last name
-              <input value={form.last_name} onChange={(e) => set("last_name")(e.target.value)} />
-              {fieldErrors.last_name && <span className="field-error">{fieldErrors.last_name}</span>}
-            </label>
-            <label>
-              USN
-              <input
-                value={form.usn}
-                onChange={(e) => set("usn")(e.target.value)}
-                placeholder={student ? undefined : "Leave blank to generate one"}
-              />
-              {fieldErrors.usn && <span className="field-error">{fieldErrors.usn}</span>}
-            </label>
-            <label>
-              Date of birth
-              <input type="date" value={form.date_of_birth ?? ""} onChange={(e) => set("date_of_birth")(e.target.value)} />
-              {fieldErrors.date_of_birth && <span className="field-error">{fieldErrors.date_of_birth}</span>}
-            </label>
-            <label>
-              Gender
-              <select value={form.gender ?? ""} onChange={(e) => set("gender")(e.target.value)}>
-                <option value="">Not recorded</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            <label>
-              Admission date
-              <input type="date" value={form.joined_on ?? ""} onChange={(e) => set("joined_on")(e.target.value)} />
-            </label>
-            {student && (
+              <div className="form-grid">
+                <label>
+                  First name *
+                  <input
+                    value={form.first_name}
+                    onChange={(e) => set("first_name")(e.target.value)}
+                    placeholder="e.g. Aarav"
+                    autoFocus
+                  />
+                  {fieldErrors.first_name && <span className="field-error">{fieldErrors.first_name}</span>}
+                </label>
+                <label>
+                  Last name *
+                  <input
+                    value={form.last_name}
+                    onChange={(e) => set("last_name")(e.target.value)}
+                    placeholder="e.g. Sharma"
+                  />
+                  {fieldErrors.last_name && <span className="field-error">{fieldErrors.last_name}</span>}
+                </label>
+                <label>
+                  USN / Admission Number
+                  <input
+                    value={form.usn}
+                    onChange={(e) => set("usn")(e.target.value)}
+                    placeholder={student ? undefined : "Auto-generated (e.g. GGS1001) if blank"}
+                  />
+                  {fieldErrors.usn && <span className="field-error">{fieldErrors.usn}</span>}
+                </label>
+                <label>
+                  Enrolled Class / Grade
+                  <select value={form.grade} onChange={(e) => set("grade")(e.target.value)}>
+                    <option value="">Select class</option>
+                    {availableGrades.map((g) => (
+                      <option key={g} value={g}>
+                        {formatGradeLabel(g)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Section
+                  <select value={form.section} onChange={(e) => set("section")(e.target.value)}>
+                    <option value="">Select section</option>
+                    {availableSections.map((s) => (
+                      <option key={s} value={s}>
+                        Section {s}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Roll Number
+                  <input
+                    value={form.roll_no}
+                    onChange={(e) => set("roll_no")(e.target.value)}
+                    placeholder="e.g. 14"
+                  />
+                </label>
+                <label>
+                  Admission date
+                  <input
+                    type="date"
+                    value={form.joined_on ?? ""}
+                    onChange={(e) => set("joined_on")(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Enrollment status
+                  <select value={form.status ?? "active"} onChange={(e) => set("status")(e.target.value)}>
+                    <option value="active">Active (Enrolled)</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="graduated">Graduated</option>
+                    <option value="withdrawn">Withdrawn</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "personal" && (
+            <div className="form-grid">
               <label>
-                Status
-                <select value={form.status ?? ""} onChange={(e) => set("status")(e.target.value)}>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="graduated">Graduated</option>
-                  <option value="withdrawn">Withdrawn</option>
+                Date of birth
+                <input
+                  type="date"
+                  value={form.date_of_birth ?? ""}
+                  onChange={(e) => set("date_of_birth")(e.target.value)}
+                />
+                {fieldErrors.date_of_birth && <span className="field-error">{fieldErrors.date_of_birth}</span>}
+              </label>
+              <label>
+                Gender
+                <select value={form.gender ?? ""} onChange={(e) => set("gender")(e.target.value)}>
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
                 </select>
               </label>
-            )}
-            <label>
-              Guardian name
-              <input value={form.guardian_name ?? ""} onChange={(e) => set("guardian_name")(e.target.value)} />
-            </label>
-            {!student && (
-              <>
-                <label>
-                  Guardian phone
-                  <input value={form.guardian_phone ?? ""} onChange={(e) => set("guardian_phone")(e.target.value)} />
-                </label>
-                <label>
-                  Guardian email
-                  <input type="email" value={form.guardian_email ?? ""} onChange={(e) => set("guardian_email")(e.target.value)} />
-                </label>
-              </>
-            )}
-          </div>
+              <label>
+                Blood group
+                <select value={form.blood_group} onChange={(e) => set("blood_group")(e.target.value)}>
+                  <option value="">Select blood group</option>
+                  <option value="A+">A+</option>
+                  <option value="A-">A-</option>
+                  <option value="B+">B+</option>
+                  <option value="B-">B-</option>
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
+                  <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                </select>
+              </label>
+              <label>
+                Nationality
+                <input
+                  value={form.nationality}
+                  onChange={(e) => set("nationality")(e.target.value)}
+                  placeholder="e.g. Indian"
+                />
+              </label>
+              <label>
+                Mother tongue
+                <input
+                  value={form.mother_tongue}
+                  onChange={(e) => set("mother_tongue")(e.target.value)}
+                  placeholder="e.g. English, Kannada, Hindi"
+                />
+              </label>
+              <label>
+                Religion / Category
+                <input
+                  value={form.religion}
+                  onChange={(e) => set("religion")(e.target.value)}
+                  placeholder="e.g. General / Not specified"
+                />
+              </label>
+              <label>
+                Student personal email
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set("email")(e.target.value)}
+                  placeholder="Optional pupil email"
+                />
+              </label>
+              <label>
+                Student phone number
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => set("phone")(e.target.value)}
+                  placeholder="Optional pupil mobile"
+                />
+              </label>
+            </div>
+          )}
+
+          {activeTab === "guardian" && (
+            <div className="form-grid">
+              <label>
+                Primary guardian name
+                <input
+                  value={form.guardian_name}
+                  onChange={(e) => set("guardian_name")(e.target.value)}
+                  placeholder="e.g. Rajesh Sharma"
+                />
+              </label>
+              <label>
+                Relationship to student
+                <select value={form.guardian_relation} onChange={(e) => set("guardian_relation")(e.target.value)}>
+                  <option value="Father">Father</option>
+                  <option value="Mother">Mother</option>
+                  <option value="Legal Guardian">Legal Guardian</option>
+                  <option value="Parent">Parent</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+              <label>
+                Guardian mobile phone
+                <input
+                  type="tel"
+                  value={form.guardian_phone}
+                  onChange={(e) => set("guardian_phone")(e.target.value)}
+                  placeholder="e.g. +91 98765 43210"
+                />
+              </label>
+              <label>
+                Guardian email address
+                <input
+                  type="email"
+                  value={form.guardian_email}
+                  onChange={(e) => set("guardian_email")(e.target.value)}
+                  placeholder="e.g. guardian@example.com"
+                />
+              </label>
+            </div>
+          )}
+
+          {activeTab === "address" && (
+            <div className="form-grid">
+              <label style={{ gridColumn: "span 2" }}>
+                Address Line 1 (House/Flat No, Building, Street)
+                <input
+                  value={form.address_line1}
+                  onChange={(e) => set("address_line1")(e.target.value)}
+                  placeholder="e.g. Flat 402, Palm Meadows"
+                />
+              </label>
+              <label style={{ gridColumn: "span 2" }}>
+                Address Line 2 (Locality, Area, Landmark)
+                <input
+                  value={form.address_line2}
+                  onChange={(e) => set("address_line2")(e.target.value)}
+                  placeholder="e.g. Whitefield Main Road"
+                />
+              </label>
+              <label>
+                City
+                <input
+                  value={form.city}
+                  onChange={(e) => set("city")(e.target.value)}
+                  placeholder="e.g. Bengaluru"
+                />
+              </label>
+              <label>
+                District
+                <input
+                  value={form.district}
+                  onChange={(e) => set("district")(e.target.value)}
+                  placeholder="e.g. Bengaluru Urban"
+                />
+              </label>
+              <label>
+                State
+                <input
+                  value={form.state}
+                  onChange={(e) => set("state")(e.target.value)}
+                  placeholder="e.g. Karnataka"
+                />
+              </label>
+              <label>
+                Postal PIN code
+                <input
+                  value={form.pincode}
+                  onChange={(e) => set("pincode")(e.target.value)}
+                  placeholder="e.g. 560066"
+                />
+              </label>
+              <label>
+                Emergency contact person
+                <input
+                  value={form.emergency_contact_name}
+                  onChange={(e) => set("emergency_contact_name")(e.target.value)}
+                  placeholder="Name of emergency contact"
+                />
+              </label>
+              <label>
+                Emergency phone number
+                <input
+                  type="tel"
+                  value={form.emergency_contact_phone}
+                  onChange={(e) => set("emergency_contact_phone")(e.target.value)}
+                  placeholder="+91 Emergency mobile"
+                />
+              </label>
+            </div>
+          )}
         </div>
 
-        <div className="modal-footer">
-          <button className="secondary-button" onClick={onClose}>
+        <div className="modal-footer" style={{ borderTop: "1px solid var(--border)", padding: "14px 21px" }}>
+          <button type="button" className="secondary-button" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary-button" onClick={() => void submit()} disabled={saving}>
+          {activeTab !== "address" ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                if (activeTab === "academic") setActiveTab("personal");
+                else if (activeTab === "personal") setActiveTab("guardian");
+                else if (activeTab === "guardian") setActiveTab("address");
+              }}
+            >
+              Next section →
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => void submit()}
+            disabled={saving}
+          >
             {saving ? "Saving…" : submitLabel}
           </button>
         </div>

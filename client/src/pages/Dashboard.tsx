@@ -32,6 +32,7 @@ import {
   Globe,
   GraduationCap,
   IndianRupee,
+  Layers,
   LayoutDashboard,
   Lock,
   LogOut,
@@ -42,6 +43,7 @@ import {
   Plus,
   Receipt,
   RefreshCw,
+  RotateCcw,
   Save,
   School,
   Search,
@@ -165,6 +167,7 @@ import {
 import { StudentDirectory } from "./StudentDirectory";
 import { StaffDrawer } from "../components/StaffDrawer";
 import { StaffCreateDialog } from "../components/StaffCreateDialog";
+import { SmoothFilterDropdown } from "../components/SmoothFilterDropdown";
 import SmoothScroll, { smoothScrollTo } from "../components/SmoothScroll";
 import {
   effectiveRole,
@@ -3191,6 +3194,8 @@ function StaffView({
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All staff");
+  const [department, setDepartment] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [showDialog, setShowDialog] = useState(false);
   const [selected, setSelected] = useState<RowId | null>(null);
 
@@ -3200,27 +3205,120 @@ function StaffView({
       onStaffOpened?.();
     }
   }, [openStaffId, onStaffOpened]);
+
   const {
     rows: staff,
     loading: staffViewLoading,
     reload: reloadStaff,
   } = useStaff();
-  const filtered = staff.filter(
-    member =>
-      `${member.name} ${member.usn} ${member.role} ${member.department}`
+
+  const departments = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of staff) {
+      if (s.department) set.add(s.department);
+    }
+    return Array.from(set).sort();
+  }, [staff]);
+
+  const roles = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of staff) {
+      if (s.role) set.add(s.role);
+    }
+    return Array.from(set).sort();
+  }, [staff]);
+
+  const filtered = useMemo(() => {
+    return staff.filter(member => {
+      const textMatch = `${member.name} ${member.usn} ${member.role} ${member.department}`
         .toLowerCase()
-        .includes(query.toLowerCase()) &&
-      (status === "All staff" || member.status === status)
-  );
+        .includes(query.toLowerCase());
+      const statusMatch =
+        !status || status === "All staff" || status === "all"
+          ? true
+          : status === "On campus"
+          ? member.status === "On campus"
+          : status === "On leave"
+          ? member.status === "On leave"
+          : member.status === status;
+      const deptMatch = !department || member.department === department;
+      const roleMatch = !roleFilter || member.role === roleFilter;
+      return textMatch && statusMatch && deptMatch && roleMatch;
+    });
+  }, [staff, query, status, department, roleFilter]);
+
   const staffPager = usePagination(filtered);
   const pageStaff = staffPager.pageRows;
   const onCampus = staff.filter(member => member.status === "On campus").length;
-  /*
-   * Resolved by id, not by name. The drawer's edit dialog can change the name,
-   * and a selection keyed on the name stopped matching the moment it was saved
-   * — the panel closed by itself as if the save had failed.
-   */
+
+  const activeFilters = useMemo(() => {
+    const list: Array<{ id: string; label: string; onRemove: () => void }> = [];
+    if (query) {
+      list.push({
+        id: "search",
+        label: `"${query}"`,
+        onRemove: () => setQuery(""),
+      });
+    }
+    if (status && status !== "All staff") {
+      list.push({
+        id: "status",
+        label: `Status: ${status}`,
+        onRemove: () => setStatus("All staff"),
+      });
+    }
+    if (department) {
+      list.push({
+        id: "department",
+        label: `Dept: ${department}`,
+        onRemove: () => setDepartment(""),
+      });
+    }
+    if (roleFilter) {
+      list.push({
+        id: "role",
+        label: `Role: ${roleFilter}`,
+        onRemove: () => setRoleFilter(""),
+      });
+    }
+    return list;
+  }, [query, status, department, roleFilter]);
+
+  const activeFilterCount = activeFilters.length;
+
+  const clearAllFilters = () => {
+    setQuery("");
+    setStatus("All staff");
+    setDepartment("");
+    setRoleFilter("");
+  };
+
+  const exportStaffCsv = () => {
+    const headers = ["Staff Member", "USN", "Role", "Department", "Email", "Status", "Attendance %"];
+    const rows = filtered.map(m => [
+      `"${(m.name || "").replace(/"/g, '""')}"`,
+      `"${(m.usn || "").replace(/"/g, '""')}"`,
+      `"${(m.role || "").replace(/"/g, '""')}"`,
+      `"${(m.department || "").replace(/"/g, '""')}"`,
+      `"${(m.email || "").replace(/"/g, '""')}"`,
+      `"${(m.status || "").replace(/"/g, '""')}"`,
+      `"${m.attendance ?? ""}"`,
+    ].join(","));
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `staff-directory-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Staff directory exported", {
+      description: `Downloaded ${filtered.length} staff records.`,
+    });
+  };
+
   const active = staff.find(member => String(member.id) === String(selected));
+
   return (
     <div className="page-stack">
       <div className="page-intro">
@@ -3232,14 +3330,25 @@ function StaffView({
           />
           <h1 className="page-title">Staff</h1>
           <p className="page-subtitle">
-            Every educator, coordinator and officer in one directory.
+            Every educator, coordinator and administrative officer in one directory.
           </p>
         </div>
-        <button className="primary-button" onClick={() => setShowDialog(true)}>
-          <Plus size={16} />
-          Add staff
-        </button>
+        <div className="intro-actions">
+          <button
+            className="secondary-button"
+            onClick={exportStaffCsv}
+            disabled={!filtered.length}
+          >
+            <Download size={15} />
+            Export
+          </button>
+          <button className="primary-button" onClick={() => setShowDialog(true)}>
+            <Plus size={16} />
+            Add staff
+          </button>
+        </div>
       </div>
+
       <div className="metric-grid three">
         {staffViewLoading ? (
           <>
@@ -3259,21 +3368,22 @@ function StaffView({
             <MetricBlock
               label="On leave"
               value={`${staff.length - onCampus}`}
-              comparison="2 approved requests"
+              comparison="Approved leave requests"
               icon={CalendarDays}
               spark={[27, 25, 24, 23, 21, 20, 18]}
               positive={false}
             />
             <MetricBlock
-              label="New this term"
-              value="3"
-              comparison="Joined in September"
+              label="Active faculty"
+              value={`${staff.length}`}
+              comparison="Full teaching & administrative roster"
               icon={GraduationCap}
               spark={[11, 13, 12, 15, 14, 17, 19]}
             />
           </>
         )}
       </div>
+
       <div className="panel table-panel">
         <div className="table-toolbar">
           <div className="search-field">
@@ -3283,32 +3393,97 @@ function StaffView({
               onChange={event => setQuery(event.target.value)}
               placeholder="Search by name, USN, role or department..."
             />
-          </div>
-          <div className="toolbar-actions">
-            <div className="filter-select">
-              <Filter size={14} />
-              <select
-                value={status}
-                onChange={event => setStatus(event.target.value)}
+            {query && (
+              <button
+                className="search-clear"
+                onClick={() => setQuery("")}
+                aria-label="Clear search"
               >
-                <option>All staff</option>
-                <option>On campus</option>
-                <option>On leave</option>
-              </select>
-              <ChevronDown size={14} />
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <div className="toolbar-actions">
+            {/* Quick Status Segmented Control */}
+            <div className="segmented-control" role="group" aria-label="Filter by staff status">
+              <button
+                type="button"
+                className={status === "All staff" || status === "all" ? "active" : ""}
+                onClick={() => setStatus("All staff")}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={status === "On campus" ? "active" : ""}
+                onClick={() => setStatus("On campus")}
+              >
+                On campus
+              </button>
+              <button
+                type="button"
+                className={status === "On leave" ? "active" : ""}
+                onClick={() => setStatus("On leave")}
+              >
+                On leave
+              </button>
             </div>
-            <button
-              className="secondary-button compact"
-              onClick={() => toast.success("Staff directory exported")}
-            >
-              <Download size={14} />
-              Export
-            </button>
-            <IconButton label="More staff table actions">
-              <MoreHorizontal size={17} />
-            </IconButton>
+
+            {/* Department Filter */}
+            <SmoothFilterDropdown
+              label="All departments"
+              icon={<Layers size={14} />}
+              value={department}
+              onChange={setDepartment}
+              ariaLabel="Filter by department"
+              options={[
+                { value: "", label: "All departments" },
+                ...departments.map(d => ({ value: d, label: d })),
+              ]}
+            />
+
+            {/* Role Filter */}
+            <SmoothFilterDropdown
+              label="All roles"
+              icon={<Briefcase size={14} />}
+              value={roleFilter}
+              onChange={setRoleFilter}
+              ariaLabel="Filter by role"
+              options={[
+                { value: "", label: "All roles" },
+                ...roles.map(r => ({ value: r, label: r })),
+              ]}
+            />
           </div>
         </div>
+
+        {/* Active Filter Badges Bar */}
+        {activeFilterCount > 0 && (
+          <div className="active-filters-bar">
+            <span className="active-filters-label">Active filters:</span>
+            {activeFilters.map(f => (
+              <span key={f.id} className="active-filter-chip">
+                <span>{f.label}</span>
+                <button
+                  type="button"
+                  onClick={f.onRemove}
+                  aria-label={`Remove filter ${f.label}`}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              className="clear-all-filters-btn"
+              onClick={clearAllFilters}
+            >
+              Reset all ({activeFilterCount})
+            </button>
+          </div>
+        )}
+
         <div className="table-scroll">
           <table className="data-table">
             <thead>
@@ -3376,6 +3551,31 @@ function StaffView({
               )}
             </tbody>
           </table>
+
+          {!staffViewLoading && filtered.length === 0 && (
+            <div className="empty-state">
+              <Users size={22} className="text-[var(--text-muted)]" />
+              <p className="panel-title" style={{ fontSize: 15, marginTop: 6 }}>
+                {activeFilterCount ? "No staff members match these filters" : "No staff members on record"}
+              </p>
+              <p className="panel-subtitle">
+                {activeFilterCount
+                  ? "Try adjusting your search, department, role, or campus status filters."
+                  : "Get started by adding the first faculty or administrative officer."}
+              </p>
+              {Boolean(activeFilterCount) && (
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  onClick={clearAllFilters}
+                  style={{ marginTop: 10 }}
+                >
+                  <RotateCcw size={13} />
+                  Reset all filters
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <Pager pagination={staffPager} noun="staff" />
       </div>

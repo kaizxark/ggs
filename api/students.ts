@@ -907,6 +907,7 @@ export default async function handler(req: Request): Promise<Response> {
       pageCount: Math.max(1, Math.ceil(total / filter.pageSize)),
       scanned,
       truncated,
+      role: caller.role,
     });
   }
 
@@ -1017,6 +1018,7 @@ export default async function handler(req: Request): Promise<Response> {
       "blood_group",
       "nationality",
       "mother_tongue",
+      "religion",
       "photo_url",
       "emergency_contact_name",
       "emergency_contact_phone",
@@ -1067,6 +1069,35 @@ export default async function handler(req: Request): Promise<Response> {
         );
       }
       return fail("The student could not be created.", 500, "create_failed");
+    }
+
+    const grade = clean(body.grade, 40);
+    const section = clean(body.section, 10);
+    const rollNo = clean(body.roll_no, 20);
+
+    if (grade && grade !== "Unassigned") {
+      let roomQuery = `classrooms?select=id&organisation_id=eq.${orgId}&grade=eq.${encodeURIComponent(grade)}`;
+      if (section) roomQuery += `&section=eq.${encodeURIComponent(section)}`;
+      const rooms = await readJson<Json[]>(await rest(`${roomQuery}&limit=1`)).catch(() => [] as Json[]);
+      if (rooms.length) {
+        const years = await readJson<Json[]>(
+          await rest(
+            `academic_years?select=id&organisation_id=eq.${orgId}&is_current=eq.true&limit=1`
+          )
+        ).catch(() => [] as Json[]);
+        await rest("enrollments", {
+          method: "POST",
+          headers: { Prefer: "return=representation" },
+          body: JSON.stringify({
+            organisation_id: orgId,
+            student_id: created[0].id,
+            classroom_id: rooms[0].id,
+            academic_year_id: years[0]?.id ?? null,
+            roll_no: rollNo || null,
+            active: true,
+          }),
+        }).catch(() => null);
+      }
     }
 
     const { account, detail } = await ensureStudentAccount(
