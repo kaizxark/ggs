@@ -1454,125 +1454,173 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
    library default.
    ========================================================================= */
 
+/* ============================================================================
+   Toasts — Apple HIG Frosted Glass Retouch & Refined Status Iconography
+   ========================================================================= */
+
 [data-sonner-toaster] { font-family: inherit; }
 
-/*
- * `[data-styled="true"]` is not decoration: Sonner's own rule is
- * `[data-sonner-toast][data-styled=true]`, which is one attribute more specific
- * than a plain `[data-sonner-toast]`. Without matching it here, Sonner's
- * background wins on specificity regardless of order, and the toast renders
- * pure black — which is exactly what it was doing. Verified in a browser.
- */
 [data-sonner-toast][data-styled="true"] {
-  /* Opaque on purpose. `bg-panel` is the app's own card colour. */
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  color: var(--text-secondary);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
-  font-size: 13.5px;
+  background: rgba(18, 20, 26, 0.94);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  color: var(--text-primary);
+  box-shadow:
+    0 16px 40px -8px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 1px 0 0 rgba(255, 255, 255, 0.15) inset;
+  font-size: 13px;
+  padding: 13px 16px;
+  letter-spacing: -0.01em;
+}
+
+html:not(.dark) [data-sonner-toast][data-styled="true"] {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 16px 36px -8px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(0, 0, 0, 0.04) inset;
+  color: #1a1a1e;
 }
 
 [data-sonner-toast][data-styled="true"] [data-title] {
   color: var(--text-primary);
   font-weight: 600;
-  line-height: 1.45;
+  font-size: 13.5px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+html:not(.dark) [data-sonner-toast][data-styled="true"] [data-title] {
+  color: #111827;
 }
 
 [data-sonner-toast][data-styled="true"] [data-description] {
   color: var(--text-muted);
   font-size: 12.5px;
-  line-height: 1.5;
+  line-height: 1.45;
+  margin-top: 2px;
 }
 
-/* A coloured rule down the leading edge, so the kind of message is readable
-   before the words are. Cheaper to scan than a fully tinted card, and it keeps
-   the surface opaque. */
-[data-sonner-toast][data-styled="true"]::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  border-radius: 10px 0 0 10px;
-  background: var(--toast-rule, var(--brand));
+html:not(.dark) [data-sonner-toast][data-styled="true"] [data-description] {
+  color: #6b7280;
 }
 
-/* ---- Per state ---- */
+/* Status Icon Badge */
+[data-sonner-toast] [data-icon] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  margin-right: 12px;
+  flex-shrink: 0;
+  transition: transform 180ms ease;
+}
+
+/* ---- Per state styling ---- */
 [data-sonner-toast][data-styled="true"][data-type="success"] {
-  --toast-rule: var(--brand);
-  border-color: var(--brand-border);
-  background: var(--bg-panel);
+  background: linear-gradient(135deg, rgba(48, 209, 88, 0.09) 0%, rgba(18, 20, 26, 0.95) 45%);
+  border-color: rgba(48, 209, 88, 0.32);
 }
-[data-sonner-toast][data-styled="true"][data-type="success"] [data-icon] { color: var(--brand); }
+[data-sonner-toast][data-styled="true"][data-type="success"] [data-icon] {
+  background: rgba(48, 209, 88, 0.14);
+  border: 1px solid rgba(48, 209, 88, 0.30);
+  color: #30d158;
+}
 
 [data-sonner-toast][data-styled="true"][data-type="error"] {
-  --toast-rule: var(--danger);
-  border-color: var(--danger-border);
-  background: var(--bg-panel);
+  background: linear-gradient(135deg, rgba(255, 69, 58, 0.09) 0%, rgba(18, 20, 26, 0.95) 45%);
+  border-color: rgba(255, 69, 58, 0.32);
 }
-[data-sonner-toast][data-styled="true"][data-type="error"] [data-icon] { color: var(--danger); }
+[data-sonner-toast][data-styled="true"][data-type="error"] [data-icon] {
+  background: rgba(255, 69, 58, 0.14);
+  border: 1px solid rgba(255, 69, 58, 0.30);
+  color: #ff453a;
+}
 
 [data-sonner-toast][data-styled="true"][data-type="warning"] {
-  --toast-rule: var(--warning);
-  border-color: var(--warning-border);
-  background: var(--bg-panel);
+  background: linear-gradient(135deg, rgba(255, 159, 10, 0.09) 0%, rgba(18, 20, 26, 0.95) 45%);
+  border-color: rgba(255, 159, 10, 0.32);
 }
-[data-sonner-toast][data-styled="true"][data-type="warning"] [data-icon] { color: var(--warning); }
+[data-sonner-toast][data-styled="true"][data-type="warning"] [data-icon] {
+  background: rgba(255, 159, 10, 0.14);
+  border: 1px solid rgba(255, 159, 10, 0.30);
+  color: #ff9f0a;
+}
 
 [data-sonner-toast][data-styled="true"][data-type="info"] {
-  --toast-rule: var(--info);
-  border-color: var(--info-border);
-  background: var(--bg-panel);
+  background: linear-gradient(135deg, rgba(100, 210, 255, 0.09) 0%, rgba(18, 20, 26, 0.95) 45%);
+  border-color: rgba(100, 210, 255, 0.32);
 }
-[data-sonner-toast][data-styled="true"][data-type="info"] [data-icon] { color: var(--info); }
+[data-sonner-toast][data-styled="true"][data-type="info"] [data-icon] {
+  background: rgba(100, 210, 255, 0.14);
+  border: 1px solid rgba(100, 210, 255, 0.30);
+  color: #64d2ff;
+}
 
-/* Untyped toasts are informational — "Class schedule opened". They get the
-   neutral rule rather than borrowing an accent, so a plain confirmation cannot
-   be mistaken for a success.
-   Matched on the *absence* of `data-type`: Sonner only writes that attribute for
-   a typed toast, so `toast("Filters opened")` arrives with no type at all and a
-   `[data-type="default"]` selector silently matched nothing — leaving these to
-   fall through to Sonner's black. Verified in a browser. */
+/* Default / Untyped toast */
 [data-sonner-toast][data-styled="true"]:not([data-type]) {
-  /* The background is repeated here deliberately. This rule matches the most
-     specific selector in the group, so it is the one place an untyped toast's
-     surface can be set without depending on rule order; without it these cards
-     fell through to Sonner's black. */
-  background: var(--bg-panel);
-  border-color: var(--border-strong);
-  --toast-rule: var(--text-faint);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(18, 20, 26, 0.95) 45%);
+  border-color: rgba(255, 255, 255, 0.16);
 }
-[data-sonner-toast][data-styled="true"]:not([data-type]) [data-icon] { color: var(--text-muted); }
+[data-sonner-toast][data-styled="true"]:not([data-type]) [data-icon] {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--text-primary);
+}
 
-/* Sonner dims the whole stack while hovering or when the window loses focus.
-   That is right for a translucent stack and wrong for opaque cards: dimming an
-   opaque toast makes it look disabled rather than backgrounded. */
+/* Action button inside toast */
+[data-sonner-toast][data-styled="true"] [data-button] {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  transition: all 140ms ease;
+}
+[data-sonner-toast][data-styled="true"] [data-button]:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.30);
+  color: #ffffff;
+}
+[data-sonner-toast][data-styled="true"] [data-button]:active {
+  transform: scale(0.96);
+}
+
+/* Close button on toast */
+[data-sonner-toast][data-styled="true"] [data-close-button] {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 160ms ease, background 160ms ease, color 160ms ease;
+}
+[data-sonner-toast][data-styled="true"]:hover [data-close-button] {
+  opacity: 1;
+}
+[data-sonner-toast][data-styled="true"] [data-close-button]:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.16);
+}
+
 [data-sonner-toaster][data-hovered="false"] [data-sonner-toast]:not([data-during]) { opacity: 1; }
 [data-sonner-toaster][data-focused="false"] [data-sonner-toast]:not([data-during]) { opacity: 1; }
 
-/* An action button inside a toast ("Undo") has to read as a button. */
-[data-sonner-toast][data-styled="true"] [data-button] {
-  border: 1px solid var(--border-accent);
-  border-radius: 7px;
-  background: var(--bg-raised);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-[data-sonner-toast][data-styled="true"] [data-button]:hover {
-  border-color: var(--brand-border);
-  color: var(--brand);
-}
-
-/* The close affordance is invisible until the toast is hovered or focused —
-   a permanent ✕ on every card is noise when most are informational. */
-[data-sonner-toast][data-styled="true"] [data-close-button] { color: var(--text-faint); }
-[data-sonner-toast][data-styled="true"] [data-close-button]:hover { color: var(--text-secondary); background: var(--bg-hover); }
-
-/* Keep toasts clear of the sidebar on a narrow window, where bottom-right would
-   otherwise sit on top of the nav. */
 @media (max-width: 616px) {
   [data-sonner-toaster] { right: 12px !important; left: 12px !important; }
   [data-sonner-toast][data-styled="true"] { width: 100% !important; }
@@ -2289,6 +2337,13 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
     width: 100% !important;
     max-height: none !important;
     overflow: visible !important;
+  }
+
+  .report-card-container {
+    background: white !important;
+    color: black !important;
+    border: 1px solid #000 !important;
+    box-shadow: none !important;
   }
   .printable-report-dialog .no-print {
     display: none !important;
@@ -3629,4 +3684,37 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .pupil-m-sk { animation: none; background-image: none; }
   .mobile-tab-slider { transition: none; }
   .staff-more-sheet, .staff-more-scrim { animation: none; }
+}
+
+/* ---------- Examination & Gradebook Enhancements ---------- */
+.exam-icon-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.avatar-chip {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.erp-marks-input:focus {
+  outline: 2px solid var(--brand-strong);
+  border-color: var(--brand);
+  background: var(--bg-hover) !important;
 }

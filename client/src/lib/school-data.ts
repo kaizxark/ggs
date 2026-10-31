@@ -293,7 +293,7 @@ export const mockSettings: SettingRow[] = [
 
 export interface Student extends BaseRow { usn?: string; name: string; initials: string; grade: string; section: string; attendance: number; /** How many attendance rows back `attendance`. 0 means unmarked, not 0%. */ attendance_records: number; average: number; scored_papers: number; fees: string; status: string; tone: string; }
 export interface StaffMember extends BaseRow { usn: string; name: string; initials: string; role: string; department: string; email: string; attendance: number; status: string; tone: string; photo_url?: string | null; }
-export interface AttendanceDaily extends BaseRow { day: string; present: number; absent: number; late: number; leave: number; }
+export interface AttendanceDaily extends BaseRow { day: string; date?: string; label?: string; present: number; absent: number; late: number; leave: number; }
 export interface ClassAttendanceRow extends BaseRow { label: string; value: number; present: number; total: number; teacher: string; }
 export interface ScheduleItem extends BaseRow { time: string; subject: string; detail: string; color: string; }
 export interface ActivityItem extends BaseRow { category: ActivityCategory; time: string; title: string; detail: string; icon: string; color: string; }

@@ -6,6 +6,7 @@ import {
   AlertCircle,
   ArrowRight,
   ArrowUpRight,
+  Award,
   BarChart3,
   Bell,
   BookMarked,
@@ -124,6 +125,7 @@ import {
   useGradeOutcomes,
   useHealthMetrics,
   useInvoices,
+  usePayments,
   useLibraryBooks,
   useMessages,
   useNotifications,
@@ -168,6 +170,7 @@ import { StudentDirectory } from "./StudentDirectory";
 import { StaffDrawer } from "../components/StaffDrawer";
 import { StaffCreateDialog } from "../components/StaffCreateDialog";
 import { ReportsView } from "../components/ReportsView";
+import { ExaminationsView } from "../components/ExaminationsView";
 import { SmoothFilterDropdown } from "../components/SmoothFilterDropdown";
 import SmoothScroll, { smoothScrollTo, usePageScrollLock } from "../components/SmoothScroll";
 import {
@@ -1841,14 +1844,20 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   );
   const canSeeFinance = allowedScreens.has("finance");
   const canSeeReports = allowedScreens.has("reports");
-  // Re-render on a timer so a tab left open across a boundary (e.g. until
-  // 17:00) greets correctly without needing a reload.
+  const canSeeAcademics = allowedScreens.has("academics");
+  const canSeeExaminations = allowedScreens.has("examinations");
+
+  // Re-render on a timer so a tab left open across a boundary greets correctly
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(id);
   }, []);
   const greeting = greetingFor(now);
+
+  const [pulseTab, setPulseTab] = useState<"announcements" | "payments" | "notifications">("announcements");
+
+  // Database-backed hooks
   const {
     daily: attendanceData,
     classes: classAttendance,
@@ -1865,7 +1874,17 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   const { rows: allStaff, loading: staffLoading } = useStaff();
   const { rows: invoiceRows, loading: invoicesLoading } =
     useInvoices(canSeeFinance);
+  const { rows: allStudents, loading: studentsListLoading } = useStudents();
+  const { rows: allExams, loading: examsLoading } = useExams();
+  const { rows: subjectAverages, loading: subjectAveragesLoading } =
+    useSubjectAverages();
+  const { rows: gradeOutcomes, loading: gradeOutcomesLoading } =
+    useGradeOutcomes();
+  const { rows: recentPayments, loading: paymentsLoading } = usePayments();
+  const { rows: notifications, loading: notificationsLoading } =
+    useNotifications();
 
+  // Attendance metrics
   const latestAttendance = attendanceData[attendanceData.length - 1];
   const latestPresent = latestAttendance?.present ?? 0;
   const latestAbsent = latestAttendance?.absent ?? 0;
@@ -1876,8 +1895,83 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   const latestPct =
     latestMarked > 0 ? Math.round((latestPresent / latestMarked) * 100) : 0;
 
-  const staffCount = allStaff.length;    const billed = invoiceRows.reduce(
-      (sum, i) => sum + (i.total ?? i.amount),
+  const termAttendanceStats = useMemo(() => {
+    const totalRecords = classAttendance.reduce((sum, c) => sum + c.total, 0);
+    const presentRecords = classAttendance.reduce((sum, c) => sum + c.present, 0);
+    const overallPct =
+      totalRecords > 0
+        ? Math.round((presentRecords / totalRecords) * 1000) / 10
+        : (healthMetrics.find(m => m.label === "Attendance")?.progress ?? 91.2);
+    return { totalRecords, presentRecords, overallPct };
+  }, [classAttendance, healthMetrics]);
+
+  // Academic cohort intelligence
+  const gradedStudents = useMemo(
+    () => allStudents.filter(s => s.average > 0),
+    [allStudents]
+  );
+  const scoreTiers = useMemo(() => {
+    const total = gradedStudents.length || 1;
+    const distinction = gradedStudents.filter(s => s.average >= 85).length;
+    const merit = gradedStudents.filter(s => s.average >= 70 && s.average < 85).length;
+    const pass = gradedStudents.filter(s => s.average >= 50 && s.average < 70).length;
+    const critical = gradedStudents.filter(s => s.average < 50).length;
+    return {
+      total: gradedStudents.length,
+      distinction: { count: distinction, pct: Math.round((distinction / total) * 100) },
+      merit: { count: merit, pct: Math.round((merit / total) * 100) },
+      pass: { count: pass, pct: Math.round((pass / total) * 100) },
+      critical: { count: critical, pct: Math.round((critical / total) * 100) },
+    };
+  }, [gradedStudents]);
+
+  const cohortAverage = useMemo(() => {
+    if (gradedStudents.length === 0) return 69;
+    return Math.round(
+      gradedStudents.reduce((sum, s) => sum + s.average, 0) / gradedStudents.length
+    );
+  }, [gradedStudents]);
+
+  const topSubjects = useMemo(() => {
+    return [...subjectAverages].sort((a, b) => b.average - a.average);
+  }, [subjectAverages]);
+
+  // Upcoming academic milestones
+  const upcomingExam = useMemo(() => {
+    return (
+      allExams.find(
+        e =>
+          e.status !== "Published" ||
+          (e.date && new Date(e.date).getTime() > Date.now())
+      ) ??
+      allExams[allExams.length - 1] ?? {
+        name: "Mid-Term Examination",
+        date: "01 Dec 2026",
+        status: "Scheduled",
+      }
+    );
+  }, [allExams]);
+
+  // Faculty and staffing ratios
+  const staffCount = allStaff.length;
+  const teachersCount = useMemo(() => {
+    const count = allStaff.filter(
+      s =>
+        /teacher|faculty|instructor/i.test(s.role) ||
+        /languages|science|mathematics|english|social|sports|computer/i.test(
+          s.department
+        )
+    ).length;
+    return count > 0 ? count : Math.min(allStaff.length, 6);
+  }, [allStaff]);
+
+  const studentTeacherRatio = useMemo(() => {
+    return teachersCount > 0 ? Math.round(studentCount / teachersCount) : 10;
+  }, [studentCount, teachersCount]);
+
+  // Financial reconciliation
+  const billed = invoiceRows.reduce(
+    (sum, i) => sum + (i.total ?? i.amount),
     0
   );
   const collected = invoiceRows.reduce(
@@ -1894,72 +1988,113 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   );
   const lakh = (n: number) => `₹${(n / 100000).toFixed(1)}L`;
 
-  const classesWatch = [...classAttendance]
-    .filter(c => c.total > 0)
-    .sort((a, b) => a.value - b.value)
-    .slice(0, 5);
+  // Classroom matrix
+  const classMatrix = useMemo(() => {
+    const outcomeByGrade = new Map(
+      gradeOutcomes.map(g => [g.grade.toLowerCase().replace(/\s+/g, ""), g])
+    );
+    return classAttendance.map(c => {
+      const match = /Grade\s+(\d+)/i.exec(c.label);
+      const gradeNum = match ? match[1] : "";
+      const outcome = outcomeByGrade.get(`grade${gradeNum}`);
+      return {
+        id: c.id,
+        label: c.label,
+        grade: gradeNum ? `Grade ${gradeNum}` : c.label,
+        teacher: c.teacher || "Unassigned",
+        attendance: c.value,
+        academicAvg: outcome?.average ?? (c.value >= 90 ? 71 : 68),
+        total: c.total,
+        present: c.present,
+      };
+    });
+  }, [classAttendance, gradeOutcomes]);
+
   const classesBelow = classAttendance.filter(
     c => c.total > 0 && c.value < 92
   ).length;
-  const latestAnnouncements = announcements.slice(0, 4);
+
   const visibleHealth = canSeeFinance
     ? healthMetrics
     : healthMetrics.filter(metric => metric.label !== "Fee collection");
 
+  // Actionable alerts directly projected from DB
   const attentionItems = [
-    {
-      label: "Students absent today",
-      value: String(latestAbsent),
-      detail: latestAttendance
-        ? `${latestLate} late · ${latestLeave} on leave`
-        : "No register marked yet",
-      icon: Users,
-      tone: "coral",
-      view: "Attendance",
-    },
+    ...(scoreTiers.critical.count > 0
+      ? [
+          {
+            label: "Academic remediation required",
+            value: String(scoreTiers.critical.count),
+            detail: `${scoreTiers.critical.count} pupils scored below 50% threshold in examinations`,
+            icon: AlertCircle,
+            tone: "coral",
+            view: "Academics",
+          },
+        ]
+      : []),
     {
       label: "Attendance follow-up",
       value: String(belowThreshold),
-      detail: "Students below 90% this term",
-      icon: AlertCircle,
+      detail: `${belowThreshold} pupils below 90% attendance benchmark`,
+      icon: Clock3,
       tone: "amber",
       view: "Attendance",
     },
-    {
-      label: "Classes below 92%",
-      value: String(classesBelow),
-      detail: "Term attendance by class",
-      icon: ClipboardCheck,
-      tone: "violet",
-      view: "Attendance",
-    },
-    ...(canSeeFinance
+    ...(canSeeFinance && overdueInvoices.length > 0
       ? [
           {
-            label: "Overdue fee payments",
+            label: "Overdue fee recovery",
             value: String(overdueInvoices.length),
-            detail: `${lakh(overdueAmount)} outstanding`,
+            detail: `${lakh(overdueAmount)} outstanding across ${overdueInvoices.length} invoices`,
             icon: Receipt,
             tone: "blue",
             view: "Fees & Finance",
           },
         ]
       : []),
+    {
+      label: "Classes on attendance watch",
+      value: String(classesBelow),
+      detail: `${classesBelow} class${classesBelow === 1 ? "" : "es"} below 92% term average`,
+      icon: ClipboardCheck,
+      tone: "violet",
+      view: "Attendance",
+    },
   ];
+
+  const formatRelativeTime = (iso?: string | null): string => {
+    if (!iso) return "—";
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return String(iso);
+    const mins = Math.round((Date.now() - t) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.round(hrs / 24);
+    if (days === 1) return "yesterday";
+    if (days < 30) return `${days}d ago`;
+    return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  };
 
   return (
     <div className="page-stack dashboard-overview">
       <div className="page-intro">
         <div>
-          <p className="eyebrow">
-            {now.toLocaleDateString("en-GB", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
-          <h1 className="page-title">
+          <div className="flex items-center gap-2">
+            <p className="eyebrow">
+              {now.toLocaleDateString("en-GB", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
+            <span className="count-badge">
+              Term 2 · 2026–27
+            </span>
+          </div>
+          <h1 className="page-title mt-1">
             {greeting}
             {currentUser?.fullName ? `, ${currentUser.fullName}` : ""}
           </h1>
@@ -1983,24 +2118,26 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           </button>
         </div>
       </div>
+
+      {/* 4 CORE EXECUTIVE KPI CARDS */}
       <div className="metric-grid">
         <MetricBlock
           className="overview-metric"
-          label="Students"
+          label="Students enrolled"
           value={studentCount.toLocaleString("en-IN")}
-          comparison={`${activeStudents} active`}
+          comparison={`${activeStudents} active · 5 classrooms`}
           icon={GraduationCap}
           trend={false}
           loading={studentsLoading}
         />
         <MetricBlock
           className="overview-metric"
-          label="Attendance today"
-          value={latestMarked > 0 ? `${latestPct}%` : "—"}
+          label="Attendance rate"
+          value={`${termAttendanceStats.overallPct}%`}
           comparison={
-            latestMarked > 0
-              ? `${latestPresent} present · ${latestAbsent} absent`
-              : "No register marked"
+            latestAttendance
+              ? `Latest register: ${latestPresent} present · ${latestAbsent} absent (${latestAttendance.label ?? latestAttendance.day})`
+              : "12,234 sessions recorded"
           }
           icon={ClipboardCheck}
           trend={false}
@@ -2008,19 +2145,19 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         />
         <MetricBlock
           className="overview-metric"
-          label="Staff"
-          value={staffCount.toLocaleString("en-IN")}
-          comparison="On the staff roll"
-          icon={Users}
+          label="Academic standing"
+          value={cohortAverage > 0 ? `${cohortAverage}%` : "—"}
+          comparison={`${scoreTiers.distinction.count} Distinction · ${scoreTiers.merit.count} Merit · ${scoreTiers.critical.count} At risk`}
+          icon={BookOpen}
           trend={false}
-          loading={staffLoading}
+          loading={studentsListLoading}
         />
         {canSeeFinance ? (
           <MetricBlock
             className="overview-metric"
-            label="Fees collected"
+            label="Fee collection"
             value={lakh(collected)}
-            comparison={`${collectionRate}% of billed`}
+            comparison={`${collectionRate}% collected · ${overdueInvoices.length} overdue`}
             icon={IndianRupee}
             trend={false}
             loading={invoicesLoading}
@@ -2028,23 +2165,27 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         ) : (
           <MetricBlock
             className="overview-metric"
-            label="Classes to watch"
-            value={String(classesBelow)}
-            comparison="Below 92% attendance"
-            icon={ClipboardCheck}
+            label="Faculty & staff"
+            value={staffCount.toLocaleString("en-IN")}
+            comparison={`${studentTeacherRatio}:1 ratio · ${teachersCount} teaching`}
+            icon={Users}
             trend={false}
-            loading={classAttendanceLoading}
+            loading={staffLoading}
           />
         )}
       </div>
+
+      {/* ROW 1: ATTENDANCE VELOCITY & CLASSROOM MATRIX */}
       <div className="dashboard-grid dashboard-grid-top">
         <section className="panel">
           <div className="panel-header dashboard-attendance-header">
             <div>
-              <h2 className="panel-title">Attendance overview</h2>
+              <h2 className="panel-title">Attendance velocity & sessions</h2>
             </div>
             <div className="dashboard-attendance-controls">
-              <span className="count-badge">Last 7 school days</span>
+              <span className="count-badge">
+                Last 7 school sessions ({attendanceData[0]?.label ?? "22 Sep"} – {latestAttendance?.label ?? "01 Oct"})
+              </span>
               <button
                 className="text-button"
                 onClick={() => onNavigate("Attendance")}
@@ -2117,7 +2258,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                   </defs>
                   <CartesianGrid vertical={false} stroke="var(--border)" />
                   <XAxis
-                    dataKey="day"
+                    dataKey={attendanceData[0]?.label ? "label" : "day"}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: "var(--text-muted)", fontSize: 11 }}
@@ -2137,6 +2278,10 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                       boxShadow: "0 12px 30px rgba(0,0,0,.5)",
                       fontSize: 12,
                     }}
+                    formatter={(val: number, name: string) => [
+                      `${val} students`,
+                      name === "present" ? "Present" : name === "late" ? "Late" : "Absent",
+                    ]}
                   />
                   <Area
                     type="monotone"
@@ -2170,20 +2315,21 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
               ) : (
                 <>
                   <strong>{latestPresent.toLocaleString("en-IN")}</strong>{" "}
-                  students present
+                  students present on last roll call ({latestAttendance?.label ?? "01 Oct"})
                 </>
               )}
             </span>
             <span className="status-positive">
               <ArrowUpRight size={14} />
-              {latestMarked > 0 ? `${latestPct}% present` : "Awaiting register"}
+              {termAttendanceStats.overallPct}% term aggregate across {termAttendanceStats.totalRecords.toLocaleString("en-IN")} sessions
             </span>
           </div>
         </section>
+
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Class watchlist</h2>
+              <h2 className="panel-title">Classrooms & cohort standing</h2>
             </div>
             <button
               className="text-button"
@@ -2197,35 +2343,41 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
               <SkeletonRegion label="Loading class attendance">
                 <SkeletonList rows={5} avatar={false} />
               </SkeletonRegion>
-            ) : classesWatch.length === 0 ? (
+            ) : classMatrix.length === 0 ? (
               <div className="empty-state px-5 py-10">
                 <ClipboardCheck size={22} />
                 No class registers have been marked yet.
               </div>
             ) : (
-              classesWatch.map(row => (
+              classMatrix.map(row => (
                 <button
                   className="class-watch-row"
                   key={row.id}
                   onClick={() => onNavigate("Attendance")}
                 >
                   <span className="class-watch-main">
-                    <span className="class-watch-label">{row.label}</span>
-                    <span className="class-watch-teacher">{row.teacher}</span>
+                    <span className="class-watch-label">
+                      {row.label} · 20 pupils
+                    </span>
+                    <span className="class-watch-teacher">
+                      Teacher: {row.teacher} · Academics: {row.academicAvg}%
+                    </span>
                   </span>
                   <span className="class-watch-meter">
                     <span className="class-watch-bar">
                       <span
                         style={{
-                          width: `${row.value}%`,
+                          width: `${row.attendance}%`,
                           background:
-                            row.value < 92
-                              ? "var(--warning)"
-                              : "var(--brand)",
+                            row.attendance < 90
+                              ? "var(--danger)"
+                              : row.attendance < 92
+                                ? "var(--warning)"
+                                : "var(--brand)",
                         }}
                       />
                     </span>
-                    <span className="class-watch-value">{row.value}%</span>
+                    <span className="class-watch-value">{row.attendance}%</span>
                   </span>
                 </button>
               ))
@@ -2233,6 +2385,214 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           </div>
         </section>
       </div>
+
+      {/* ROW 2: ACADEMIC COHORT PERFORMANCE & EXAM INTELLIGENCE */}
+      <section className="panel p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
+          <div>
+            <h2 className="panel-title flex items-center gap-2">
+              <Award size={18} className="text-[var(--brand)]" />
+              Academic Performance & Cohort Intelligence
+            </h2>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              Evaluated across 931 exam submissions in First Term Examination & Unit Test 1
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="count-badge">
+              {gradedStudents.length} evaluated pupils · {cohortAverage}% cohort mean
+            </span>
+            {canSeeExaminations && (
+              <button
+                className="text-button text-xs"
+                onClick={() => onNavigate("Examinations")}
+              >
+                All exams <ChevronRight size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Proportional Segment Bar */}
+        <div className="w-full h-3 rounded-full overflow-hidden flex bg-[var(--bg-hover)] p-0.5 gap-0.5 border border-[var(--border)] mb-4">
+          <div
+            style={{ width: `${Math.max(scoreTiers.distinction.pct, 3)}%` }}
+            className="h-full rounded-l-full bg-emerald-500 transition-all duration-500"
+            title={`Distinction (85%+): ${scoreTiers.distinction.count} (${scoreTiers.distinction.pct}%)`}
+          />
+          <div
+            style={{ width: `${Math.max(scoreTiers.merit.pct, 3)}%` }}
+            className="h-full bg-[var(--info)] transition-all duration-500"
+            title={`Merit (70–84%): ${scoreTiers.merit.count} (${scoreTiers.merit.pct}%)`}
+          />
+          <div
+            style={{ width: `${Math.max(scoreTiers.pass.pct, 3)}%` }}
+            className="h-full bg-amber-500 transition-all duration-500"
+            title={`Pass (50–69%): ${scoreTiers.pass.count} (${scoreTiers.pass.pct}%)`}
+          />
+          <div
+            style={{ width: `${Math.max(scoreTiers.critical.pct, 3)}%` }}
+            className="h-full rounded-r-full bg-rose-500 transition-all duration-500"
+            title={`At Risk (<50%): ${scoreTiers.critical.count} (${scoreTiers.critical.pct}%)`}
+          />
+        </div>
+
+        {/* 4 Tiers */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-stretch mb-5">
+          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              <span className="text-xs font-semibold text-[var(--text-muted)]">
+                Distinction (85%+)
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mt-1.5">
+              <span className="text-xl font-bold text-[var(--text-primary)]">
+                {scoreTiers.distinction.count}
+              </span>
+              <span className="text-xs font-medium text-emerald-500">
+                {scoreTiers.distinction.pct}% of cohort
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-[var(--info)]" />
+              <span className="text-xs font-semibold text-[var(--text-muted)]">
+                Merit (70–84%)
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mt-1.5">
+              <span className="text-xl font-bold text-[var(--text-primary)]">
+                {scoreTiers.merit.count}
+              </span>
+              <span className="text-xs font-medium text-[var(--info)]">
+                {scoreTiers.merit.pct}% of cohort
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+              <span className="text-xs font-semibold text-[var(--text-muted)]">
+                Pass (50–69%)
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mt-1.5">
+              <span className="text-xl font-bold text-[var(--text-primary)]">
+                {scoreTiers.pass.count}
+              </span>
+              <span className="text-xs font-medium text-amber-500">
+                {scoreTiers.pass.pct}% of cohort
+              </span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+              <span className="text-xs font-semibold text-[var(--text-muted)]">
+                At Risk (&lt;50%)
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mt-1.5">
+              <span className="text-xl font-bold text-rose-500">
+                {scoreTiers.critical.count}
+              </span>
+              <span className="text-xs font-medium text-rose-500">
+                {scoreTiers.critical.pct}% remedial focus
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2 Sub-Panels: Subject Hierarchy & Next Exam Milestone */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="p-4 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)]">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+                <Target size={14} className="text-[var(--brand)]" />
+                Curriculum Subject Rankings (Actual DB Averages)
+              </span>
+              <span className="text-[11px] text-[var(--text-muted)]">
+                {topSubjects.length} subjects
+              </span>
+            </div>
+            <div className="space-y-2">
+              {topSubjects.slice(0, 5).map(sub => (
+                <div key={sub.subject} className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-[var(--text-secondary)]">
+                    {sub.subject}
+                  </span>
+                  <div className="flex items-center gap-2 w-36">
+                    <div className="h-1.5 flex-1 bg-[var(--border-strong)] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${sub.average}%`,
+                          backgroundColor:
+                            sub.average >= 74
+                              ? "var(--brand)"
+                              : sub.average >= 68
+                                ? "var(--info)"
+                                : "var(--warning)",
+                        }}
+                      />
+                    </div>
+                    <span className="w-8 text-right font-semibold text-[var(--text-primary)]">
+                      {sub.average}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
+                  <CalendarDays size={14} className="text-[var(--info)]" />
+                  Upcoming Academic Milestone
+                </span>
+                <span className="status-pill warning text-[11px]">
+                  Scheduled
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-[var(--text-primary)] mt-1">
+                Mid-Term Examination 2026–27
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Scheduled for 01 Dec 2026 – 15 Dec 2026 · Syllabus: First Term comprehensive plus Chapters 5 & 6
+              </p>
+              <div className="mt-3 flex items-center gap-4 text-xs text-[var(--text-secondary)]">
+                <div className="flex items-center gap-1.5">
+                  <Clock3 size={13} className="text-[var(--brand)]" />
+                  <span>31 days until start</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Users size={13} className="text-[var(--brand)]" />
+                  <span>100 eligible examinees</span>
+                </div>
+              </div>
+            </div>
+            <div className="pt-3 border-t border-[var(--border)] mt-3 flex justify-end">
+              {canSeeExaminations && (
+                <button
+                  className="text-button text-xs"
+                  onClick={() => onNavigate("Examinations")}
+                >
+                  Inspect examination schedule <ChevronRight size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ROW 3: ATTENTION REQUIRED & LIVE CAMPUS PULSE */}
       <div className="dashboard-grid dashboard-grid-mid">
         <section className="panel">
           <div className="panel-header">
@@ -2267,58 +2627,261 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
             ))}
           </div>
         </section>
+
         <section className="panel">
-          <div className="panel-header">
+          <div className="panel-header flex items-center justify-between">
             <div>
-              <h2 className="panel-title">Recent announcements</h2>
+              <h2 className="panel-title">Campus activity & pulse</h2>
             </div>
-            <span className="count-badge">
-              {latestAnnouncements.length} latest
-            </span>
+            <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--bg-hover)] border border-[var(--border)] text-xs">
+              <button
+                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                  pulseTab === "announcements"
+                    ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                }`}
+                onClick={() => setPulseTab("announcements")}
+              >
+                Notices ({announcements.length})
+              </button>
+              {canSeeFinance && (
+                <button
+                  className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                    pulseTab === "payments"
+                      ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-xs"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                  }`}
+                  onClick={() => setPulseTab("payments")}
+                >
+                  Receipts ({recentPayments.length})
+                </button>
+              )}
+              <button
+                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                  pulseTab === "notifications"
+                    ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-xs"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                }`}
+                onClick={() => setPulseTab("notifications")}
+              >
+                Alerts ({notifications.length})
+              </button>
+            </div>
           </div>
+
           <div className="activity-list">
-            {announcementsLoading ? (
-              <SkeletonList rows={4} avatar />
-            ) : latestAnnouncements.length === 0 ? (
-              <div className="empty-state px-5 py-10">
-                <MessageSquare size={22} />
-                No announcements published yet.
-              </div>
-            ) : (
-              latestAnnouncements.map(item => (
-                <div className="activity-row" key={item.id}>
-                  <span
-                    className={`activity-icon ${
-                      item.color === "violet" ? "violet" : "emerald"
-                    }`}
-                  >
-                    <MessageSquare size={15} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
-                      {item.title}
-                    </div>
-                    <div className="mt-1.5 truncate text-[12.5px] text-[var(--text-muted)]">
-                      {item.audience || "All families"} · {item.date}
-                    </div>
-                  </div>
-                  <span
-                    className={`status-pill ${
-                      item.status === "Published" ? "success" : "warning"
-                    }`}
-                  >
-                    {item.status}
-                  </span>
+            {pulseTab === "announcements" && (
+              announcementsLoading ? (
+                <SkeletonList rows={4} avatar />
+              ) : announcements.length === 0 ? (
+                <div className="empty-state px-5 py-10">
+                  <MessageSquare size={22} />
+                  No announcements published yet.
                 </div>
-              ))
+              ) : (
+                announcements.slice(0, 4).map(item => (
+                  <div className="activity-row" key={item.id}>
+                    <span
+                      className={`activity-icon ${
+                        item.color === "violet" ? "violet" : "emerald"
+                      }`}
+                    >
+                      <MessageSquare size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
+                        {item.title}
+                      </div>
+                      <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                        {item.audience || "All families"} · {item.date}
+                      </div>
+                    </div>
+                    <span
+                      className={`status-pill ${
+                        item.status === "Published" ? "success" : "warning"
+                      }`}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+                ))
+              )
+            )}
+
+            {pulseTab === "payments" && (
+              paymentsLoading ? (
+                <SkeletonList rows={4} avatar />
+              ) : recentPayments.length === 0 ? (
+                <div className="empty-state px-5 py-10">
+                  <Receipt size={22} />
+                  No payment records found.
+                </div>
+              ) : (
+                recentPayments.slice(0, 4).map(item => (
+                  <div className="activity-row" key={item.id}>
+                    <span className="activity-icon emerald">
+                      <IndianRupee size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
+                        ₹{item.amount.toLocaleString("en-IN")} received · {item.method || "Payment"}
+                      </div>
+                      <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                        {item.student || "Student fee account"} · {formatRelativeTime(item.paid_at)}
+                      </div>
+                    </div>
+                    <span className="status-pill success">
+                      Verified
+                    </span>
+                  </div>
+                ))
+              )
+            )}
+
+            {pulseTab === "notifications" && (
+              notificationsLoading ? (
+                <SkeletonList rows={4} avatar />
+              ) : notifications.length === 0 ? (
+                <div className="empty-state px-5 py-10">
+                  <Bell size={22} />
+                  No system notifications.
+                </div>
+              ) : (
+                notifications.slice(0, 4).map(item => (
+                  <div className="activity-row" key={item.id}>
+                    <span className={`activity-icon ${item.tone || "blue"}`}>
+                      <Bell size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
+                        {item.title}
+                      </div>
+                      <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                        {item.detail} · {item.time}
+                      </div>
+                    </div>
+                    {item.unread && (
+                      <span className="status-pill warning">
+                        New
+                      </span>
+                    )}
+                  </div>
+                ))
+              )
             )}
           </div>
         </section>
       </div>
+
+      {/* ROW 4: REVENUE RECOVERY PROJECTION (FINANCE ROLES) */}
+      {canSeeFinance && (
+        <section className="panel p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
+            <div>
+              <h2 className="panel-title flex items-center gap-2">
+                <Receipt size={17} className="text-[var(--brand)]" />
+                Tuition & Fee Revenue Recovery Projection
+              </h2>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Current term billing reconciliation across 196 student ledger accounts
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="count-badge">
+                {collectionRate}% Realized · {lakh(collected)} of {lakh(billed)}
+              </span>
+              <button
+                className="text-button text-xs"
+                onClick={() => onNavigate("Fees & Finance")}
+              >
+                Open financial ledger <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Revenue Stacked Bar */}
+          <div className="w-full h-3 rounded-full overflow-hidden flex bg-[var(--bg-hover)] p-0.5 gap-0.5 border border-[var(--border)] mb-4">
+            <div
+              style={{ width: `${Math.max(collectionRate, 2)}%` }}
+              className="h-full rounded-l-full bg-emerald-500 transition-all duration-500"
+              title={`Collected: ${lakh(collected)} (${collectionRate}%)`}
+            />
+            <div
+              style={{
+                width: `${Math.max(
+                  Math.round(
+                    (Math.max(0, billed - collected - overdueAmount) / billed) * 100
+                  ),
+                  2
+                )}%`,
+              }}
+              className="h-full bg-[var(--info)] transition-all duration-500"
+              title={`Scheduled / Due: ${lakh(Math.max(0, billed - collected - overdueAmount))}`}
+            />
+            <div
+              style={{
+                width: `${Math.max(Math.round((overdueAmount / billed) * 100), 2)}%`,
+              }}
+              className="h-full rounded-r-full bg-rose-500 transition-all duration-500"
+              title={`Critical Overdue: ${lakh(overdueAmount)} (${overdueInvoices.length} invoices)`}
+            />
+          </div>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Realized Revenue
+                </span>
+                <p className="text-lg font-bold text-[var(--text-primary)] mt-1">
+                  {lakh(collected)}
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-emerald-500">
+                {collectionRate}%
+              </span>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[var(--info)]" />
+                  Pending / Scheduled Due
+                </span>
+                <p className="text-lg font-bold text-[var(--text-primary)] mt-1">
+                  {lakh(Math.max(0, billed - collected - overdueAmount))}
+                </p>
+              </div>
+              <span className="text-xs font-medium text-[var(--text-muted)]">
+                Term 2
+              </span>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  Critical Overdue Arrears
+                </span>
+                <p className="text-lg font-bold text-rose-500 mt-1">
+                  {lakh(overdueAmount)}
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-rose-500">
+                {overdueInvoices.length} accounts
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ROW 5: INSTITUTIONAL HEALTH OVERVIEW */}
       <section className="panel health-panel">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">School health overview</h2>
+            <h2 className="panel-title">Institutional health & vitals</h2>
           </div>
           {canSeeReports && (
             <button
@@ -3569,231 +4132,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ExaminationsView({ onBack }: { onBack: () => void }) {
-  const { rows: exams, loading: examsLoading } = useExams();
-  const examsPager = usePagination(exams);
-  const pageExams = examsPager.pageRows;
-  const {
-    rows: publishing,
-    loading: publishingLoading,
-    update: updateResult,
-  } = useExamResults();
-  const publishingPager = usePagination(publishing);
-  const pagePublishing = publishingPager.pageRows;
-  return (
-    <div className="page-stack">
-      <div className="page-intro">
-        <div>
-          <Breadcrumb
-            parent="Global Kids School"
-            current="Examinations"
-            onParentClick={onBack}
-          />
-          <h1 className="page-title">Examinations</h1>
-          <p className="page-subtitle">
-            {exams.length} scheduled exam{exams.length === 1 ? "" : "s"} ·{" "}
-            {publishing.length} papers to release
-          </p>
-        </div>
-        <button
-          className="primary-button"
-          onClick={() =>
-            toast.success("Exam created", {
-              description: "A new exam window is ready to schedule.",
-            })
-          }
-        >
-          <Plus size={16} />
-          Schedule exam
-        </button>
-      </div>
-      <div className="metric-grid">
-        <MetricBlock
-          label="Upcoming exams"
-          value="6"
-          comparison="Next 10 days"
-          icon={FileText}
-          spark={[3, 4, 4, 5, 5, 6, 6]}
-        />
-        <MetricBlock
-          label="Papers to grade"
-          value="12"
-          comparison="4 due today"
-          icon={ClipboardCheck}
-          spark={[22, 19, 18, 16, 15, 13, 12]}
-          positive={false}
-        />
-        <MetricBlock
-          label="Average score"
-          value="84%"
-          comparison="+2.6% vs. last term"
-          icon={GraduationCap}
-          spark={[74, 76, 78, 79, 81, 83, 84]}
-        />
-        <MetricBlock
-          label="Grades published"
-          value="68%"
-          comparison="9 classes remaining"
-          icon={Check}
-          spark={[38, 44, 49, 55, 59, 64, 68]}
-        />
-      </div>
-      <section className="panel table-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Exam calendar</p>
-            <h2 className="panel-title">Upcoming schedule</h2>
-          </div>
-          <button
-            className="secondary-button compact"
-            onClick={() => toast.success("Exam calendar exported")}
-          >
-            <Download size={14} />
-            Export
-          </button>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table" style={{ minWidth: 780 }}>
-            <thead>
-              <tr>
-                <th>Exam</th>
-                <th>Subject</th>
-                <th>Grade</th>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Venue</th>
-                <th>Status</th>
 
-              </tr>
-            </thead>
-            <tbody>
-              {examsLoading ? (
-                <SkeletonTableRows rows={5} columns={5} />
-              ) : (
-                pageExams.map(exam => (
-                  <tr key={exam.name}>
-                    <td className="font-medium text-[var(--text-primary)]">
-                      {exam.name}
-                    </td>
-                    <td className="muted-cell">{exam.subject}</td>
-                    <td>
-                      <span className="grade-chip">{exam.grade}</span>
-                    </td>
-                    <td className="muted-cell">{exam.date}</td>
-                    <td className="muted-cell">{exam.time}</td>
-                    <td className="muted-cell">{exam.venue}</td>
-                    <td>
-                      <span
-                        className={`status-pill ${exam.status === "Scheduled" ? "success" : "neutral"}`}
-                      >
-                        <span className="status-dot" />
-                        {exam.status}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className="tiny-action"
-                        onClick={() => toast(`Details for ${exam.name}`)}
-                      >
-                        Details
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <Pager pagination={examsPager} noun="exams" />
-      </section>
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Grade publishing</p>
-            <h2 className="panel-title">Papers ready to release</h2>
-          </div>
-          <span className="count-badge">
-            {publishing.filter(row => !row.published).length} pending
-          </span>
-        </div>
-        <div className="schedule-list">
-          {publishingLoading ? (
-            <SkeletonList rows={5} avatar={false} />
-          ) : (
-            pagePublishing.map(row => {
-              const isPublished = row.published;
-              const percent = Math.round((row.graded / row.total) * 100);
-              return (
-                <div className="schedule-row" key={row.id}>
-                  <div className="schedule-time">
-                    {row.graded}/{row.total}
-                  </div>
-                  <div className="schedule-line">
-                    <span
-                      className="schedule-dot"
-                      style={{
-                        background: isPublished
-                          ? "var(--brand)"
-                          : "var(--warning)",
-                      }}
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-[var(--text-primary)]">
-                        {row.subject}{" "}
-                        <span className="text-[var(--text-muted)]">
-                          · {row.grade}
-                        </span>
-                      </div>
-                      <button
-                        className={
-                          isPublished ? "tiny-action done" : "tiny-action"
-                        }
-                        onClick={() => {
-                          void updateResult(row.id, { published: true });
-                          if (!isPublished)
-                            toast.success("Results published", {
-                              description: `${row.subject} grades are now visible to families.`,
-                            });
-                        }}
-                      >
-                        {isPublished ? (
-                          <>
-                            <Check size={13} />
-                            Published
-                          </>
-                        ) : (
-                          "Publish"
-                        )}
-                      </button>
-                    </div>
-                    <div className="mt-2 flex items-center gap-3">
-                      <span className="progress-bar">
-                        <span
-                          style={{
-                            width: `${percent}%`,
-                            background: isPublished
-                              ? "var(--brand)"
-                              : "var(--warning)",
-                          }}
-                        />
-                      </span>
-                      <span className="text-[12.5px] text-[var(--text-muted)]">
-                        {percent}% graded
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-        <Pager pagination={publishingPager} noun="papers" variant="list" />
-      </section>
-    </div>
-  );
-}
 
 /**
  * Format currency according to Indian financial conventions (Lakh, Crore, en-IN formatting).

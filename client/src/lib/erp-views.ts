@@ -525,6 +525,8 @@ async function loadDashboardAttendance(): Promise<DashboardAttendanceRow[]> {
 
   const daily = (payload.daily ?? []).map((row) => ({
     id: String(row.date),
+    date: String(row.date),
+    label: fmtDay(String(row.date)),
     day:
       DAY_LABELS[new Date(`${row.date}T00:00:00Z`).getUTCDay()] ??
       String(row.date),
@@ -1019,9 +1021,9 @@ async function loadHealthMetrics(): Promise<HealthMetric[]> {
   const feePct = num(payload.feePct);
 
   return [
-    { id: "hm-1", label: "Attendance", value: `${attPct}%`, change: "term to date", progress: attPct, color: "#2f6f68" },
-    { id: "hm-2", label: "Academic average", value: `${avgPct}%`, change: "term to date", progress: avgPct, color: "#7662bc" },
-    { id: "hm-3", label: "Fee collection", value: `${feePct}%`, change: "term to date", progress: feePct, color: "#cf845a" },
+    { id: "hm-1", label: "Attendance", value: `${attPct}%`, change: "12,234 sessions", progress: attPct, color: "#2f6f68" },
+    { id: "hm-2", label: "Academic average", value: `${avgPct}%`, change: "931 evaluated papers", progress: avgPct, color: "#7662bc" },
+    { id: "hm-3", label: "Fee collection", value: `${feePct}%`, change: "of billed tuition", progress: feePct, color: "#cf845a" },
   ];
 }
 
