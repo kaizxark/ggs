@@ -1860,10 +1860,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     loading: attendanceChartLoading,
   } = useDashboardAttendance();
   const classAttendanceLoading = attendanceChartLoading;
-  const { rows: announcements, loading: announcementsLoading } =
-    useAnnouncements();
-  const { rows: healthMetrics, loading: healthMetricsLoading } =
-    useHealthMetrics();
   const { total: studentCount, active: activeStudents, loading: studentsLoading } =
     useStudentCounts();
   const { rows: allStaff, loading: staffLoading } = useStaff();
@@ -1877,9 +1873,15 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     const overallPct =
       totalRecords > 0
         ? Math.round((presentRecords / totalRecords) * 1000) / 10
-        : (healthMetrics.find(m => m.label === "Attendance")?.progress ?? 91.2);
+        : allStudents.length > 0
+          ? Math.round(
+              (allStudents.reduce((sum, s) => sum + (s.attendance || 0), 0) /
+                allStudents.length) *
+                10
+            ) / 10
+          : 91.2;
     return { totalRecords, presentRecords, overallPct };
-  }, [classAttendance, healthMetrics]);
+  }, [classAttendance, allStudents]);
 
   // Academic standing
   const gradedStudents = useMemo(
@@ -1897,6 +1899,44 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     () => gradedStudents.filter(s => s.average < 50).length,
     [gradedStudents]
   );
+
+  // Real Cohort Breakdowns by Grade from database students
+  const gradeBreakdowns = useMemo(() => {
+    const map = new Map<
+      string,
+      { grade: string; count: number; totalAvg: number; totalAtt: number; atRisk: number }
+    >();
+
+    for (const s of allStudents) {
+      const g = s.grade || "Unassigned";
+      const cur = map.get(g) ?? { grade: g, count: 0, totalAvg: 0, totalAtt: 0, atRisk: 0 };
+      cur.count += 1;
+      cur.totalAvg += s.average || 0;
+      cur.totalAtt += s.attendance || 0;
+      if (s.average > 0 && s.average < 50) cur.atRisk += 1;
+      map.set(g, cur);
+    }
+
+    return Array.from(map.values())
+      .map(g => {
+        const avg = g.count > 0 ? Math.round(g.totalAvg / g.count) : 0;
+        const att = g.count > 0 ? Math.round(g.totalAtt / g.count) : 0;
+        return {
+          grade: g.grade,
+          count: g.count,
+          average: avg,
+          attendance: att,
+          atRisk: g.atRisk,
+          status:
+            avg >= 75 ? "Optimal" : avg >= 60 ? "Steady" : "Review",
+        };
+      })
+      .sort((a, b) => {
+        const numA = parseInt(a.grade.replace(/\D/g, "")) || 0;
+        const numB = parseInt(b.grade.replace(/\D/g, "")) || 0;
+        return numA - numB;
+      });
+  }, [allStudents]);
 
   // Faculty and staffing ratios
   const staffCount = allStaff.length;
@@ -1935,10 +1975,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     c => c.total > 0 && c.value < 92
   ).length;
 
-  const visibleHealth = canSeeFinance
-    ? healthMetrics
-    : healthMetrics.filter(metric => metric.label !== "Fee collection");
-
   // Actionable alerts directly projected from DB
   const attentionItems = [
     ...(criticalStudentsCount > 0
@@ -1946,7 +1982,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           {
             label: "Academic remediation",
             value: String(criticalStudentsCount),
-            detail: `${criticalStudentsCount} pupils below 50% average`,
+            detail: `${criticalStudentsCount} pupil${criticalStudentsCount === 1 ? "" : "s"} below 50% average`,
             icon: AlertCircle,
             tone: "coral",
             view: "Academics",
@@ -1956,7 +1992,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     {
       label: "Attendance follow-up",
       value: String(belowThreshold),
-      detail: `${belowThreshold} pupils below 90% attendance`,
+      detail: `${belowThreshold} pupil${belowThreshold === 1 ? "" : "s"} below 90% attendance`,
       icon: Clock3,
       tone: "amber",
       view: "Attendance",
@@ -2269,109 +2305,223 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           </div>
         </section>
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <h2 className="panel-title">Notices</h2>
-            </div>
-            <span className="count-badge">
-              {announcements.length} published
-            </span>
-          </div>
-
-          <div className="activity-list">
-            {announcementsLoading ? (
-              <SkeletonList rows={4} avatar />
-            ) : announcements.length === 0 ? (
-              <div className="empty-state px-5 py-10">
-                <MessageSquare size={22} />
-                No announcements published yet.
+        {canSeeFinance ? (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Recent fee invoices</h2>
               </div>
-            ) : (
-              announcements.slice(0, 4).map(item => (
-                <div className="activity-row" key={item.id}>
-                  <span
-                    className={`activity-icon ${
-                      item.color === "violet" ? "violet" : "emerald"
-                    }`}
-                  >
-                    <MessageSquare size={15} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
-                      {item.title}
-                    </div>
-                    <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
-                      {item.audience || "All families"} · {item.date}
-                    </div>
-                  </div>
-                  <span
-                    className={`status-pill ${
-                      item.status === "Published" ? "success" : "warning"
-                    }`}
-                  >
-                    {item.status}
-                  </span>
+              <span className="count-badge">
+                {invoiceRows.length} recorded
+              </span>
+            </div>
+
+            <div className="activity-list">
+              {invoicesLoading ? (
+                <SkeletonList rows={4} avatar />
+              ) : invoiceRows.length === 0 ? (
+                <div className="empty-state px-5 py-10">
+                  <Receipt size={22} />
+                  No fee invoices recorded yet.
                 </div>
-              ))
-            )}
-          </div>
-        </section>
+              ) : (
+                invoiceRows.slice(0, 4).map(inv => (
+                  <button
+                    type="button"
+                    className="activity-row w-full text-left cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                    key={inv.id}
+                    onClick={() => onNavigate("Fees & Finance")}
+                  >
+                    <span
+                      className={`activity-icon ${
+                        inv.status === "Paid"
+                          ? "emerald"
+                          : inv.status === "Overdue"
+                            ? "amber"
+                            : "blue"
+                      }`}
+                    >
+                      <Receipt size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)] truncate">
+                        {inv.student}
+                      </div>
+                      <div className="mt-0.5 truncate text-[12.5px] text-[var(--text-muted)]">
+                        Due: {inv.due_date} · Invoice #{inv.id}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <span className="text-sm font-bold text-[var(--text-primary)]">
+                        ₹{inv.amount.toLocaleString("en-IN")}
+                      </span>
+                      <span
+                        className={`status-pill ${
+                          inv.status === "Paid"
+                            ? "success"
+                            : inv.status === "Overdue"
+                              ? "warning"
+                              : "neutral"
+                        }`}
+                      >
+                        {inv.status}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+        ) : (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Teaching faculty & staff</h2>
+              </div>
+              <span className="count-badge">
+                {allStaff.length} active
+              </span>
+            </div>
+
+            <div className="activity-list">
+              {staffLoading ? (
+                <SkeletonList rows={4} avatar />
+              ) : allStaff.length === 0 ? (
+                <div className="empty-state px-5 py-10">
+                  <Users size={22} />
+                  No staff members listed yet.
+                </div>
+              ) : (
+                allStaff.slice(0, 4).map(member => (
+                  <button
+                    type="button"
+                    className="activity-row w-full text-left cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                    key={member.id}
+                    onClick={() => onNavigate("User Management")}
+                  >
+                    <span className="activity-icon emerald">
+                      <Users size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)] truncate">
+                        {member.name}
+                      </div>
+                      <div className="mt-0.5 truncate text-[12.5px] text-[var(--text-muted)]">
+                        {member.department || "General"} · {member.role}
+                      </div>
+                    </div>
+                    <span className="status-pill success">
+                      {member.status || "Active"}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+        )}
       </div>
 
-      {/* ROW 3: INSTITUTIONAL HEALTH */}
-      <section className="panel health-panel">
+      {/* ROW 3: COHORT ACADEMIC STANDING BY GRADE (100% REAL STUDENT DATA) */}
+      <section className="panel">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">Institutional health</h2>
+            <h2 className="panel-title">Cohort academic standing</h2>
           </div>
+          <span className="count-badge">
+            {gradeBreakdowns.length} active cohorts
+          </span>
         </div>
-        <div
-          className={`health-grid ${
-            visibleHealth.length === 2
-              ? "two"
-              : visibleHealth.length === 3
-                ? "three"
-                : ""
-          }`}
-        >
-          {healthMetricsLoading ? (
-            <SkeletonHealthGrid count={visibleHealth.length || 2} />
-          ) : (
-            visibleHealth.map(metric => (
-              <div className="health-metric" key={metric.label}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[var(--text-muted)]">
-                    {metric.label}
-                  </span>
-                  <span className="text-[12.5px] font-medium text-[var(--brand)]">
-                    {metric.change}
-                  </span>
-                </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <div
-                    className="health-ring"
-                    style={{
-                      background: `conic-gradient(${metric.color} ${metric.progress * 3.6}deg, var(--border-strong) 0deg)`,
-                    }}
-                  >
-                    <div className="health-ring-inner">{metric.progress}%</div>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--border-strong)]">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${metric.progress}%`,
-                          background: metric.color,
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Grade / Class</th>
+                <th>Enrolled</th>
+                <th>Academic average</th>
+                <th>Attendance</th>
+                <th>Status</th>
+                <th className="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {studentsListLoading ? (
+                <SkeletonTableRows rows={4} columns={6} />
+              ) : gradeBreakdowns.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-[var(--text-muted)]">
+                    No pupil cohorts registered yet.
+                  </td>
+                </tr>
+              ) : (
+                gradeBreakdowns.map(row => (
+                  <tr key={row.grade}>
+                    <td>
+                      <span className="font-semibold text-[var(--text-primary)]">
+                        {row.grade}
+                      </span>
+                    </td>
+                    <td className="muted-cell">
+                      {row.count} pupil{row.count === 1 ? "" : "s"}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-3">
+                        <span className="progress-bar">
+                          <span
+                            style={{
+                              width: `${row.average}%`,
+                              background:
+                                row.average < 60
+                                  ? "var(--danger)"
+                                  : row.average < 75
+                                    ? "var(--warning)"
+                                    : "var(--brand)",
+                            }}
+                          />
+                        </span>
+                        <span className="font-medium text-[var(--text-hover)]">
+                          {row.average > 0 ? `${row.average}%` : "—"}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className={`font-semibold ${
+                          row.attendance < 90
+                            ? "text-[var(--danger)]"
+                            : row.attendance < 93
+                              ? "text-[var(--warning)]"
+                              : "text-[var(--success)]"
+                        }`}
+                      >
+                        {row.attendance}%
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`status-pill ${
+                          row.status === "Optimal"
+                            ? "success"
+                            : row.status === "Review"
+                              ? "warning"
+                              : "neutral"
+                        }`}
+                      >
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      <button
+                        className="secondary-button compact"
+                        onClick={() => onNavigate("Academics")}
+                      >
+                        View cohort
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
