@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { notifyDataChanged } from "./live-data";
 
 /**
  * Student document types.
@@ -228,6 +229,7 @@ export async function uploadStudentDocument(
   if (!res.ok || !payload?.document) {
     throw new Error(messageOf(payload, "That file could not be uploaded."));
   }
+  notifyDataChanged();
   return payload.document;
 }
 
@@ -244,4 +246,5 @@ export async function deleteStudentDocument(
     const payload = (await res.json().catch(() => null)) as { message?: string } | null;
     throw new Error(messageOf(payload, "That document could not be removed."));
   }
+  notifyDataChanged();
 }

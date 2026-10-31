@@ -9,6 +9,7 @@
  */
 
 import { supabase } from "./supabase";
+import { notifyDataChanged } from "./live-data";
 import { ApiError } from "./student-directory";
 import type { StaffSection } from "@shared/staff-access";
 
@@ -147,14 +148,32 @@ export function fetchStaffProfile(
  * changed email address is not merely a corrected column: it is the address
  * that account will use to prove the account is its owner's.
  */
-export function updateStaffProfile(
+export async function updateStaffProfile(
   staffId: string,
   draft: StaffDraft,
   signal?: AbortSignal
 ): Promise<{ staff: StaffProfileStaff }> {
-  return apiFetch<{ staff: StaffProfileStaff }>("/api/staff", {
+  const result = await apiFetch<{ staff: StaffProfileStaff }>("/api/staff", {
     method: "PATCH",
     body: JSON.stringify({ id: staffId, ...draft }),
     signal,
   });
+  notifyDataChanged();
+  return result;
+}
+
+/** Delete a staff record and its sign-in account. School owner only. */
+export async function deleteStaff(
+  staffId: string
+): Promise<{ staff: StaffProfileStaff; deleted: boolean; message: string }> {
+  const result = await apiFetch<{
+    staff: StaffProfileStaff;
+    deleted: boolean;
+    message: string;
+  }>("/api/staff", {
+    method: "DELETE",
+    body: JSON.stringify({ id: staffId }),
+  });
+  notifyDataChanged();
+  return result;
 }

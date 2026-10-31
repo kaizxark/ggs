@@ -49,6 +49,7 @@ import {
   normaliseEmail,
 } from "../shared/portal-accounts.js";
 import {
+  deletePortalAccount,
   findAccountByEmail,
   provisionPortalAccount,
 } from "../shared/portal-server.js";
@@ -591,6 +592,84 @@ export default async function handler(req: Request): Promise<Response> {
       { staff: created[0], account, accountDetail: detail },
       { status: 201 }
     );
+  }
+
+  /* ---------------------------- delete ---------------------------- */
+  if (req.method === "DELETE") {
+    /*
+     * Deleting a person is the school owner's decision alone. Everyone else
+     * may deactivate the record, which keeps the teaching history and the
+     * audit trail; only the immutable super admin may remove it outright.
+     */
+    if (caller.role !== "super_admin") {
+      return fail(
+        "Only the school owner can delete a staff record permanently.",
+        403,
+        "forbidden"
+      );
+    }
+    const orgId = await callerOrg(caller);
+    if (!orgId)
+      return fail(
+        "Your account is not linked to a school.",
+        403,
+        "no_organisation"
+      );
+
+    let body: Json;
+    try {
+      body = (await req.json()) as Json;
+    } catch {
+      return fail("Bad request.", 400, "bad_request");
+    }
+
+    const id = clean(body.id, 64);
+    if (!id) return fail("Which member of staff?", 400, "missing_id");
+
+    const rows = await readJson<Json>(
+      await rest(
+        `staff?select=id,name,profile_id&organisation_id=eq.${orgId}&id=eq.${encodeURIComponent(id)}&limit=1`
+      )
+    ).catch(() => [] as Json[]);
+    if (!rows.length) {
+      return fail("That member of staff could not be found.", 404, "not_found");
+    }
+
+    const record = rows[0];
+    const blocked = superAdminGuard(record.profile_id, "delete");
+    if (blocked) return fail(blocked, 403, "forbidden");
+
+    // Remove the login first: a deleted record must not leave an account that
+    // can still sign in with no staff row behind it.
+    const profileId = String(record.profile_id ?? "");
+    if (profileId && !(await deletePortalAccount(profileId))) {
+      return fail(
+        "The sign-in account could not be removed, so the record was left intact.",
+        502,
+        "account_delete_failed"
+      );
+    }
+
+    const deleted = await readJson<Json>(
+      await rest(`staff?id=eq.${id}&organisation_id=eq.${orgId}`, {
+        method: "DELETE",
+        headers: { Prefer: "return=representation" },
+      })
+    ).catch(() => [] as Json[]);
+
+    if (!deleted.length) {
+      return fail("The staff record could not be deleted.", 500, "delete_failed");
+    }
+
+    await writeAudit(orgId, caller.id, "delete", id, deleted[0]).catch(
+      () => null
+    );
+
+    return Response.json({
+      staff: deleted[0],
+      deleted: true,
+      message: `${record.name ?? "The staff member"} and their sign-in account were deleted permanently.`,
+    });
   }
 
   /* ---------------------------- update ---------------------------- */

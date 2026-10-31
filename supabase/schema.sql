@@ -278,7 +278,8 @@ declare
   tbl text;
 begin
   foreach tbl in array array[
-    'students','staff','attendance_daily','class_attendance','schedule',
+    'students','staff','settings',
+    'attendance_daily','class_attendance','schedule',
     'activity_log','health_metrics','finance_monthly','fee_categories',
     'invoices','payments','announcements','messages','notifications',
     'exams','exam_results','assignments','transport_routes','vehicles',

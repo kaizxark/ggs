@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 
+import { usePageScrollLock } from "@/components/SmoothScroll";
 import {
   DOC_TYPES,
   REQUIRED_DOC_TYPES,
@@ -60,6 +61,8 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
   const [verifying, setVerifying] = useState<StudentDocument | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingType = useRef<string | null>(null);
+
+  usePageScrollLock(Boolean(preview || verifying));
 
   const load = useCallback(async () => {
     setLoading(true);

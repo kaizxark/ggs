@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import {
   Activity,
   AlertCircle,
-  ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   BarChart3,
@@ -82,6 +81,7 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "@/lib/toast";
+import { notifyDataChanged } from "../lib/live-data";
 import { useLocation } from "wouter";
 import {
   changePortalCredentials,
@@ -142,7 +142,6 @@ import {
   type Settings,
 } from "../lib/school-data";
 import {
-  SkeletonBlock,
   SkeletonChart,
   SkeletonCircle,
   SkeletonHealthGrid,
@@ -155,6 +154,7 @@ import {
   SkeletonText,
 } from "../components/ErpSkeleton";
 import { Pager, usePagination } from "../components/ErpPagination";
+import { MetricBlock } from "../components/MetricBlock";
 import { Breadcrumb } from "../components/Breadcrumb";
 import { StudentDocumentsPanel } from "../components/StudentDocuments";
 import { UserManagementView } from "../components/UserManagementView";
@@ -167,8 +167,9 @@ import {
 import { StudentDirectory } from "./StudentDirectory";
 import { StaffDrawer } from "../components/StaffDrawer";
 import { StaffCreateDialog } from "../components/StaffCreateDialog";
+import { ReportsView } from "../components/ReportsView";
 import { SmoothFilterDropdown } from "../components/SmoothFilterDropdown";
-import SmoothScroll, { smoothScrollTo } from "../components/SmoothScroll";
+import SmoothScroll, { smoothScrollTo, usePageScrollLock } from "../components/SmoothScroll";
 import {
   effectiveRole,
   isSuperAdminId,
@@ -468,130 +469,6 @@ function IconButton({
   );
 }
 
-function MetricBlock({
-  label,
-  value,
-  comparison,
-  positive = true,
-  icon: Icon,
-  spark,
-  trend = true,
-  loading = false,
-  className = "",
-}: {
-  label: string;
-  value: string;
-  comparison: string;
-  positive?: boolean;
-  icon: React.ElementType;
-  spark?: number[];
-  trend?: boolean;
-  loading?: boolean;
-  className?: string;
-}) {
-  const hasSpark = Boolean(spark && spark.length > 1);
-  const coords = useMemo(() => {
-    if (!hasSpark || !spark) return [];
-    const minVal = Math.min(...spark);
-    const maxVal = Math.max(...spark);
-    const range = Math.max(maxVal - minVal, 1);
-    return spark.map((point, index) => {
-      const x = (index / (spark.length - 1)) * 100;
-      const y = 38 - ((point - minVal) / range) * 26;
-      return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
-    });
-  }, [hasSpark, spark]);
-
-  const points = coords.map((c) => `${c.x},${c.y}`).join(" ");
-  const areaPoints = coords.length > 0 ? `0,44 ${points} 100,44` : "";
-  const lastPoint = coords.length > 0 ? coords[coords.length - 1] : null;
-  const strokeColor = positive ? "var(--brand)" : "var(--danger)";
-  const gradId = `spark-grad-${label.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}`;
-
-  return (
-    <div className={`metric-block ${className}`}>
-      <div className="flex items-center justify-between">
-        <span className="metric-label">{label}</span>
-        <span className="metric-icon">
-          <Icon size={15} strokeWidth={1.8} />
-        </span>
-      </div>
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div>
-          <div className="metric-value tabular-nums">
-            {loading ? <SkeletonText width={58} height={24} /> : value}
-          </div>
-          <div
-            className={`metric-change tabular-nums ${
-              trend
-                ? positive
-                  ? "text-[var(--brand)]"
-                  : "text-[var(--danger)]"
-                : "text-[var(--text-muted)]"
-            }`}
-          >
-            {loading ? (
-              <SkeletonText width={44} />
-            ) : (
-              <>
-                {trend &&
-                  (positive ? (
-                    <ArrowUpRight size={13} />
-                  ) : (
-                    <ArrowDownRight size={13} />
-                  ))}
-                {comparison}
-              </>
-            )}
-          </div>
-        </div>
-        {loading && hasSpark ? (
-          <SkeletonBlock style={{ height: 44, width: 84 }} />
-        ) : hasSpark ? (
-          <svg
-            viewBox="0 0 100 44"
-            className="h-11 w-[84px] overflow-visible"
-            aria-hidden="true"
-          >
-            <defs>
-              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={strokeColor} stopOpacity={0.22} />
-                <stop offset="100%" stopColor={strokeColor} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <polygon points={areaPoints} fill={`url(#${gradId})`} />
-            <polyline
-              points={points}
-              fill="none"
-              stroke={strokeColor}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            {lastPoint && (
-              <>
-                <circle
-                  cx={lastPoint.x}
-                  cy={lastPoint.y}
-                  r="4"
-                  fill={strokeColor}
-                  opacity={0.22}
-                />
-                <circle
-                  cx={lastPoint.x}
-                  cy={lastPoint.y}
-                  r="2"
-                  fill={strokeColor}
-                />
-              </>
-            )}
-          </svg>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /**
  * What the assistant says it is doing while it works.
  *
@@ -630,6 +507,7 @@ function CommandPaletteBody({
   onNavigate: (view: string, entityId?: RowId, entityType?: "student" | "staff") => void;
   activeView?: string;
 }) {
+  usePageScrollLock();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [aiState, setAiState] = useState<"idle" | "loading">("idle");
@@ -1926,6 +1804,7 @@ function AppDialog({
   children: React.ReactNode;
   onClose: () => void;
 }) {
+  usePageScrollLock();
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div
@@ -3025,134 +2904,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ReportsView({ onBack }: { onBack: () => void }) {
-  const { rows: reportExports, loading: reportExportsLoading } =
-    useReportExports();
-  const reportsPager = usePagination(reportExports);
-  const pageReports = reportsPager.pageRows;
-  return (
-    <div className="page-stack">
-      <div className="page-intro">
-        <div>
-          <Breadcrumb
-            parent="Global Kids School"
-            current="Reports"
-            onParentClick={onBack}
-          />
-          <h1 className="page-title">Reports</h1>
-          <p className="page-subtitle">
-            {reportExports.length} recent export
-            {reportExports.length === 1 ? "" : "s"}
-          </p>
-        </div>
-        <button
-          className="primary-button"
-          onClick={() => toast("Report builder opened")}
-        >
-          <Plus size={16} />
-          Build a report
-        </button>
-      </div>
-      <div className="report-card-grid">
-        {[
-          {
-            title: "Monthly principal review",
-            detail: "Attendance, academics, fees & staffing",
-            date: "Updated today",
-            icon: ShieldCheck,
-            color: "teal",
-          },
-          {
-            title: "Fee collection summary",
-            detail: "Term 1 collections and outstanding balances",
-            date: "Updated 2 hrs ago",
-            icon: IndianRupee,
-            color: "orange",
-          },
-          {
-            title: "Academic performance",
-            detail: "Grade and subject-level outcomes",
-            date: "Updated yesterday",
-            icon: BookOpen,
-            color: "violet",
-          },
-          {
-            title: "Parent engagement",
-            detail: "Messages, events and portal activity",
-            date: "Updated 26 Sep",
-            icon: Users,
-            color: "blue",
-          },
-        ].map(report => (
-          <button
-            className="report-card"
-            key={report.title}
-            onClick={() => toast.success(`${report.title} opened`)}
-          >
-            <span className={`report-icon ${report.color}`}>
-              <report.icon size={18} />
-            </span>
-            <span className="mt-5 block text-left text-[15px] font-semibold tracking-[-0.015em] text-[var(--text-primary)]">
-              {report.title}
-            </span>
-            <span className="mt-2 block text-left text-[12.5px] leading-5 text-[var(--text-muted)]">
-              {report.detail}
-            </span>
-            <span className="mt-6 flex items-center justify-between text-[12.5px] text-[var(--text-muted)]">
-              <span>{report.date}</span>
-              <ChevronRight size={15} />
-            </span>
-          </button>
-        ))}
-      </div>
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Recent exports</p>
-            <h2 className="panel-title">Report history</h2>
-          </div>
-          <button
-            className="secondary-button compact"
-            onClick={() => toast("Report filters opened")}
-          >
-            <Filter size={14} />
-            Filter
-          </button>
-        </div>
-        <div className="history-list">
-          {reportExportsLoading ? (
-            <SkeletonRegion label="Loading report history">
-              <SkeletonList rows={4} avatar={false} />
-            </SkeletonRegion>
-          ) : (
-            pageReports.map(report => (
-              <div className="history-row" key={report.name}>
-                <span className="file-icon">
-                  <FileText size={16} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-[var(--text-secondary)]">
-                    {report.name}
-                  </div>
-                  <div className="mt-1 text-[12.5px] text-[var(--text-muted)]">
-                    {report.created} · {report.size}
-                  </div>
-                </div>
-                <button
-                  className="tiny-action"
-                  onClick={() => toast.success("Download started")}
-                >
-                  Download <Download size={13} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-        <Pager pagination={reportsPager} noun="exports" variant="list" />
-      </section>
-    </div>
-  );
-}
+
 
 function SettingToggle({
   checked,
@@ -5799,6 +5551,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
         .update({ full_name: name })
         .eq("id", currentUser.id);
       if (error) throw error;
+      notifyDataChanged();
       const { error: metaError } = await supabase.auth.updateUser({
         data: { full_name: name },
       });

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
 
+import { usePageScrollLock } from "@/components/SmoothScroll";
 import { ApiError } from "@/lib/student-directory";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/lib/toast";
+import { notifyDataChanged } from "@/lib/live-data";
 import { FormSelect } from "./FormSelect";
 
 /**
@@ -53,6 +55,7 @@ export interface StaffCreateDialogProps {
 }
 
 export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps) {
+  usePageScrollLock();
   const [form, setForm] = useState({
     name: "",
     usn: "",
@@ -141,6 +144,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
             : `${form.name.trim()} is now in the staff directory.`,
       });
       onCreated();
+      notifyDataChanged();
     } catch (err) {
       if (err instanceof ApiError) {
         setFieldErrors(err.fieldErrors);

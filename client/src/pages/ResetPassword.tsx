@@ -133,7 +133,7 @@ export default function ResetPassword() {
 
   return (
     <div
-      className="min-h-screen bg-[#0b0c10] relative flex items-center justify-center px-4 overflow-hidden"
+      className="min-h-screen bg-[var(--bg-page)] relative flex items-center justify-center px-4 overflow-hidden"
       style={{ fontFamily: "system-ui, sans-serif" }}
     >
       <div className="pointer-events-none absolute inset-0">
@@ -175,7 +175,7 @@ export default function ResetPassword() {
               <button
                 type="button"
                 onClick={() => setLocation("/login")}
-                className="w-full bg-[var(--brand)] hover:bg-[#4338ca] text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(79,70,229,.35)] cursor-pointer"
+                className="w-full bg-[var(--brand)] hover:bg-[#0071e3] active:scale-[0.98] text-white font-semibold py-2.5 rounded-lg transition shadow-[0_1px_2px_rgba(0,0,0,.35),inset_0_1px_0_rgba(255,255,255,.22)] cursor-pointer"
               >
                 Request a new link
               </button>
@@ -298,7 +298,7 @@ export default function ResetPassword() {
                 </div>
 
                 {error && (
-                  <div className="flex items-start gap-2 text-[var(--danger)] text-[12.5px] bg-[#2a1a18]/60 border border-[#3a2020] rounded-lg px-3 py-2">
+                  <div className="flex items-start gap-2 text-[var(--danger)] text-[12.5px] bg-[var(--danger-soft-2)] border border-[var(--danger-border)] rounded-lg px-3 py-2">
                     <AlertCircle size={14} className="flex-shrink-0 mt-px" />
                     {error}
                   </div>
@@ -307,7 +307,7 @@ export default function ResetPassword() {
                 <button
                   type="submit"
                   disabled={submitting || !canSubmit}
-                  className="w-full bg-[var(--brand)] hover:bg-[#4338ca] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(79,70,229,.35)] flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full bg-[var(--brand)] hover:bg-[#0071e3] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition shadow-[0_1px_2px_rgba(0,0,0,.35),inset_0_1px_0_rgba(255,255,255,.22)] flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {submitting ? (
                     <>

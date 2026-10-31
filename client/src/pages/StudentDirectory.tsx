@@ -17,20 +17,28 @@ import {
   RotateCcw,
   Search,
   Loader2,
+  Trash2,
+  UserX,
   Users,
   X,
 } from "lucide-react";
 
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { DrawerBackdrop } from "@/components/DrawerBackdrop";
+import { useDataRevision } from "@/lib/live-data";
+import { MetricBlock } from "@/components/MetricBlock";
+import { SkeletonMetric } from "@/components/ErpSkeleton";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { ServerPager } from "@/components/ErpServerPager";
 import {
   ApiError,
   archiveStudent,
   createStudent,
+  deleteStudent,
   downloadDirectoryExport,
   fetchDirectory,
   fetchDirectoryOptions,
+  fetchStudentCounts,
   formatDate,
   formatMoney,
   fetchStudentProfile,
@@ -42,6 +50,7 @@ import {
   type DirectoryOptions,
   type DirectoryPage,
   type DirectoryStudent,
+  type StudentCounts,
   type ProfilePayload,
   type StudentDraft,
 } from "@/lib/student-directory";
@@ -52,6 +61,7 @@ import { canEditStudent, canManageFees, ALL_STUDENT_SECTIONS, type StudentSectio
 import { supabase } from "@/lib/supabase";
 import { useCurrentUser } from "@/lib/erp-views";
 import { SmoothFilterDropdown } from "@/components/SmoothFilterDropdown";
+import { usePageScrollLock } from "@/components/SmoothScroll";
 import { FormSelect } from "@/components/FormSelect";
 
 /**
@@ -181,6 +191,9 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
   const [editing, setEditing] = useState<DirectoryStudent | null>(null);
   const [exporting, setExporting] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [counts, setCounts] = useState<StudentCounts | null>(null);
+  const [countsLoading, setCountsLoading] = useState(true);
+  const dataRevision = useDataRevision();
 
   // Debounce: 300 ms is long enough to coalesce a word and short enough that the
   // list feels like it is following along.
@@ -209,8 +222,23 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [filters]
+    [filters, dataRevision]
   );
+
+  const loadCounts = useCallback(async () => {
+    try {
+      setCounts(await fetchStudentCounts());
+    } catch {
+      // The ribbon is supplementary: a failed count request must not stop the
+      // directory from loading or replace the table with an error.
+    } finally {
+      setCountsLoading(false);
+    }
+  }, [dataRevision]);
+
+  useEffect(() => {
+    void loadCounts();
+  }, [loadCounts]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -383,7 +411,10 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
           setProfileId(null);
           void load();
         }}
-        onChanged={() => void load()}
+        onChanged={() => {
+          void load();
+          void loadCounts();
+        }}
       />
     );
   }
@@ -417,6 +448,50 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
             </button>
           )}
         </div>
+      </div>
+
+      <div className="metric-grid">
+        {countsLoading ? (
+          <>
+            <SkeletonMetric />
+            <SkeletonMetric />
+            <SkeletonMetric />
+            <SkeletonMetric />
+          </>
+        ) : (
+          <>
+            <MetricBlock
+              label="Active students"
+              value={`${counts?.active ?? 0}`}
+              comparison={`of ${counts?.total ?? 0} on record`}
+              icon={Users}
+              trend={false}
+            />
+            <MetricBlock
+              label="Inactive"
+              value={`${counts?.inactive ?? 0}`}
+              comparison="Paused or not attending"
+              icon={UserX}
+              positive={false}
+              trend={false}
+            />
+            <MetricBlock
+              label="Withdrawn"
+              value={`${counts?.withdrawn ?? 0}`}
+              comparison="No longer enrolled"
+              icon={RotateCcw}
+              positive={false}
+              trend={false}
+            />
+            <MetricBlock
+              label="Graduated"
+              value={`${counts?.graduated ?? 0}`}
+              comparison="Completed their final year"
+              icon={GraduationCap}
+              trend={false}
+            />
+          </>
+        )}
       </div>
 
       {error && (
@@ -468,10 +543,24 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
               </button>
               <button
                 type="button"
+                className={filters.status === "inactive" ? "active" : ""}
+                onClick={() => setFilter({ status: "inactive" })}
+              >
+                Inactive
+              </button>
+              <button
+                type="button"
                 className={filters.status === "withdrawn" ? "active" : ""}
                 onClick={() => setFilter({ status: "withdrawn" })}
               >
                 Withdrawn
+              </button>
+              <button
+                type="button"
+                className={filters.status === "graduated" ? "active" : ""}
+                onClick={() => setFilter({ status: "graduated" })}
+              >
+                Graduated
               </button>
             </div>
 
@@ -638,6 +727,12 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
             setFallbackDrawerStudent(null);
             setEditing(drawer);
           }}
+          onDeleted={() => {
+            setDrawerId(null);
+            setFallbackDrawerStudent(null);
+            void load();
+            void loadCounts();
+          }}
         />
       )}
 
@@ -655,6 +750,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
             });
             setShowAdd(false);
             await load();
+            void loadCounts();
           }}
         />
       )}
@@ -672,6 +768,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
             toast.success("Student updated");
             setEditing(null);
             await load();
+            void loadCounts();
           }}
         />
       )}
@@ -813,6 +910,7 @@ function StudentDrawer({
   onClose,
   onOpenProfile,
   onEdit,
+  onDeleted,
 }: {
   student: DirectoryStudent;
   mayEdit: boolean;
@@ -822,8 +920,11 @@ function StudentDrawer({
   onClose: () => void;
   onOpenProfile: () => void;
   onEdit: () => void;
+  onDeleted: () => void;
 }) {
   const [detail, setDetail] = useState<ProfilePayload | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<StudentSection>("personal");
@@ -986,11 +1087,44 @@ function StudentDrawer({
             Edit details
           </button>
         )}
+        {detail?.viewer.role === "super_admin" && (
+          <button
+            className="secondary-button compact danger"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        )}
         <button className="primary-button compact" onClick={onOpenProfile}>
           Open full profile
           <ExternalLink size={14} />
         </button>
       </div>
+
+      {confirmingDelete && (
+        <ConfirmDeleteDialog
+          title={`Delete ${student.name}?`}
+          description="This permanently removes the pupil, their enrolment, attendance, marks, invoices, documents and portal account. It cannot be undone. Archive instead if they have simply left the school."
+          busy={deleting}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            setDeleting(true);
+            try {
+              await deleteStudent(student.id);
+              toast.success("Student deleted", {
+                description: "The record and its linked account were removed permanently.",
+              });
+              onClose();
+              onDeleted();
+            } catch (err) {
+              toast.error(err instanceof ApiError ? err.message : "Could not delete this student.");
+            } finally {
+              setDeleting(false);
+            }
+          }}
+        />
+      )}
       </aside>
     </>
   );
@@ -1203,6 +1337,7 @@ function StudentDialog({
   onClose: () => void;
   onSubmit: (draft: StudentDraft) => Promise<void>;
 }) {
+  usePageScrollLock();
   const [activeTab, setActiveTab] = useState<"academic" | "personal" | "guardian" | "address">("academic");
   const [form, setForm] = useState({
     full_name: student?.name || [student?.first_name, student?.last_name].filter(Boolean).join(" ") || "",

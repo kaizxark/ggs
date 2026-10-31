@@ -44,15 +44,34 @@ export function FormSelect({
 
   const updateCoords = useCallback(() => {
     if (!triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
+    /*
+     * The app scales `html` with `zoom: var(--ui-zoom)`. That scales the used
+     * value of `top`/`left` on a fixed child, while `getBoundingClientRect()`
+     * already returns visual (post-zoom) coordinates — so feeding the rect
+     * straight into the portal placed it 10% further out than the trigger.
+     * Work in the unzoomed layout space here; the zoom multiplies it back when
+     * the popover paints.
+     */
+    const zoomValue = Number.parseFloat(
+      getComputedStyle(document.documentElement).zoom
+    );
+    const zoom = Number.isFinite(zoomValue) && zoomValue > 0 ? zoomValue : 1;
+    const raw = triggerRef.current.getBoundingClientRect();
+    const rect = {
+      top: raw.top / zoom,
+      bottom: raw.bottom / zoom,
+      left: raw.left / zoom,
+      width: raw.width / zoom,
+      height: raw.height / zoom,
+    };
 
     if (rect.width === 0 && rect.height === 0) {
       setOpen(false);
       return;
     }
 
-    const vh = window.innerHeight;
-    const vw = window.innerWidth;
+    const vh = window.innerHeight / zoom;
+    const vw = window.innerWidth / zoom;
     const margin = 8;
     const spaceBelow = vh - rect.bottom - margin;
     const spaceAbove = rect.top - margin;
@@ -248,6 +267,7 @@ export function FormSelect({
                   maxHeight: coords.maxHeight,
                   zIndex: 99999,
                   overflowY: "auto",
+                  overscrollBehavior: "contain",
                   padding: 5,
                   borderRadius: 12,
                   background: "rgba(20, 21, 26, 0.96)",

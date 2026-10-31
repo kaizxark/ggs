@@ -14,10 +14,14 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 function AuthSplash() {
   return (
     <div
-      className="min-h-screen bg-[#0b0c10] flex items-center justify-center"
+      className="min-h-screen bg-[var(--bg-page)] flex items-center justify-center"
       style={{ fontFamily: "system-ui, sans-serif" }}
     >
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--brand)]/30 border-t-[var(--brand)]" />
+      <div
+        role="status"
+        aria-label="Loading"
+        className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--brand)]/30 border-t-[var(--brand)] [animation-duration:0.75s]"
+      />
     </div>
   );
 }

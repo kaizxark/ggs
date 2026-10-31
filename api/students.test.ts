@@ -19,6 +19,7 @@ const ORG = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
 const OTHER_ORG = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
 
 const ADMIN = "11111111-1111-4111-8111-111111111111";
+const OWNER = "60ff6003-c0a4-438f-85df-2048b0e7b6c8";
 const TEACHER = "22222222-2222-4222-8222-222222222222";
 const PARENT = "33333333-3333-4333-8333-333333333333";
 
@@ -111,6 +112,26 @@ function makeFetch() {
         return Response.json(rows.slice(0, 1));
       }
       if (href.includes("select=id&")) {
+        const prefer = String(
+          new Headers(init?.headers as HeadersInit).get("Prefer") ?? ""
+        );
+        if (prefer.includes("count=exact")) {
+          if (!href.includes(`organisation_id=eq.${ORG}`))
+            return new Response(null, {
+              status: 200,
+              headers: { "content-range": "0-0/0" },
+            });
+          const status = new URL(href).searchParams
+            .get("status")
+            ?.replace("eq.", "");
+          const count = status
+            ? students.filter(s => String(s.status) === status).length
+            : students.length;
+          return new Response(null, {
+            status: 200,
+            headers: { "content-range": `0-0/${count}` },
+          });
+        }
         // The "does this pupil exist in this org" existence probe. Honouring the
         // organisation filter here is what makes the cross-tenant test meaningful.
         if (!href.includes(`organisation_id=eq.${ORG}`))
@@ -244,6 +265,40 @@ describe("GET /api/students — authentication and directory access", () => {
       "Bhuvan Kumar",
       "Ananya Sharma",
     ]);
+  });
+
+  it("returns school-wide status counts for the KPI ribbon", async () => {
+    students = [
+      student(STUDENT_1, "Ananya", "Sharma"),
+      student(STUDENT_2, "Bhuvan", "Kumar"),
+      student("66666666-6666-4666-8666-666666666666", "Cara", "Iyer", {
+        status: "withdrawn",
+      }),
+      student("77777777-7777-4777-8777-777777777777", "Dev", "Nair", {
+        status: "graduated",
+      }),
+      student("88888888-8888-4888-8888-888888888888", "Esha", "Rao", {
+        status: "inactive",
+      }),
+    ];
+
+    const res = await handler(req("/api/students?counts=1"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { counts: Row };
+    expect(body.counts).toEqual({
+      total: 5,
+      active: 2,
+      inactive: 1,
+      graduated: 1,
+      withdrawn: 1,
+    });
+
+    // Counts are still a service-key read, so they must be tenant-scoped too.
+    for (const call of restCalls.filter(c =>
+      c.includes("/rest/v1/students?")
+    )) {
+      expect(call, call).toContain(`organisation_id=eq.${ORG}`);
+    }
   });
 
   it("keeps every database query inside the caller's organisation", async () => {
@@ -628,6 +683,36 @@ describe("POST/PATCH/DELETE /api/students — writes", () => {
     expect(body.archived).toBe(true);
     expect(patched.some(p => p.body.status === "withdrawn")).toBe(true);
     // A DELETE must never reach the database.
+    expect(restCalls.some(c => c.startsWith("DELETE"))).toBe(false);
+  });
+
+  it("destroys a record permanently for the school owner", async () => {
+    callerId = OWNER;
+    callerRole = "admin";
+    const res = await handler(
+      req("/api/students", {
+        method: "DELETE",
+        body: JSON.stringify({ id: STUDENT_1, permanent: true }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { deleted: boolean };
+    expect(body.deleted).toBe(true);
+    expect(restCalls.some(c => c.startsWith("DELETE"))).toBe(true);
+    expect(patched).toHaveLength(0);
+  });
+
+  it("still archives when an administrator asks for a permanent delete", async () => {
+    const res = await handler(
+      req("/api/students", {
+        method: "DELETE",
+        body: JSON.stringify({ id: STUDENT_1, permanent: true }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { archived: boolean; deleted?: boolean };
+    expect(body.archived).toBe(true);
+    expect(body.deleted).toBeUndefined();
     expect(restCalls.some(c => c.startsWith("DELETE"))).toBe(false);
   });
 

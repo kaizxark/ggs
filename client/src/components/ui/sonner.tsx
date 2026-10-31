@@ -1,22 +1,13 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, Loader2 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { MAX_VISIBLE } from "@/lib/toast";
 
 /**
  * Toast host.
  *
- * ## Why this no longer reads the theme from `next-themes`
- *
- * It used to, but the app has its own `ThemeContext` and never mounts
- * `next-themes` at all. `useTheme` from that package falls back to `"system"`
- * when it finds no provider, so every toast was rendered with Sonner's *system*
- * styling rather than the theme actually in use — on a dark app that meant the
- * near-black, faintly-tinted toasts that looked like tinted glass. Reading the
- * real context is what makes a toast match the screen it appears on.
- *
- * The colours themselves live in `index.css` under "Toasts". This component only
- * supplies the variables' inputs and the behaviour; keeping the values in one
- * stylesheet means a toast cannot drift from the rest of the palette.
+ * Polished toast host calibrated with Apple HIG frosted dark surfaces,
+ * specular inner rim lighting, and elegant custom status iconography.
  */
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "dark" } = useTheme();
@@ -26,13 +17,26 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme}
       className="toaster"
       position="bottom-right"
-      // Long enough to read a sentence, short enough that a burst of them does
-      // not build a wall. Errors stay longer because they carry instructions.
       duration={4200}
-      // A stack that grows without bound runs up the side of the window. Four is
-      // enough to read without the oldest scrolling off before it is seen.
       visibleToasts={MAX_VISIBLE}
-      toastOptions={{ classNames: { toast: "erp-toast" } }}
+      closeButton
+      icons={{
+        success: <CheckCircle2 className="erp-toast-icon" size={16} strokeWidth={2.4} />,
+        info: <Info className="erp-toast-icon" size={16} strokeWidth={2.4} />,
+        warning: <AlertTriangle className="erp-toast-icon" size={16} strokeWidth={2.4} />,
+        error: <AlertCircle className="erp-toast-icon" size={16} strokeWidth={2.4} />,
+        loading: <Loader2 className="erp-toast-icon animate-spin" size={16} strokeWidth={2.4} />,
+      }}
+      toastOptions={{
+        classNames: {
+          toast: "erp-toast",
+          title: "erp-toast-title",
+          description: "erp-toast-description",
+          actionButton: "erp-toast-action",
+          cancelButton: "erp-toast-cancel",
+          closeButton: "erp-toast-close",
+        },
+      }}
       {...props}
     />
   );

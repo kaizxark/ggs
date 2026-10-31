@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+
+import { usePageScrollLock } from "@/components/SmoothScroll";
 import {
   AlertCircle,
   BookOpen,
@@ -33,6 +35,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
+import { notifyDataChanged, useDataRevision } from "../lib/live-data";
 import {
   avatarTones,
   useCurrentUser,
@@ -220,12 +223,15 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
   // Edit Role & Scope Modal State
   const [editingPerson, setEditingPerson] = useState<PeopleRow | null>(null);
+
+  usePageScrollLock(inviteModalOpen || Boolean(editingPerson));
   const [editRole, setEditRole] = useState<"teacher" | "staff" | "admin">("teacher");
   const [editSubject, setEditSubject] = useState("Mathematics");
   const [editGrades, setEditGrades] = useState<string[]>([]);
   const [editClassTeacher, setEditClassTeacher] = useState<string>("none");
   const [editModules, setEditModules] = useState<string[]>([]);
   const [savingRole, setSavingRole] = useState(false);
+  const dataRevision = useDataRevision();
 
   useEffect(() => {
     void (async () => {
@@ -244,7 +250,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
         orgId: String(data?.organisation_id ?? ""),
       });
     })();
-  }, []);
+  }, [dataRevision]);
 
   const loadAccounts = useCallback(async () => {
     setAccountsLoading(true);
@@ -269,7 +275,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
     } finally {
       setAccountsLoading(false);
     }
-  }, []);
+  }, [dataRevision]);
 
   // Load accounts immediately on mount so credentials are ready
   useEffect(() => {
@@ -311,6 +317,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       });
       await loadAccounts();
       void reloadPeople();
+      notifyDataChanged();
     } catch {
       toast.error("Cannot reach the server.");
     } finally {
@@ -530,6 +537,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       setInviteName("");
       void reloadPeople();
       void loadAccounts();
+      notifyDataChanged();
       toast.success("Staff account provisioned with login credentials!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create staff account");
@@ -614,6 +622,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       setEditingPerson(null);
       void reloadPeople();
       void loadAccounts();
+      notifyDataChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update permissions");
     } finally {

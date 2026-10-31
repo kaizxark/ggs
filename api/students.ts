@@ -48,7 +48,10 @@ import {
   canViewFees,
   exportColumnsForRole,
 } from "../shared/student-access.js";
-import { provisionPortalAccount } from "../shared/portal-server.js";
+import {
+  deletePortalAccount,
+  provisionPortalAccount,
+} from "../shared/portal-server.js";
 
 /** Hard ceiling. A caller asking for 10,000 rows gets this and no more. */
 const MAX_PAGE_SIZE = 200;
@@ -617,6 +620,43 @@ async function loadDirectory(
   };
 }
 
+/**
+ * School-wide status counts for the directory's KPI ribbon.
+ *
+ * `loadDirectory` counts only the rows matching the current filters, so it
+ * cannot answer "how many pupils are active?" without re-scanning the roll.
+ * Four `Prefer: count=exact` probes with `Range: 0-0` return the totals without
+ * transferring any rows, and every probe stays inside the caller's organisation.
+ */
+async function studentCounts(orgId: string): Promise<{
+  total: number;
+  active: number;
+  inactive: number;
+  graduated: number;
+  withdrawn: number;
+}> {
+  const statuses = ["active", "inactive", "graduated", "withdrawn"] as const;
+  const responses = await Promise.all(
+    statuses.map(status =>
+      rest(
+        `students?select=id&organisation_id=eq.${orgId}&status=eq.${status}&limit=1`,
+        { headers: { Prefer: "count=exact", Range: "0-0" } }
+      )
+    )
+  );
+
+  const counts = { total: 0, active: 0, inactive: 0, graduated: 0, withdrawn: 0 };
+  statuses.forEach((status, index) => {
+    const value =
+      Number(
+        responses[index].headers.get("content-range")?.split("/")[1] ?? 0
+      ) || 0;
+    counts[status] = value;
+    counts.total += value;
+  });
+  return counts;
+}
+
 function sortRows(rows: Json[], sortField: string, direction: "asc" | "desc") {
   const sortColumn = SORT_COLUMNS[sortField] ?? SORT_COLUMNS.name;
   const dir = direction === "desc" ? -1 : 1;
@@ -869,6 +909,13 @@ export default async function handler(req: Request): Promise<Response> {
         403,
         "no_organisation"
       );
+
+    // The KPI ribbon needs school-wide counts, independent of the current
+    // search and filters, so it is a separate cheap request rather than extra
+    // work on every page change.
+    if (url.searchParams.has("counts")) {
+      return Response.json({ counts: await studentCounts(orgId) });
+    }
 
     const maySeeFees = canViewFees(caller.role);
     const maySeeContacts = SCHOOL_ONLY(caller.role);
@@ -1296,7 +1343,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   /* ---------------------------------------------------------------- *
-   * DELETE — archive rather than destroy
+   * DELETE — archive by default, destroy for the school owner
    * ---------------------------------------------------------------- */
 
   if (req.method === "DELETE") {
@@ -1325,6 +1372,11 @@ export default async function handler(req: Request): Promise<Response> {
     const id = clean(body.id, 64);
     if (!id) return fail("Which student?", 400, "missing_id");
 
+    const url = new URL(req.url);
+    const permanent =
+      caller.role === "super_admin" &&
+      (body.permanent === true || url.searchParams.has("permanent"));
+
     const existing = await readJson<Json[]>(
       await rest(
         `students?select=id,status&organisation_id=eq.${orgId}&id=eq.${id}&limit=1`
@@ -1335,11 +1387,60 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     /*
-     * Archival, not deletion. A pupil's marks, attendance, invoices and medical
-     * history are the school's legal record; deleting the row would cascade
-     * them away and there would be no way to undo it. `withdrawn` records that
-     * the pupil has left and keeps every record intact and auditable.
+     * Archival is the default. A pupil's marks, attendance, invoices and
+     * medical history are the school's legal record; deleting the row would
+     * cascade them away and there would be no way to undo it. `withdrawn`
+     * records that the pupil has left and keeps every record intact.
+     *
+     * The school owner is the one exception: a record created by mistake has
+     * to be removable, and only the immutable super admin can ask for that.
+     * Their own pupil account (if one is linked) is deleted from Auth first so
+     * no orphaned login survives the record.
      */
+    if (permanent) {
+      const linked = await readJson<Json[]>(
+        await rest(
+          `profiles?select=id&student_id=eq.${id}&organisation_id=eq.${orgId}`
+        )
+      ).catch(() => [] as Json[]);
+
+      for (const profile of linked) {
+        const accountId = String(profile.id ?? "");
+        if (accountId && !(await deletePortalAccount(accountId))) {
+          return fail(
+            "The pupil's sign-in account could not be removed, so the record was left intact.",
+            502,
+            "account_delete_failed"
+          );
+        }
+      }
+
+      const deleted = await readJson<Json[]>(
+        await rest(`students?id=eq.${id}&organisation_id=eq.${orgId}`, {
+          method: "DELETE",
+          headers: { Prefer: "return=representation" },
+        })
+      ).catch(() => [] as Json[]);
+
+      if (!deleted.length) {
+        return fail(
+          "The student record could not be deleted.",
+          500,
+          "delete_failed"
+        );
+      }
+
+      await writeAudit(orgId, caller.id, "delete", id, deleted[0]).catch(
+        () => null
+      );
+
+      return Response.json({
+        student: deleted[0],
+        deleted: true,
+        message: `${deleted[0].first_name ?? "The student"} and their linked records were deleted permanently.`,
+      });
+    }
+
     const updated = await readJson<Json[]>(
       await rest(`students?id=eq.${id}&organisation_id=eq.${orgId}`, {
         method: "PATCH",

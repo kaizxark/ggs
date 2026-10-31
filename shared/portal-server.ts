@@ -670,6 +670,22 @@ function keyColumn(table: string): string {
   return table === "student_credentials" ? "student_id" : "id";
 }
 
+/**
+ * Delete an auth user.
+ *
+ * A 404 is success: the account is already gone, which is the state the caller
+ * asked for. Every other failure is reported so a route can refuse to leave an
+ * orphaned login behind a deleted record.
+ */
+export async function deletePortalAccount(authUserId: string): Promise<boolean> {
+  if (!authUserId) return true;
+  const res = await fetch(
+    `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(authUserId)}`,
+    { method: "DELETE", headers: headers() }
+  );
+  return res.ok || res.status === 404;
+}
+
 /** Set the auth user's password through the admin API. */
 async function setAuthPassword(
   userId: string,

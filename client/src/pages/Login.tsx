@@ -163,7 +163,7 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen bg-[#0b0c10] relative flex items-center justify-center px-4 overflow-hidden"
+      className="min-h-screen bg-[var(--bg-page)] relative flex items-center justify-center px-4 overflow-hidden"
       style={{ fontFamily: "system-ui, sans-serif" }}
     >
       <div className="pointer-events-none absolute inset-0">
@@ -271,14 +271,14 @@ export default function Login() {
             )}
 
             {error && (
-              <div className="flex items-center gap-2 text-[var(--danger)] text-[12.5px] bg-[#2a1a18]/60 border border-[#3a2020] rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 text-[var(--danger)] text-[12.5px] bg-[var(--danger-soft-2)] border border-[var(--danger-border)] rounded-lg px-3 py-2">
                 <AlertCircle size={14} className="flex-shrink-0" />
                 {error}
               </div>
             )}
 
             {notice && (
-              <div className="flex items-start gap-2 text-[var(--brand-strong)] text-[12.5px] bg-indigo-950/60 border border-indigo-900/60 rounded-lg px-3 py-2">
+              <div className="flex items-start gap-2 text-[var(--brand-strong)] text-[12.5px] bg-[var(--brand-soft-2)] border border-[var(--brand-border)] rounded-lg px-3 py-2">
                 <Check size={14} className="flex-shrink-0 mt-px" />
                 {notice}
               </div>
@@ -287,7 +287,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[var(--brand)] hover:bg-[#4338ca] disabled:opacity-70 text-white font-semibold py-2.5 rounded-lg transition shadow-[0_0_24px_rgba(79,70,229,.35)] flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full bg-[var(--brand)] hover:bg-[#0071e3] active:scale-[0.98] disabled:opacity-70 text-white font-semibold py-2.5 rounded-lg transition shadow-[0_1px_2px_rgba(0,0,0,.35),inset_0_1px_0_rgba(255,255,255,.22)] flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
                 <>

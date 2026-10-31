@@ -13,16 +13,21 @@ import {
   Pencil,
   Phone,
   ShieldCheck,
+  Trash2,
   UserRound,
   X,
 } from "lucide-react";
 
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { DrawerBackdrop } from "@/components/DrawerBackdrop";
+import { usePageScrollLock } from "@/components/SmoothScroll";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { FormSelect } from "./FormSelect";
 import { toast } from "@/lib/toast";
+import { useDataRevision } from "@/lib/live-data";
 import { ApiError, formatDate, initialsFor } from "@/lib/student-directory";
 import {
+  deleteStaff,
   fetchStaffProfile,
   updateStaffProfile,
   type StaffDraft,
@@ -113,6 +118,9 @@ export function StaffDrawer({
   const [tab, setTab] = useState<StaffSection>("personal");
   const [wide, setWide] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const dataRevision = useDataRevision();
 
   /*
    * Escape and the scroll lock live in `DrawerBackdrop`, as they do for the
@@ -153,7 +161,7 @@ export function StaffDrawer({
       live = false;
       controller.abort();
     };
-  }, [staff.id, reloadKey]);
+  }, [staff.id, reloadKey, dataRevision]);
 
   const record = detail?.staff;
   const account = detail?.account ?? null;
@@ -381,6 +389,15 @@ export function StaffDrawer({
             <Copy size={14} />
             Copy email
           </button>
+          {detail?.viewer.role === "super_admin" && !detail.viewer.is_self && (
+            <button
+              className="secondary-button compact danger"
+              onClick={() => setConfirmingDelete(true)}
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          )}
           {detail?.viewer.is_manager ? (
             <button
               className="primary-button compact"
@@ -415,6 +432,30 @@ export function StaffDrawer({
             setEditing(false);
             setReloadKey((key) => key + 1);
             onUpdated();
+          }}
+        />
+      )}
+
+      {confirmingDelete && record && (
+        <ConfirmDeleteDialog
+          title={`Delete ${record.name}?`}
+          description="This permanently removes the staff record, their teaching assignments, credentials and sign-in account. It cannot be undone. Deactivate the record instead if they have left but their history should remain."
+          busy={deleting}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            setDeleting(true);
+            try {
+              await deleteStaff(record.id);
+              toast.success("Staff member deleted", {
+                description: "The record and its sign-in account were removed permanently.",
+              });
+              onClose();
+              onUpdated();
+            } catch (err) {
+              toast.error(err instanceof ApiError ? err.message : "Could not delete this staff record.");
+            } finally {
+              setDeleting(false);
+            }
           }}
         />
       )}
@@ -676,6 +717,7 @@ function StaffEditDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  usePageScrollLock();
   const originalPhoto = record.photo_url ?? "";
   const [form, setForm] = useState({
     name: record.name ?? "",

@@ -94,6 +94,14 @@ export const toast = Object.assign(
     error: (...args: ToastArgs) => fire("error", args),
     warning: (...args: ToastArgs) => fire("warning", args),
     info: (...args: ToastArgs) => fire("info", args),
+    loading: (message: unknown, data?: ExternalToast) =>
+      sonnerToast.loading(message as string, {
+        id: idFor(message, data),
+        ...data,
+      }),
+    dismiss: (toastId?: number | string) => sonnerToast.dismiss(toastId),
+    promise: sonnerToast.promise,
+    custom: sonnerToast.custom,
   }
 );
 

@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { notifyDataChanged } from "./live-data";
 
 export interface FeePaymentSession {
   orderId: string;
@@ -117,6 +118,7 @@ export async function confirmFeePayment(
     duplicate?: boolean;
     status?: string;
   };
+  notifyDataChanged();
   return {
     receiptNo: String(body.receiptNo ?? ""),
     duplicate: body.duplicate === true,
@@ -145,6 +147,7 @@ export async function recordUpiPayment(input: {
     duplicate?: boolean;
     status?: string;
   };
+  notifyDataChanged();
   return {
     receiptNo: String(body.receiptNo ?? ""),
     duplicate: body.duplicate === true,

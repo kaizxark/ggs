@@ -39,6 +39,7 @@ interface Store {
 }
 
 let store: Store;
+let sessionId = CALLER_ID;
 
 function emptyStore(): Store {
   return { profiles: [], staff: [], authUsers: [], writes: [] };
@@ -66,7 +67,7 @@ function stubNetwork() {
     /* The session, and the caller's own role. */
     if (url.includes("/auth/v1/user")) {
       return Response.json({
-        id: CALLER_ID,
+        id: sessionId,
         email: "head.teacher@globalskids.edu.in",
       });
     }
@@ -131,6 +132,14 @@ function stubNetwork() {
         Object.assign(row, body);
         return Response.json([row]);
       }
+      if (method === "DELETE") {
+        const byId = filterValue(url, "id");
+        const index = store.staff.findIndex(
+          person => String(person.id) === byId
+        );
+        const removed = index >= 0 ? store.staff.splice(index, 1)[0] : null;
+        return Response.json(removed ? [removed] : []);
+      }
       const byId = filterValue(url, "id");
       const byProfile = filterValue(url, "profile_id");
       const usnMatch = /[?&]usn=ilike\.([^&]+)/.exec(url);
@@ -191,6 +200,7 @@ function writesTo(table: string) {
 }
 
 beforeEach(() => {
+  sessionId = CALLER_ID;
   store = emptyStore();
   store.profiles.push({
     id: CALLER_ID,
@@ -626,5 +636,57 @@ describe("USN — the staff identifier", () => {
     expect(body.fieldErrors?.usn).toBeTruthy();
     const row = store.staff.find(person => person.id === STAFF_ID);
     expect(row?.usn).toBe("STF1001");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+
+describe("DELETE /api/staff — permanent removal", () => {
+  beforeEach(() => {
+    store.staff.push({
+      id: STAFF_ID,
+      organisation_id: "org-1",
+      name: "Rajesh Menon",
+      email: "rajesh.menon@myschool.edu.in",
+      designation: "Head of Physics",
+      usn: "STF1002",
+      profile_id: PROFILE_ID,
+    });
+  });
+
+  it("refuses a permanent delete from an administrator", async () => {
+    const res = await request("DELETE", { id: STAFF_ID });
+    expect(res.status).toBe(403);
+    expect(store.staff).toHaveLength(1);
+  });
+
+  it("removes the record and its sign-in account for the school owner", async () => {
+    sessionId = OWNER_ID;
+    store.profiles.push({
+      id: OWNER_ID,
+      organisation_id: "org-1",
+      role: "admin",
+      full_name: "School Owner",
+    });
+    const res = await request("DELETE", { id: STAFF_ID });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { deleted: boolean };
+    expect(body.deleted).toBe(true);
+    expect(store.staff).toHaveLength(0);
+    expect(writesTo("audit_logs")).toHaveLength(1);
+  });
+
+  it("will not let the owner delete their own staff record", async () => {
+    sessionId = OWNER_ID;
+    store.profiles.push({
+      id: OWNER_ID,
+      organisation_id: "org-1",
+      role: "admin",
+      full_name: "School Owner",
+    });
+    store.staff[0].profile_id = OWNER_ID;
+    const res = await request("DELETE", { id: STAFF_ID });
+    expect(res.status).toBe(403);
+    expect(store.staff).toHaveLength(1);
   });
 });

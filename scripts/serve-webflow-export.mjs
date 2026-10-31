@@ -322,6 +322,34 @@ function localiseVendorRuntime(html) {
 }
 
 /**
+ * Interaction polish shared by every exported page.
+ *
+ * The template's own CSS ships `transition: all .3s` on buttons and nav links,
+ * no press feedback, and hover lifts that also fire on touch. These rules keep
+ * the template's visual identity but bring the interaction layer up to the same
+ * standard as the product: exact properties, a strong ease-out curve, instant
+ * press feedback, a keyboard-only focus ring, and a translucent header material
+ * that the page can scroll beneath.
+ */
+const GKS_POLISH_STYLES = `
+:root{--gks-ease-out:cubic-bezier(.23,1,.32,1)}
+html{scroll-behavior:smooth}
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+::selection{background:rgba(248,100,43,.22)}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid #f8642b;outline-offset:3px}
+.button{transition:background-color .2s var(--gks-ease-out),color .2s var(--gks-ease-out),border-color .2s var(--gks-ease-out),transform .12s var(--gks-ease-out)}
+.button:active{transform:scale(.97)}
+a{transition-property:color,opacity,background-color,border-color,transform;transition-duration:.2s;transition-timing-function:var(--gks-ease-out)}
+.nav-link,.nav-dropdown-toggle,.nav-dropdown-link,.menu-dropdown-text{transition:color .16s var(--gks-ease-out),opacity .16s var(--gks-ease-out)}
+.text-field,.submit-button{transition:background-color .2s var(--gks-ease-out),border-color .2s var(--gks-ease-out),color .2s var(--gks-ease-out),box-shadow .2s var(--gks-ease-out)}
+.submit-button:active{transform:scale(.97)}
+.navbar{background-color:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%);box-shadow:0 1px 0 rgba(0,0,0,.04)}
+@media (hover:none){.button:hover{transform:none}}
+@media (prefers-reduced-transparency:reduce){.navbar{background-color:#fff;-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}.button:active{transform:none}}
+`;
+
+/**
  * Hide the "Made in Webflow" badge.
  *
  * Webflow's runtime (webflow.schunk.*.js) appends <a class="w-webflow-badge">
@@ -346,7 +374,9 @@ function suppressBadge(html) {
     ".gks-footer-ticker-wordmark{color:#000;font-family:inherit;font-size:clamp(48px,6.67vw,96px);font-weight:700;line-height:1;white-space:nowrap}" +
     MOBILE_NAV_STYLES +
     "html.w-mod-js:not(.w-mod-ix3) .hero-section.hero-section *,html.w-mod-js:not(.w-mod-ix3) .navbar.navbar .navigation-button *{visibility:visible!important;opacity:1!important}" +
-    "@media(max-width:767px){.gks-footer-ticker-emblem{width:72px;height:72px}}</style>";
+    "@media(max-width:767px){.gks-footer-ticker-emblem{width:72px;height:72px}}" +
+    GKS_POLISH_STYLES +
+    "</style>";
   return html.includes("</head>") ? html.replace("</head>", style + "</head>") : style + html;
 }
 

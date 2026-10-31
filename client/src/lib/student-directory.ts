@@ -18,6 +18,7 @@
  */
 
 import { supabase } from "./supabase";
+import { notifyDataChanged, registerDataInvalidator } from "./live-data";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -85,6 +86,15 @@ export interface DirectoryPage {
   /** True when the list hit the server's scan ceiling and is not exhaustive. */
   truncated: boolean;
   role?: string;
+}
+
+/** School-wide status totals for the directory's KPI ribbon. */
+export interface StudentCounts {
+  total: number;
+  active: number;
+  inactive: number;
+  graduated: number;
+  withdrawn: number;
 }
 
 export interface DirectoryFilters {
@@ -186,6 +196,8 @@ export function clearDirectoryCache() {
   directoryCache.clear();
 }
 
+registerDataInvalidator(clearDirectoryCache);
+
 /** One page of the directory, served from in-memory cache if fresh. */
 export async function fetchDirectory(
   filters: DirectoryFilters = {},
@@ -204,6 +216,12 @@ export async function fetchDirectory(
     if (oldestKey) directoryCache.delete(oldestKey);
   }
   return data;
+}
+
+/** School-wide counts, unaffected by the directory's current search or filters. */
+export async function fetchStudentCounts(signal?: AbortSignal): Promise<StudentCounts> {
+  const data = await apiFetch<{ counts: StudentCounts }>("/api/students?counts=1", { signal });
+  return data.counts;
 }
 
 /** The server's filter parameters, including the `export` flag the route reads. */
@@ -279,25 +297,54 @@ export interface StudentDraft {
 }
 
 export async function createStudent(draft: StudentDraft): Promise<{ student: DirectoryStudent }> {
-  clearDirectoryCache();
-  return apiFetch("/api/students", { method: "POST", body: JSON.stringify(draft) });
+  const result = await apiFetch<{ student: DirectoryStudent }>("/api/students", {
+    method: "POST",
+    body: JSON.stringify(draft),
+  });
+  notifyDataChanged();
+  return result;
 }
 
 export async function updateStudent(
   id: string,
   patch: Partial<StudentDraft>
 ): Promise<{ student: DirectoryStudent }> {
-  clearDirectoryCache();
-  return apiFetch("/api/students", {
+  const result = await apiFetch<{ student: DirectoryStudent }>("/api/students", {
     method: "PATCH",
     body: JSON.stringify({ id, ...patch }),
   });
+  notifyDataChanged();
+  return result;
 }
 
 /** Archive a pupil. This is a status change, not a delete: records are kept. */
 export async function archiveStudent(id: string): Promise<{ student: DirectoryStudent; archived: boolean }> {
-  clearDirectoryCache();
-  return apiFetch("/api/students", { method: "DELETE", body: JSON.stringify({ id }) });
+  const result = await apiFetch<{ student: DirectoryStudent; archived: boolean }>("/api/students", {
+    method: "DELETE",
+    body: JSON.stringify({ id }),
+  });
+  notifyDataChanged();
+  return result;
+}
+
+/**
+ * Delete a pupil permanently. The school owner's route removes the linked
+ * sign-in account first, then the row; everything keyed on `student_id`
+ * cascades with it. This is not the archive action.
+ */
+export async function deleteStudent(
+  id: string
+): Promise<{ student: DirectoryStudent; deleted: boolean; message: string }> {
+  const result = await apiFetch<{
+    student: DirectoryStudent;
+    deleted: boolean;
+    message: string;
+  }>("/api/students", {
+    method: "DELETE",
+    body: JSON.stringify({ id, permanent: true }),
+  });
+  notifyDataChanged();
+  return result;
 }
 
 /* ------------------------------------------------------------------ *

@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "./supabase";
+import { notifyDataChanged, useDataRevision } from "./live-data";
 
 export type RowId = string | number;
 export type BaseRow = { id: RowId } & Record<string, unknown>;
@@ -384,6 +385,7 @@ export function useSupabaseTable<T extends BaseRow>(
   const [source, setSource] = useState<"mock" | "db">("mock");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const revision = useDataRevision();
 
   const sourceRef = useRef(source);
   sourceRef.current = source;
@@ -447,7 +449,7 @@ export function useSupabaseTable<T extends BaseRow>(
       unsubscribe?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, eqKey]);
+  }, [table, eqKey, revision]);
 
   const insert = useCallback(
     async (row: Record<string, unknown>): Promise<T | null> => {
@@ -643,6 +645,7 @@ export function useSettings() {
       const result = await upsert({ key, value });
       if (!result) ok = false;
     }
+    if (ok) notifyDataChanged();
     return ok;
   };
 

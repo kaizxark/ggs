@@ -50,6 +50,22 @@ export function smoothScrollTo(target: number): void {
   if (instance) instance.scrollTo(target, { immediate: true });
 }
 
+/**
+ * Hold the page still for as long as an overlay is mounted.
+ *
+ * Modals used to rely on their scrim alone, which dims the page but leaves the
+ * wheel pointed at `.main-area`; scrolling a short dialog therefore moved the
+ * dashboard behind it. The lock is reference-counted, so nested overlays (a
+ * dialog over a drawer) hand the page back only when the last one closes.
+ */
+export function usePageScrollLock(active = true): void {
+  useEffect(() => {
+    if (!active) return;
+    setPageScrollLocked(true);
+    return () => setPageScrollLocked(false);
+  }, [active]);
+}
+
 
 export default function SmoothScroll({
   scrollRef,

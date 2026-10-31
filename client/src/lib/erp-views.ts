@@ -16,6 +16,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import {
+  registerDataInvalidator,
+  useDataRevision,
+} from "./live-data";
+import {
   ROLE_LABELS,
   effectiveRole,
   isSuperAdminId,
@@ -67,6 +71,11 @@ import {
   type SubjectRow,
   type TimetableEntry,
 } from "./school-data";
+
+// The report screens import these shapes from the view layer rather than
+// reaching past it into `school-data`, so the view module is the one public
+// surface for a row type.
+export type { Invoice, StaffMember, Student };
 
 /* ------------------------------------------------------------------ */
 /* Low-level fetching                                                  */
@@ -233,6 +242,8 @@ export function clearErpCache() {
   rowCache.clear();
 }
 
+registerDataInvalidator(clearErpCache);
+
 /* ------------------------------------------------------------------ */
 /* View loader                                                         */
 /* ------------------------------------------------------------------ */
@@ -263,6 +274,7 @@ function useErpView<T extends { id: string | number }>(
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<"mock" | "db">("db");
   const [nonce, setNonce] = useState(0);
+  const revision = useDataRevision();
   const mockRef = useRef(mockRows);
   mockRef.current = mockRows;
   const loadRef = useRef(load);
@@ -298,7 +310,7 @@ function useErpView<T extends { id: string | number }>(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, nonce, enabled, ...deps]);
+  }, [key, nonce, enabled, revision, ...deps]);
 
   const reload = useCallback(() => {
     cache.delete(`${key}:${nonce}`);
@@ -1164,6 +1176,7 @@ export interface CurrentUser {
 
 export function useCurrentUser(): CurrentUser | null {
   const [session, setSession] = useState<Session | null>(null);
+  const revision = useDataRevision();
 
   useEffect(() => {
     let cancelled = false;
@@ -1239,7 +1252,7 @@ export function useCurrentUser(): CurrentUser | null {
     return () => {
       cancelled = true;
     };
-  }, [userId, session?.user?.email]);
+  }, [userId, session?.user?.email, revision]);
 
   return profile;
 }

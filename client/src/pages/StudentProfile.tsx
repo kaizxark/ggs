@@ -11,15 +11,20 @@ import {
   Pencil,
   Printer,
   ShieldAlert,
+  Trash2,
   UserRound,
   Users,
   Wallet,
   X,
 } from "lucide-react";
 
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
+import { useDataRevision } from "@/lib/live-data";
+import { usePageScrollLock } from "@/components/SmoothScroll";
 import {
   ApiError,
   archiveStudent,
+  deleteStudent,
   fetchStudentProfile,
   formatBytes,
   formatDate,
@@ -115,7 +120,10 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<StudentSection>("personal");
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const dataRevision = useDataRevision();
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -130,7 +138,7 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [studentId],
+    [studentId, dataRevision],
   );
 
   useEffect(() => {
@@ -214,6 +222,7 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
             }
           }}
           onPrint={() => window.print()}
+          onDelete={() => setConfirmingDelete(true)}
         />
 
         <section className="student-profile-main" aria-label={`${data.student.name} record`}>
@@ -257,6 +266,30 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
           }}
         />
       )}
+
+      {confirmingDelete && (
+        <ConfirmDeleteDialog
+          title={`Delete ${data.student.name}?`}
+          description="This permanently removes the pupil, their enrolment, attendance, marks, invoices, documents and portal account. It cannot be undone. Archive instead if they have simply left the school."
+          busy={deleting}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            setDeleting(true);
+            try {
+              await deleteStudent(studentId);
+              toast.success("Student deleted", {
+                description: "The record and its linked account were removed permanently.",
+              });
+              onChanged?.();
+              onBack();
+            } catch (err) {
+              toast.error(err instanceof ApiError ? err.message : "Could not delete this student.");
+            } finally {
+              setDeleting(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -293,6 +326,7 @@ function ProfileRail({
   onEdit,
   onArchive,
   onPrint,
+  onDelete,
 }: {
   data: ProfilePayload;
   role: string;
@@ -304,6 +338,7 @@ function ProfileRail({
   onEdit: () => void;
   onArchive: () => void;
   onPrint: () => void;
+  onDelete: () => void;
 }) {
   const { student, class: klass } = data;
   const attendance = data.attendance?.summary;
@@ -398,6 +433,12 @@ function ProfileRail({
             <button className="secondary-button compact danger" onClick={onArchive}>
               <Archive size={14} />
               Archive
+            </button>
+          )}
+          {role === "super_admin" && (
+            <button className="secondary-button compact danger" onClick={onDelete}>
+              <Trash2 size={14} />
+              Delete
             </button>
           )}
         </div>
@@ -1253,6 +1294,7 @@ function EditStudentDialog({
   onClose: () => void;
   onSaved: (draft: Partial<StudentDraft>) => Promise<void>;
 }) {
+  usePageScrollLock();
   const s = data.student;
   const [form, setForm] = useState({
     first_name: s.first_name ?? "",
