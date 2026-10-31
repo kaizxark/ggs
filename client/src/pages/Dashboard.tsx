@@ -4058,11 +4058,11 @@ function AnalyticsView({
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
           <select
             value={selectedTerm}
             onChange={e => setSelectedTerm(e.target.value)}
-            className="px-3 py-2 text-xs font-semibold rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] transition-colors cursor-pointer"
+            className="flex-1 sm:flex-initial min-w-0 px-3 py-2 text-xs font-semibold rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] transition-colors cursor-pointer"
           >
             <option value="All Terms (2024–25)">All Terms (Annual 2024–25)</option>
             <option value="Term 1 (Autumn)">Term 1 (Autumn Term)</option>
@@ -4072,7 +4072,7 @@ function AnalyticsView({
 
           <button
             onClick={handleExportReport}
-            className="primary-button flex items-center gap-2 px-3.5 py-2 text-xs font-medium cursor-pointer shadow-sm"
+            className="primary-button flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-medium cursor-pointer shadow-sm"
           >
             <Download size={14} />
             <span>Export Report</span>

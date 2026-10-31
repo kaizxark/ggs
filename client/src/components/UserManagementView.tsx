@@ -902,7 +902,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as "staff" | "students")}
-                className={`relative flex items-center gap-3 px-6 py-3.5 rounded-xl font-semibold text-sm cursor-pointer z-10 transition-colors duration-200 ${
+                className={`relative flex items-center gap-2 sm:gap-3 px-3.5 sm:px-6 py-2.5 sm:py-3.5 rounded-xl font-semibold text-xs sm:text-sm cursor-pointer z-10 transition-colors duration-200 whitespace-nowrap ${
                   isActive
                     ? "text-white font-bold"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -967,7 +967,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               </div>
 
               {/* Roles: Dynamic tabs with Smooth Horizontal Sliding Indicator */}
-              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
+              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1 max-w-full overflow-x-auto no-scrollbar">
                 {availableStaffTabs.map(tab => {
                   const isActive = staffRoleFilter === tab.key;
                   return (
@@ -1252,7 +1252,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               </div>
 
               {/* Intuitive School Division Filters with Smooth Horizontal Sliding Indicator */}
-              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1">
+              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1 max-w-full overflow-x-auto no-scrollbar">
                 {[
                   { key: "all", label: "All Students" },
                   { key: "primary", label: "Primary (G1–5)" },
