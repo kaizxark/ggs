@@ -1843,9 +1843,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     [role]
   );
   const canSeeFinance = allowedScreens.has("finance");
-  const canSeeReports = allowedScreens.has("reports");
-  const canSeeAcademics = allowedScreens.has("academics");
-  const canSeeExaminations = allowedScreens.has("examinations");
 
   // Re-render on a timer so a tab left open across a boundary greets correctly
   const [now, setNow] = useState(() => new Date());
@@ -1854,8 +1851,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     return () => window.clearInterval(id);
   }, []);
   const greeting = greetingFor(now);
-
-  const [pulseTab, setPulseTab] = useState<"announcements" | "payments" | "notifications">("announcements");
 
   // Database-backed hooks
   const {
@@ -1875,25 +1870,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   const { rows: invoiceRows, loading: invoicesLoading } =
     useInvoices(canSeeFinance);
   const { rows: allStudents, loading: studentsListLoading } = useStudents();
-  const { rows: allExams, loading: examsLoading } = useExams();
-  const { rows: subjectAverages, loading: subjectAveragesLoading } =
-    useSubjectAverages();
-  const { rows: gradeOutcomes, loading: gradeOutcomesLoading } =
-    useGradeOutcomes();
-  const { rows: recentPayments, loading: paymentsLoading } = usePayments();
-  const { rows: notifications, loading: notificationsLoading } =
-    useNotifications();
-
-  // Attendance metrics
-  const latestAttendance = attendanceData[attendanceData.length - 1];
-  const latestPresent = latestAttendance?.present ?? 0;
-  const latestAbsent = latestAttendance?.absent ?? 0;
-  const latestLate = latestAttendance?.late ?? 0;
-  const latestLeave = latestAttendance?.leave ?? 0;
-  const latestMarked =
-    latestPresent + latestAbsent + latestLate + latestLeave;
-  const latestPct =
-    latestMarked > 0 ? Math.round((latestPresent / latestMarked) * 100) : 0;
 
   const termAttendanceStats = useMemo(() => {
     const totalRecords = classAttendance.reduce((sum, c) => sum + c.total, 0);
@@ -1905,26 +1881,11 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     return { totalRecords, presentRecords, overallPct };
   }, [classAttendance, healthMetrics]);
 
-  // Academic cohort intelligence
+  // Academic standing
   const gradedStudents = useMemo(
     () => allStudents.filter(s => s.average > 0),
     [allStudents]
   );
-  const scoreTiers = useMemo(() => {
-    const total = gradedStudents.length || 1;
-    const distinction = gradedStudents.filter(s => s.average >= 85).length;
-    const merit = gradedStudents.filter(s => s.average >= 70 && s.average < 85).length;
-    const pass = gradedStudents.filter(s => s.average >= 50 && s.average < 70).length;
-    const critical = gradedStudents.filter(s => s.average < 50).length;
-    return {
-      total: gradedStudents.length,
-      distinction: { count: distinction, pct: Math.round((distinction / total) * 100) },
-      merit: { count: merit, pct: Math.round((merit / total) * 100) },
-      pass: { count: pass, pct: Math.round((pass / total) * 100) },
-      critical: { count: critical, pct: Math.round((critical / total) * 100) },
-    };
-  }, [gradedStudents]);
-
   const cohortAverage = useMemo(() => {
     if (gradedStudents.length === 0) return 69;
     return Math.round(
@@ -1932,42 +1893,24 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     );
   }, [gradedStudents]);
 
-  const topSubjects = useMemo(() => {
-    return [...subjectAverages].sort((a, b) => b.average - a.average);
-  }, [subjectAverages]);
-
-  // Upcoming academic milestones
-  const upcomingExam = useMemo(() => {
-    return (
-      allExams.find(
-        e =>
-          e.status !== "Published" ||
-          (e.date && new Date(e.date).getTime() > Date.now())
-      ) ??
-      allExams[allExams.length - 1] ?? {
-        name: "Mid-Term Examination",
-        date: "01 Dec 2026",
-        status: "Scheduled",
-      }
-    );
-  }, [allExams]);
+  const criticalStudentsCount = useMemo(
+    () => gradedStudents.filter(s => s.average < 50).length,
+    [gradedStudents]
+  );
 
   // Faculty and staffing ratios
   const staffCount = allStaff.length;
-  const teachersCount = useMemo(() => {
-    const count = allStaff.filter(
+  const studentTeacherRatio = useMemo(() => {
+    const teachers = allStaff.filter(
       s =>
         /teacher|faculty|instructor/i.test(s.role) ||
         /languages|science|mathematics|english|social|sports|computer/i.test(
           s.department
         )
     ).length;
-    return count > 0 ? count : Math.min(allStaff.length, 6);
-  }, [allStaff]);
-
-  const studentTeacherRatio = useMemo(() => {
-    return teachersCount > 0 ? Math.round(studentCount / teachersCount) : 10;
-  }, [studentCount, teachersCount]);
+    const count = teachers > 0 ? teachers : Math.min(allStaff.length, 6);
+    return count > 0 ? Math.round(studentCount / count) : 10;
+  }, [allStaff, studentCount]);
 
   // Financial reconciliation
   const billed = invoiceRows.reduce(
@@ -1988,28 +1931,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   );
   const lakh = (n: number) => `₹${(n / 100000).toFixed(1)}L`;
 
-  // Classroom matrix
-  const classMatrix = useMemo(() => {
-    const outcomeByGrade = new Map(
-      gradeOutcomes.map(g => [g.grade.toLowerCase().replace(/\s+/g, ""), g])
-    );
-    return classAttendance.map(c => {
-      const match = /Grade\s+(\d+)/i.exec(c.label);
-      const gradeNum = match ? match[1] : "";
-      const outcome = outcomeByGrade.get(`grade${gradeNum}`);
-      return {
-        id: c.id,
-        label: c.label,
-        grade: gradeNum ? `Grade ${gradeNum}` : c.label,
-        teacher: c.teacher || "Unassigned",
-        attendance: c.value,
-        academicAvg: outcome?.average ?? (c.value >= 90 ? 71 : 68),
-        total: c.total,
-        present: c.present,
-      };
-    });
-  }, [classAttendance, gradeOutcomes]);
-
   const classesBelow = classAttendance.filter(
     c => c.total > 0 && c.value < 92
   ).length;
@@ -2020,12 +1941,12 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
 
   // Actionable alerts directly projected from DB
   const attentionItems = [
-    ...(scoreTiers.critical.count > 0
+    ...(criticalStudentsCount > 0
       ? [
           {
-            label: "Academic remediation required",
-            value: String(scoreTiers.critical.count),
-            detail: `${scoreTiers.critical.count} pupils scored below 50% threshold in examinations`,
+            label: "Academic remediation",
+            value: String(criticalStudentsCount),
+            detail: `${criticalStudentsCount} pupils below 50% average`,
             icon: AlertCircle,
             tone: "coral",
             view: "Academics",
@@ -2035,7 +1956,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     {
       label: "Attendance follow-up",
       value: String(belowThreshold),
-      detail: `${belowThreshold} pupils below 90% attendance benchmark`,
+      detail: `${belowThreshold} pupils below 90% attendance`,
       icon: Clock3,
       tone: "amber",
       view: "Attendance",
@@ -2045,7 +1966,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           {
             label: "Overdue fee recovery",
             value: String(overdueInvoices.length),
-            detail: `${lakh(overdueAmount)} outstanding across ${overdueInvoices.length} invoices`,
+            detail: `${lakh(overdueAmount)} across ${overdueInvoices.length} invoices`,
             icon: Receipt,
             tone: "blue",
             view: "Fees & Finance",
@@ -2053,69 +1974,26 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         ]
       : []),
     {
-      label: "Classes on attendance watch",
+      label: "Classes on watch",
       value: String(classesBelow),
-      detail: `${classesBelow} class${classesBelow === 1 ? "" : "es"} below 92% term average`,
+      detail: `${classesBelow} class${classesBelow === 1 ? "" : "es"} below 92%`,
       icon: ClipboardCheck,
       tone: "violet",
       view: "Attendance",
     },
   ];
 
-  const formatRelativeTime = (iso?: string | null): string => {
-    if (!iso) return "—";
-    const t = new Date(iso).getTime();
-    if (Number.isNaN(t)) return String(iso);
-    const mins = Math.round((Date.now() - t) / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.round(hrs / 24);
-    if (days === 1) return "yesterday";
-    if (days < 30) return `${days}d ago`;
-    return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-  };
-
   return (
     <div className="page-stack dashboard-overview">
       <div className="page-intro">
         <div>
           <div className="flex items-center gap-2">
-            <p className="eyebrow">
-              {now.toLocaleDateString("en-GB", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
-            <span className="count-badge">
-              Term 2 · 2026–27
-            </span>
+            <span className="count-badge">Term 2 · 2026–27</span>
           </div>
           <h1 className="page-title mt-1">
             {greeting}
             {currentUser?.fullName ? `, ${currentUser.fullName}` : ""}
           </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {canSeeReports && (
-            <button
-              className="secondary-button"
-              onClick={() => onNavigate("Reports")}
-            >
-              <FileBarChart size={15} />
-              Reports
-            </button>
-          )}
-          <button
-            className="primary-button"
-            onClick={() => onNavigate("Attendance")}
-          >
-            <ClipboardCheck size={16} />
-            Open register
-          </button>
         </div>
       </div>
 
@@ -2125,7 +2003,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           className="overview-metric"
           label="Students enrolled"
           value={studentCount.toLocaleString("en-IN")}
-          comparison={`${activeStudents} active · 5 classrooms`}
+          comparison="All active"
           icon={GraduationCap}
           trend={false}
           loading={studentsLoading}
@@ -2134,11 +2012,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           className="overview-metric"
           label="Attendance rate"
           value={`${termAttendanceStats.overallPct}%`}
-          comparison={
-            latestAttendance
-              ? `Latest register: ${latestPresent} present · ${latestAbsent} absent (${latestAttendance.label ?? latestAttendance.day})`
-              : "12,234 sessions recorded"
-          }
+          comparison="Term average"
           icon={ClipboardCheck}
           trend={false}
           loading={attendanceChartLoading}
@@ -2147,7 +2021,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           className="overview-metric"
           label="Academic standing"
           value={cohortAverage > 0 ? `${cohortAverage}%` : "—"}
-          comparison={`${scoreTiers.distinction.count} Distinction · ${scoreTiers.merit.count} Merit · ${scoreTiers.critical.count} At risk`}
+          comparison="Cohort average"
           icon={BookOpen}
           trend={false}
           loading={studentsListLoading}
@@ -2157,7 +2031,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
             className="overview-metric"
             label="Fee collection"
             value={lakh(collected)}
-            comparison={`${collectionRate}% collected · ${overdueInvoices.length} overdue`}
+            comparison={`${collectionRate}% collected`}
             icon={IndianRupee}
             trend={false}
             loading={invoicesLoading}
@@ -2167,7 +2041,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
             className="overview-metric"
             label="Faculty & staff"
             value={staffCount.toLocaleString("en-IN")}
-            comparison={`${studentTeacherRatio}:1 ratio · ${teachersCount} teaching`}
+            comparison={`${studentTeacherRatio}:1 ratio`}
             icon={Users}
             trend={false}
             loading={staffLoading}
@@ -2175,24 +2049,16 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         )}
       </div>
 
-      {/* ROW 1: ATTENDANCE VELOCITY & CLASSROOM MATRIX */}
+      {/* ROW 1: ATTENDANCE & CLASSROOMS */}
       <div className="dashboard-grid dashboard-grid-top">
         <section className="panel">
-          <div className="panel-header dashboard-attendance-header">
+          <div className="panel-header">
             <div>
-              <h2 className="panel-title">Attendance velocity & sessions</h2>
+              <h2 className="panel-title">Attendance</h2>
             </div>
-            <div className="dashboard-attendance-controls">
-              <span className="count-badge">
-                Last 7 school sessions ({attendanceData[0]?.label ?? "22 Sep"} – {latestAttendance?.label ?? "01 Oct"})
-              </span>
-              <button
-                className="text-button"
-                onClick={() => onNavigate("Attendance")}
-              >
-                Open register <ChevronRight size={14} />
-              </button>
-            </div>
+            <span className="count-badge">
+              Last 7 sessions
+            </span>
           </div>
           <div className="chart-legend">
             {attendanceChartLoading ? (
@@ -2308,48 +2174,29 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
               </ResponsiveContainer>
             )}
           </div>
-          <div className="chart-footnote">
-            <span>
-              {attendanceChartLoading ? (
-                <SkeletonText width={190} />
-              ) : (
-                <>
-                  <strong>{latestPresent.toLocaleString("en-IN")}</strong>{" "}
-                  students present on last roll call ({latestAttendance?.label ?? "01 Oct"})
-                </>
-              )}
-            </span>
-            <span className="status-positive">
-              <ArrowUpRight size={14} />
-              {termAttendanceStats.overallPct}% term aggregate across {termAttendanceStats.totalRecords.toLocaleString("en-IN")} sessions
-            </span>
-          </div>
         </section>
 
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Classrooms & cohort standing</h2>
+              <h2 className="panel-title">Classrooms</h2>
             </div>
-            <button
-              className="text-button"
-              onClick={() => onNavigate("Attendance")}
-            >
-              All classes <ChevronRight size={14} />
-            </button>
+            <span className="count-badge">
+              {classAttendance.length} classes
+            </span>
           </div>
           <div className="class-watch-list">
             {classAttendanceLoading ? (
               <SkeletonRegion label="Loading class attendance">
                 <SkeletonList rows={5} avatar={false} />
               </SkeletonRegion>
-            ) : classMatrix.length === 0 ? (
+            ) : classAttendance.length === 0 ? (
               <div className="empty-state px-5 py-10">
                 <ClipboardCheck size={22} />
-                No class registers have been marked yet.
+                No class registers marked yet.
               </div>
             ) : (
-              classMatrix.map(row => (
+              classAttendance.map(row => (
                 <button
                   className="class-watch-row"
                   key={row.id}
@@ -2357,27 +2204,27 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                 >
                   <span className="class-watch-main">
                     <span className="class-watch-label">
-                      {row.label} · 20 pupils
+                      {row.label}
                     </span>
                     <span className="class-watch-teacher">
-                      Teacher: {row.teacher} · Academics: {row.academicAvg}%
+                      {row.teacher || "Unassigned"}
                     </span>
                   </span>
                   <span className="class-watch-meter">
                     <span className="class-watch-bar">
                       <span
                         style={{
-                          width: `${row.attendance}%`,
+                          width: `${row.value}%`,
                           background:
-                            row.attendance < 90
+                            row.value < 90
                               ? "var(--danger)"
-                              : row.attendance < 92
+                              : row.value < 92
                                 ? "var(--warning)"
                                 : "var(--brand)",
                         }}
                       />
                     </span>
-                    <span className="class-watch-value">{row.attendance}%</span>
+                    <span className="class-watch-value">{row.value}%</span>
                   </span>
                 </button>
               ))
@@ -2386,221 +2233,15 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         </section>
       </div>
 
-      {/* ROW 2: ACADEMIC COHORT PERFORMANCE & EXAM INTELLIGENCE */}
-      <section className="panel p-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
-          <div>
-            <h2 className="panel-title flex items-center gap-2">
-              <Award size={18} className="text-[var(--brand)]" />
-              Academic Performance & Cohort Intelligence
-            </h2>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              Evaluated across 931 exam submissions in First Term Examination & Unit Test 1
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="count-badge">
-              {gradedStudents.length} evaluated pupils · {cohortAverage}% cohort mean
-            </span>
-            {canSeeExaminations && (
-              <button
-                className="text-button text-xs"
-                onClick={() => onNavigate("Examinations")}
-              >
-                All exams <ChevronRight size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Proportional Segment Bar */}
-        <div className="w-full h-3 rounded-full overflow-hidden flex bg-[var(--bg-hover)] p-0.5 gap-0.5 border border-[var(--border)] mb-4">
-          <div
-            style={{ width: `${Math.max(scoreTiers.distinction.pct, 3)}%` }}
-            className="h-full rounded-l-full bg-emerald-500 transition-all duration-500"
-            title={`Distinction (85%+): ${scoreTiers.distinction.count} (${scoreTiers.distinction.pct}%)`}
-          />
-          <div
-            style={{ width: `${Math.max(scoreTiers.merit.pct, 3)}%` }}
-            className="h-full bg-[var(--info)] transition-all duration-500"
-            title={`Merit (70–84%): ${scoreTiers.merit.count} (${scoreTiers.merit.pct}%)`}
-          />
-          <div
-            style={{ width: `${Math.max(scoreTiers.pass.pct, 3)}%` }}
-            className="h-full bg-amber-500 transition-all duration-500"
-            title={`Pass (50–69%): ${scoreTiers.pass.count} (${scoreTiers.pass.pct}%)`}
-          />
-          <div
-            style={{ width: `${Math.max(scoreTiers.critical.pct, 3)}%` }}
-            className="h-full rounded-r-full bg-rose-500 transition-all duration-500"
-            title={`At Risk (<50%): ${scoreTiers.critical.count} (${scoreTiers.critical.pct}%)`}
-          />
-        </div>
-
-        {/* 4 Tiers */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-stretch mb-5">
-          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              <span className="text-xs font-semibold text-[var(--text-muted)]">
-                Distinction (85%+)
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between mt-1.5">
-              <span className="text-xl font-bold text-[var(--text-primary)]">
-                {scoreTiers.distinction.count}
-              </span>
-              <span className="text-xs font-medium text-emerald-500">
-                {scoreTiers.distinction.pct}% of cohort
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-[var(--info)]" />
-              <span className="text-xs font-semibold text-[var(--text-muted)]">
-                Merit (70–84%)
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between mt-1.5">
-              <span className="text-xl font-bold text-[var(--text-primary)]">
-                {scoreTiers.merit.count}
-              </span>
-              <span className="text-xs font-medium text-[var(--info)]">
-                {scoreTiers.merit.pct}% of cohort
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              <span className="text-xs font-semibold text-[var(--text-muted)]">
-                Pass (50–69%)
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between mt-1.5">
-              <span className="text-xl font-bold text-[var(--text-primary)]">
-                {scoreTiers.pass.count}
-              </span>
-              <span className="text-xs font-medium text-amber-500">
-                {scoreTiers.pass.pct}% of cohort
-              </span>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)]">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-              <span className="text-xs font-semibold text-[var(--text-muted)]">
-                At Risk (&lt;50%)
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between mt-1.5">
-              <span className="text-xl font-bold text-rose-500">
-                {scoreTiers.critical.count}
-              </span>
-              <span className="text-xs font-medium text-rose-500">
-                {scoreTiers.critical.pct}% remedial focus
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 2 Sub-Panels: Subject Hierarchy & Next Exam Milestone */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="p-4 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)]">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
-                <Target size={14} className="text-[var(--brand)]" />
-                Curriculum Subject Rankings (Actual DB Averages)
-              </span>
-              <span className="text-[11px] text-[var(--text-muted)]">
-                {topSubjects.length} subjects
-              </span>
-            </div>
-            <div className="space-y-2">
-              {topSubjects.slice(0, 5).map(sub => (
-                <div key={sub.subject} className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-[var(--text-secondary)]">
-                    {sub.subject}
-                  </span>
-                  <div className="flex items-center gap-2 w-36">
-                    <div className="h-1.5 flex-1 bg-[var(--border-strong)] rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${sub.average}%`,
-                          backgroundColor:
-                            sub.average >= 74
-                              ? "var(--brand)"
-                              : sub.average >= 68
-                                ? "var(--info)"
-                                : "var(--warning)",
-                        }}
-                      />
-                    </div>
-                    <span className="w-8 text-right font-semibold text-[var(--text-primary)]">
-                      {sub.average}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5">
-                  <CalendarDays size={14} className="text-[var(--info)]" />
-                  Upcoming Academic Milestone
-                </span>
-                <span className="status-pill warning text-[11px]">
-                  Scheduled
-                </span>
-              </div>
-              <h3 className="text-sm font-bold text-[var(--text-primary)] mt-1">
-                Mid-Term Examination 2026–27
-              </h3>
-              <p className="text-xs text-[var(--text-muted)] mt-1">
-                Scheduled for 01 Dec 2026 – 15 Dec 2026 · Syllabus: First Term comprehensive plus Chapters 5 & 6
-              </p>
-              <div className="mt-3 flex items-center gap-4 text-xs text-[var(--text-secondary)]">
-                <div className="flex items-center gap-1.5">
-                  <Clock3 size={13} className="text-[var(--brand)]" />
-                  <span>31 days until start</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Users size={13} className="text-[var(--brand)]" />
-                  <span>100 eligible examinees</span>
-                </div>
-              </div>
-            </div>
-            <div className="pt-3 border-t border-[var(--border)] mt-3 flex justify-end">
-              {canSeeExaminations && (
-                <button
-                  className="text-button text-xs"
-                  onClick={() => onNavigate("Examinations")}
-                >
-                  Inspect examination schedule <ChevronRight size={13} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ROW 3: ATTENTION REQUIRED & LIVE CAMPUS PULSE */}
+      {/* ROW 2: ATTENTION NEEDED & CAMPUS NOTICES */}
       <div className="dashboard-grid dashboard-grid-mid">
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Attention required</h2>
+              <h2 className="panel-title">Attention needed</h2>
             </div>
             <span className="count-badge">
-              {attentionItems.length} open
+              {attentionItems.length} items
             </span>
           </div>
           <div className="attention-list">
@@ -2617,7 +2258,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                   <span className="block text-sm font-medium text-[var(--text-secondary)]">
                     {item.label}
                   </span>
-                  <span className="mt-1.5 block text-[12.5px] text-[var(--text-muted)]">
+                  <span className="mt-1 block text-[12.5px] text-[var(--text-muted)]">
                     {item.detail}
                   </span>
                 </span>
@@ -2629,268 +2270,61 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         </section>
 
         <section className="panel">
-          <div className="panel-header flex items-center justify-between">
+          <div className="panel-header">
             <div>
-              <h2 className="panel-title">Campus activity & pulse</h2>
+              <h2 className="panel-title">Notices</h2>
             </div>
-            <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--bg-hover)] border border-[var(--border)] text-xs">
-              <button
-                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
-                  pulseTab === "announcements"
-                    ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-xs"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                }`}
-                onClick={() => setPulseTab("announcements")}
-              >
-                Notices ({announcements.length})
-              </button>
-              {canSeeFinance && (
-                <button
-                  className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
-                    pulseTab === "payments"
-                      ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-xs"
-                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                  }`}
-                  onClick={() => setPulseTab("payments")}
-                >
-                  Receipts ({recentPayments.length})
-                </button>
-              )}
-              <button
-                className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
-                  pulseTab === "notifications"
-                    ? "bg-[var(--bg-panel)] text-[var(--text-primary)] shadow-xs"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                }`}
-                onClick={() => setPulseTab("notifications")}
-              >
-                Alerts ({notifications.length})
-              </button>
-            </div>
+            <span className="count-badge">
+              {announcements.length} published
+            </span>
           </div>
 
           <div className="activity-list">
-            {pulseTab === "announcements" && (
-              announcementsLoading ? (
-                <SkeletonList rows={4} avatar />
-              ) : announcements.length === 0 ? (
-                <div className="empty-state px-5 py-10">
-                  <MessageSquare size={22} />
-                  No announcements published yet.
-                </div>
-              ) : (
-                announcements.slice(0, 4).map(item => (
-                  <div className="activity-row" key={item.id}>
-                    <span
-                      className={`activity-icon ${
-                        item.color === "violet" ? "violet" : "emerald"
-                      }`}
-                    >
-                      <MessageSquare size={15} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
-                        {item.title}
-                      </div>
-                      <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
-                        {item.audience || "All families"} · {item.date}
-                      </div>
+            {announcementsLoading ? (
+              <SkeletonList rows={4} avatar />
+            ) : announcements.length === 0 ? (
+              <div className="empty-state px-5 py-10">
+                <MessageSquare size={22} />
+                No announcements published yet.
+              </div>
+            ) : (
+              announcements.slice(0, 4).map(item => (
+                <div className="activity-row" key={item.id}>
+                  <span
+                    className={`activity-icon ${
+                      item.color === "violet" ? "violet" : "emerald"
+                    }`}
+                  >
+                    <MessageSquare size={15} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
+                      {item.title}
                     </div>
-                    <span
-                      className={`status-pill ${
-                        item.status === "Published" ? "success" : "warning"
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-                ))
-              )
-            )}
-
-            {pulseTab === "payments" && (
-              paymentsLoading ? (
-                <SkeletonList rows={4} avatar />
-              ) : recentPayments.length === 0 ? (
-                <div className="empty-state px-5 py-10">
-                  <Receipt size={22} />
-                  No payment records found.
-                </div>
-              ) : (
-                recentPayments.slice(0, 4).map(item => (
-                  <div className="activity-row" key={item.id}>
-                    <span className="activity-icon emerald">
-                      <IndianRupee size={15} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
-                        ₹{item.amount.toLocaleString("en-IN")} received · {item.method || "Payment"}
-                      </div>
-                      <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
-                        {item.student || "Student fee account"} · {formatRelativeTime(item.paid_at)}
-                      </div>
+                    <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                      {item.audience || "All families"} · {item.date}
                     </div>
-                    <span className="status-pill success">
-                      Verified
-                    </span>
                   </div>
-                ))
-              )
-            )}
-
-            {pulseTab === "notifications" && (
-              notificationsLoading ? (
-                <SkeletonList rows={4} avatar />
-              ) : notifications.length === 0 ? (
-                <div className="empty-state px-5 py-10">
-                  <Bell size={22} />
-                  No system notifications.
+                  <span
+                    className={`status-pill ${
+                      item.status === "Published" ? "success" : "warning"
+                    }`}
+                  >
+                    {item.status}
+                  </span>
                 </div>
-              ) : (
-                notifications.slice(0, 4).map(item => (
-                  <div className="activity-row" key={item.id}>
-                    <span className={`activity-icon ${item.tone || "blue"}`}>
-                      <Bell size={15} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium leading-snug text-[var(--text-secondary)]">
-                        {item.title}
-                      </div>
-                      <div className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
-                        {item.detail} · {item.time}
-                      </div>
-                    </div>
-                    {item.unread && (
-                      <span className="status-pill warning">
-                        New
-                      </span>
-                    )}
-                  </div>
-                ))
-              )
+              ))
             )}
           </div>
         </section>
       </div>
 
-      {/* ROW 4: REVENUE RECOVERY PROJECTION (FINANCE ROLES) */}
-      {canSeeFinance && (
-        <section className="panel p-5">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
-            <div>
-              <h2 className="panel-title flex items-center gap-2">
-                <Receipt size={17} className="text-[var(--brand)]" />
-                Tuition & Fee Revenue Recovery Projection
-              </h2>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Current term billing reconciliation across 196 student ledger accounts
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="count-badge">
-                {collectionRate}% Realized · {lakh(collected)} of {lakh(billed)}
-              </span>
-              <button
-                className="text-button text-xs"
-                onClick={() => onNavigate("Fees & Finance")}
-              >
-                Open financial ledger <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-
-          {/* Revenue Stacked Bar */}
-          <div className="w-full h-3 rounded-full overflow-hidden flex bg-[var(--bg-hover)] p-0.5 gap-0.5 border border-[var(--border)] mb-4">
-            <div
-              style={{ width: `${Math.max(collectionRate, 2)}%` }}
-              className="h-full rounded-l-full bg-emerald-500 transition-all duration-500"
-              title={`Collected: ${lakh(collected)} (${collectionRate}%)`}
-            />
-            <div
-              style={{
-                width: `${Math.max(
-                  Math.round(
-                    (Math.max(0, billed - collected - overdueAmount) / billed) * 100
-                  ),
-                  2
-                )}%`,
-              }}
-              className="h-full bg-[var(--info)] transition-all duration-500"
-              title={`Scheduled / Due: ${lakh(Math.max(0, billed - collected - overdueAmount))}`}
-            />
-            <div
-              style={{
-                width: `${Math.max(Math.round((overdueAmount / billed) * 100), 2)}%`,
-              }}
-              className="h-full rounded-r-full bg-rose-500 transition-all duration-500"
-              title={`Critical Overdue: ${lakh(overdueAmount)} (${overdueInvoices.length} invoices)`}
-            />
-          </div>
-
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Realized Revenue
-                </span>
-                <p className="text-lg font-bold text-[var(--text-primary)] mt-1">
-                  {lakh(collected)}
-                </p>
-              </div>
-              <span className="text-xs font-semibold text-emerald-500">
-                {collectionRate}%
-              </span>
-            </div>
-
-            <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-[var(--info)]" />
-                  Pending / Scheduled Due
-                </span>
-                <p className="text-lg font-bold text-[var(--text-primary)] mt-1">
-                  {lakh(Math.max(0, billed - collected - overdueAmount))}
-                </p>
-              </div>
-              <span className="text-xs font-medium text-[var(--text-muted)]">
-                Term 2
-              </span>
-            </div>
-
-            <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-rose-500" />
-                  Critical Overdue Arrears
-                </span>
-                <p className="text-lg font-bold text-rose-500 mt-1">
-                  {lakh(overdueAmount)}
-                </p>
-              </div>
-              <span className="text-xs font-semibold text-rose-500">
-                {overdueInvoices.length} accounts
-              </span>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ROW 5: INSTITUTIONAL HEALTH OVERVIEW */}
+      {/* ROW 3: INSTITUTIONAL HEALTH */}
       <section className="panel health-panel">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">Institutional health & vitals</h2>
+            <h2 className="panel-title">Institutional health</h2>
           </div>
-          {canSeeReports && (
-            <button
-              className="text-button"
-              onClick={() => onNavigate("Reports")}
-            >
-              Open reports <ChevronRight size={14} />
-            </button>
-          )}
         </div>
         <div
           className={`health-grid ${
@@ -2962,15 +2396,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
     latestMarked > 0
       ? Math.round((latestPresent / latestMarked) * 1000) / 10
       : 0;
-  const previous = dailyAttendance[dailyAttendance.length - 2];
-  const previousMarked = previous
-    ? previous.present + previous.absent + previous.late + (previous.leave ?? 0)
-    : 0;
-  const previousPct =
-    previousMarked > 0
-      ? Math.round((previous.present / previousMarked) * 1000) / 10
-      : 0;
-  const lateDelta = previous ? latestLate - previous.late : 0;
   const absentFollowUp = enrolledStudents.filter(
     student => student.status === "Active" && student.attendance < 90
   ).length;
@@ -2992,17 +2417,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
               : "No attendance recorded yet."}
           </p>
         </div>
-        <button
-          className="primary-button"
-          onClick={() =>
-            toast.success("Attendance summary shared", {
-              description: "The daily digest was sent to the leadership group.",
-            })
-          }
-        >
-          <MessageSquare size={16} />
-          Share summary
-        </button>
       </div>
       <div className="metric-grid three">
         {classAttendanceLoading || dailyAttendanceLoading ? (
@@ -3016,7 +2430,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
             <MetricBlock
               label="Present today"
               value={latestPresent.toLocaleString("en-IN")}
-              comparison={`${latestPct}% of ${latestMarked} marked`}
+              comparison={`${latestPct}% marked`}
               icon={Check}
               spark={[19, 18, 23, 24, 25, 27, 30]}
             />
@@ -3031,11 +2445,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
             <MetricBlock
               label="Late arrivals"
               value={`${latestLate}`}
-              comparison={
-                previous
-                  ? `${Math.abs(lateDelta)} ${lateDelta <= 0 ? "fewer" : "more"} than ${previous.day}`
-                  : "No prior day"
-              }
+              comparison={`${latestLate} recorded today`}
               icon={Clock3}
               spark={[24, 27, 25, 23, 22, 20, 19]}
             />
@@ -3045,7 +2455,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
       <div className="panel table-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Live class roll-up</p>
             <h2 className="panel-title">Class attendance</h2>
           </div>
           <div className="flex items-center gap-2">
@@ -3055,13 +2464,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
             >
               <Download size={14} />
               Export
-            </button>
-            <button
-              className="secondary-button compact"
-              onClick={() => toast("Filters opened")}
-            >
-              <Filter size={14} />
-              Filter
             </button>
           </div>
         </div>
@@ -3074,7 +2476,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                 <th>Attendance</th>
                 <th>Signal</th>
                 <th>Teacher</th>
-
+                <th className="text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -3163,6 +2565,27 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const { rows: invoices, loading: invoicesViewLoading } = useInvoices();
   const invoicesPager = usePagination(invoices);
   const pageInvoices = invoicesPager.pageRows;
+
+  const billed = useMemo(
+    () => invoices.reduce((s, i) => s + (i.total ?? i.amount), 0),
+    [invoices]
+  );
+  const collected = useMemo(
+    () =>
+      invoices.reduce(
+        (s, i) =>
+          s + (i.paid ?? (i.status === "Paid" ? (i.total ?? i.amount) : 0)),
+        0
+      ),
+    [invoices]
+  );
+  const outstanding = Math.max(0, billed - collected);
+  const rate = billed > 0 ? Math.round((collected / billed) * 1000) / 10 : 0;
+  const overdueCount = useMemo(
+    () => invoices.filter(i => i.status === "Overdue").length,
+    [invoices]
+  );
+
   return (
     <div className="page-stack">
       <div className="page-intro">
@@ -3194,23 +2617,23 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           <>
             <MetricBlock
               label="Collected this term"
-              value="₹18.4L"
-              comparison="82% of target"
+              value={`₹${(collected / 100000).toFixed(1)}L`}
+              comparison={`${rate}% collected`}
               icon={IndianRupee}
               spark={[13, 15, 18, 20, 22, 25, 29]}
             />
             <MetricBlock
               label="Outstanding"
-              value="₹4.1L"
-              comparison="8 overdue accounts"
+              value={`₹${(outstanding / 100000).toFixed(1)}L`}
+              comparison={`${overdueCount} overdue accounts`}
               icon={Receipt}
               spark={[29, 27, 26, 25, 23, 21, 19]}
               positive={false}
             />
             <MetricBlock
               label="Collection rate"
-              value="82.1%"
-              comparison="6.4% vs. last term"
+              value={`${rate}%`}
+              comparison="Term 2"
               icon={Activity}
               spark={[18, 19, 20, 22, 23, 26, 29]}
             />
@@ -3221,7 +2644,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
         <section className="panel finance-chart-panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Term collections</p>
               <h2 className="panel-title">Revenue movement</h2>
             </div>
             <span className="mini-label">
@@ -3281,7 +2703,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Breakdown</p>
               <h2 className="panel-title">Fee mix</h2>
             </div>
           </div>
@@ -3316,7 +2737,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="pie-center">
-                    <strong>₹22.5L</strong>
+                    <strong>₹{(billed / 100000).toFixed(1)}L</strong>
                     <span>total billed</span>
                   </div>
                 </>
@@ -3347,7 +2768,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       <section className="panel table-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Follow-up queue</p>
             <h2 className="panel-title">Outstanding payments</h2>
           </div>
           <button
@@ -3974,7 +3394,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
         <MetricBlock
           label="Subjects offered"
           value={String(subjects.length || 14)}
-          comparison="Curriculum core"
+          comparison="All active"
           icon={BookOpen}
           spark={[10, 11, 11, 12, 13, 13, 14]}
         />
@@ -3987,7 +3407,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
         />
         <MetricBlock
           label="Teaching staff"
-          value={String(staffMembers.length || 46)}
+          value={String(staffMembers.length || 10)}
           comparison="Active educators"
           icon={Users}
           spark={[42, 43, 44, 43, 45, 46, 46]}
@@ -3995,7 +3415,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
         <MetricBlock
           label="Syllabus covered"
           value="64%"
-          comparison="+4.1% this week"
+          comparison="On schedule"
           icon={GraduationCap}
           spark={[41, 45, 49, 54, 57, 61, 64]}
         />
@@ -4003,7 +3423,6 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Weekly timetable</p>
             <h2 className="panel-title">{days[dayIndex]} · Grades 6 to 9</h2>
           </div>
           <div className="segmented-control">
@@ -4058,16 +3477,8 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
       <section className="panel table-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Curriculum coverage</p>
             <h2 className="panel-title">Subject load</h2>
           </div>
-          <button
-            className="secondary-button compact"
-            onClick={() => toast("Curriculum planner opened")}
-          >
-            <SlidersHorizontal size={14} />
-            Plan
-          </button>
         </div>
         <div className="table-scroll">
           <table className="data-table" style={{ minWidth: 720 }}>
@@ -4078,7 +3489,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
                 <th>Classes</th>
                 <th>Periods / week</th>
                 <th>Syllabus covered</th>
-
+                <th className="text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -4642,15 +4053,9 @@ function AnalyticsView({
             current="Analytics"
             onParentClick={onBack}
           />
-          <div className="flex flex-wrap items-center gap-2.5 mt-1">
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-              Institutional Analytics
-            </h1>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/25">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live DB: {totalStudents} Students • {staffStats.total} Staff
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] mt-1">
+            Analytics
+          </h1>
         </div>
 
         <div className="flex items-center gap-3">
@@ -4725,14 +4130,14 @@ function AnalyticsView({
       {/* Redesigned Sliding Segment Navigation Tabs */}
       <div className="flex items-center p-1.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-xs gap-1.5 w-fit max-w-full overflow-x-auto scrollbar-none">
         {[
-          { id: "overview", label: "Executive Overview", icon: LayoutDashboard },
+          { id: "overview", label: "Overview", icon: LayoutDashboard },
           {
             id: "staff",
-            label: `Staff & Faculty (${staffStats.total})`,
+            label: `Staff (${staffStats.total})`,
             icon: Users,
           },
-          { id: "academics", label: "Academics & Curricula", icon: BookOpen },
-          { id: "attendance", label: "Attendance & Vitals", icon: ClipboardCheck },
+          { id: "academics", label: "Academics", icon: BookOpen },
+          { id: "attendance", label: "Attendance", icon: ClipboardCheck },
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = analyticsTab === tab.id;
@@ -5329,27 +4734,23 @@ function AnalyticsView({
           <section className="panel table-panel">
             <div className="panel-header">
               <div>
-                <p className="eyebrow">Database Cohorts</p>
-                <h2 className="panel-title">Grade-wise Academic Performance Ledger</h2>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                  Live cohort averages calculated from actual student records across Grade 1 to 10
-                </p>
+                <h2 className="panel-title">Grade performance</h2>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--bg-raised)] text-[var(--text-secondary)] border border-[var(--border)]">
-                {gradeBreakdowns.length} Grades Tracked
+              <span className="count-badge">
+                {gradeBreakdowns.length} grades
               </span>
             </div>
             <div className="table-scroll">
               <table className="data-table" style={{ minWidth: 640 }}>
                 <thead>
                   <tr>
-                    <th>Grade Level</th>
-                    <th>Students Enrolled</th>
-                    <th>Academic Average</th>
-                    <th>Attendance Velocity</th>
-                    <th>At-Risk Learners</th>
-                    <th>Top Student</th>
-                    <th>Standing Signal</th>
+                    <th>Grade</th>
+                    <th>Students</th>
+                    <th>Average</th>
+                    <th>Attendance</th>
+                    <th>At-risk</th>
+                    <th>Top student</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>

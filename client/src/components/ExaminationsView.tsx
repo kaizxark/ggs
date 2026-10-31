@@ -777,10 +777,10 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
             current="Examinations"
             onParentClick={onBack}
           />
-          <h1 className="page-title">Examinations & Assessments</h1>
+          <h1 className="page-title">Examinations</h1>
           <p className="page-subtitle">
             {metrics.upcomingCount} active exam{metrics.upcomingCount === 1 ? "" : "s"} ·{" "}
-            {metrics.pendingGradingCount} papers pending release · Gradebook & Report Cards
+            {metrics.pendingGradingCount} pending grading
           </p>
         </div>
 
@@ -807,14 +807,14 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <MetricBlock
           label="Upcoming exams"
           value={String(metrics.upcomingCount)}
-          comparison={`${metrics.totalExams} total in master term`}
+          comparison={`${metrics.totalExams} total scheduled`}
           icon={FileText}
           spark={[3, 4, 4, 5, 5, metrics.upcomingCount, metrics.upcomingCount]}
         />
         <MetricBlock
           label="Papers to grade"
           value={String(metrics.pendingGradingCount)}
-          comparison={metrics.pendingGradingCount > 0 ? "Requires marks review" : "All graded"}
+          comparison={metrics.pendingGradingCount > 0 ? "Pending review" : "All graded"}
           icon={ClipboardCheck}
           positive={metrics.pendingGradingCount === 0}
           spark={[12, 10, 8, 6, 5, 4, metrics.pendingGradingCount]}
@@ -822,14 +822,14 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <MetricBlock
           label="Average score"
           value={`${metrics.averageScore}%`}
-          comparison="+2.8% vs last evaluation"
+          comparison="Cohort average"
           icon={GraduationCap}
           spark={[76, 78, 80, 81, 82, 83, metrics.averageScore]}
         />
         <MetricBlock
           label="Grades published"
           value={`${metrics.publishRate}%`}
-          comparison={`${metrics.publishedCount} of ${metrics.totalPapers} visible to parents`}
+          comparison={`${metrics.publishedCount} of ${metrics.totalPapers} published`}
           icon={Check}
           spark={[30, 45, 55, 60, 68, metrics.publishRate]}
         />
@@ -842,28 +842,28 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           onClick={() => setActiveTab("schedule")}
         >
           <Calendar size={14} />
-          Exam Timetable & Schedule
+          Schedule
         </button>
         <button
           className={activeTab === "marks" ? "active" : ""}
           onClick={() => setActiveTab("marks")}
         >
           <Pencil size={14} />
-          Marks Entry & Gradebook
+          Marks entry
         </button>
         <button
           className={activeTab === "publishing" ? "active" : ""}
           onClick={() => setActiveTab("publishing")}
         >
           <Send size={14} />
-          Grade Publishing & Portal ({publishingList.filter((p) => !p.published).length} pending)
+          Publishing ({publishingList.filter((p) => !p.published).length})
         </button>
         <button
           className={activeTab === "report-cards" ? "active" : ""}
           onClick={() => setActiveTab("report-cards")}
         >
           <Award size={14} />
-          Official Report Cards
+          Report cards
         </button>
       </div>
 
@@ -872,7 +872,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <section className="panel table-panel">
           <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
             <div>
-              <p className="eyebrow">Academic Assessment Calendar</p>
               <h2 className="panel-title">Examination Timetable</h2>
             </div>
 
@@ -1042,8 +1041,7 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <section className="panel">
           <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
             <div>
-              <p className="eyebrow">Gradebook & Evaluation</p>
-              <h2 className="panel-title">Marksheet & Candidate Scores</h2>
+              <h2 className="panel-title">Marksheet</h2>
             </div>
 
             <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
@@ -1404,8 +1402,7 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <section className="panel">
           <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
             <div>
-              <p className="eyebrow">Parent & Pupil Portals Visibility</p>
-              <h2 className="panel-title">Assessment Results Release</h2>
+              <h2 className="panel-title">Results release</h2>
             </div>
             <div className="flex items-center gap-2">
               <span className="count-badge">
@@ -1521,8 +1518,7 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <section className="panel">
           <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
             <div>
-              <p className="eyebrow">Academic Records</p>
-              <h2 className="panel-title">Official Student Progress Report</h2>
+              <h2 className="panel-title">Progress report</h2>
             </div>
 
             <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
@@ -1874,8 +1870,7 @@ function ScheduleExamModal({
       >
         <div className="flex items-center justify-between" style={{ marginBottom: "18px" }}>
           <div>
-            <p className="eyebrow">Examinations Office</p>
-            <h2 className="panel-title">Schedule New Examination</h2>
+            <h2 className="panel-title">Schedule examination</h2>
           </div>
           <button
             className="secondary-button compact"
@@ -2054,7 +2049,6 @@ function ExamDetailDrawer({
       >
         <div className="flex items-center justify-between" style={{ marginBottom: "20px" }}>
           <div>
-            <p className="eyebrow">Assessment Dossier</p>
             <h2 className="panel-title" style={{ fontSize: "18px" }}>{exam.name}</h2>
           </div>
           <button className="secondary-button compact" onClick={onClose}>

@@ -518,12 +518,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       <section className="panel mt-3">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Institutional Downloads</p>
-            <h2 className="panel-title">Export History & Archives</h2>
+            <h2 className="panel-title">Export history</h2>
           </div>
-          <span className="text-xs text-[var(--text-muted)]">
-            Click download on any report to export an updated copy instantly.
-          </span>
         </div>
         <div className="history-list">
           {history.map((item) => (
