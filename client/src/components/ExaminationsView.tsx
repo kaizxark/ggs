@@ -845,13 +845,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           Schedule
         </button>
         <button
-          className={activeTab === "marks" ? "active" : ""}
-          onClick={() => setActiveTab("marks")}
-        >
-          <Pencil size={14} />
-          Marks entry
-        </button>
-        <button
           className={activeTab === "publishing" ? "active" : ""}
           onClick={() => setActiveTab("publishing")}
         >
@@ -914,26 +907,21 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           </div>
 
           <div className="table-scroll">
-            <table className="data-table" style={{ minWidth: 840 }}>
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Exam Title</th>
                   <th>Subject</th>
                   <th>Grade</th>
-                  <th>Date</th>
-                  <th>Time Window</th>
-                  <th>Venue / Hall</th>
-                  <th>Invigilator</th>
                   <th>Status</th>
-                  <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {examsLoading ? (
-                  <SkeletonTableRows rows={5} columns={9} />
+                  <SkeletonTableRows rows={5} columns={4} />
                 ) : filteredExams.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: "center", padding: "40px" }}>
+                    <td colSpan={4} style={{ textAlign: "center", padding: "40px" }}>
                       <p className="text-[var(--text-muted)] text-sm">No examinations match the applied filters.</p>
                       <button
                         className="secondary-button compact"
@@ -953,15 +941,20 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
                     const isDraft = exam.status === "Draft";
                     const isCompleted = exam.status === "Completed";
                     return (
-                      <tr key={exam.id}>
+                      <tr
+                        key={exam.id}
+                        className="row-clickable cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                        onClick={() => setExamDetailDrawerItem(exam)}
+                        title="Click to view exam overview and details"
+                      >
                         <td className="font-medium text-[var(--text-primary)]">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
                             <span className="exam-icon-chip">
                               <BookOpen size={14} />
                             </span>
                             <div>
-                              <span>{exam.name}</span>
-                              <span className="block text-[11px] text-[var(--text-muted)]">{exam.id}</span>
+                              <span className="font-semibold">{exam.name}</span>
+                              <span className="block text-[11px] text-[var(--text-muted)] font-mono">{exam.id}</span>
                             </div>
                           </div>
                         </td>
@@ -969,15 +962,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
                         <td>
                           <span className="grade-chip">{exam.grade}</span>
                         </td>
-                        <td className="muted-cell font-mono text-[12px]">{exam.date}</td>
-                        <td className="muted-cell">{exam.time}</td>
-                        <td>
-                          <span className="flex items-center gap-1.5 text-[var(--text-secondary)] text-[12.5px]">
-                            <MapPin size={12} className="text-[var(--text-muted)]" />
-                            {exam.venue}
-                          </span>
-                        </td>
-                        <td className="muted-cell">{exam.invigilator ?? "Staff in charge"}</td>
                         <td>
                           <span
                             className={`status-pill ${
@@ -993,36 +977,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
                             <span className="status-dot" />
                             {exam.status}
                           </span>
-                        </td>
-                        <td style={{ textAlign: "right" }}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              className="tiny-action"
-                              title="View details & candidate roster"
-                              onClick={() => setExamDetailDrawerItem(exam)}
-                            >
-                              <Eye size={12} />
-                              Details
-                            </button>
-                            <button
-                              className="tiny-action done"
-                              title="Enter marks for this exam"
-                              onClick={() => {
-                                setSelectedExamId(exam.id);
-                                setActiveTab("marks");
-                              }}
-                            >
-                              <Pencil size={12} />
-                              Marks
-                            </button>
-                            <button
-                              className="tiny-action text-[var(--danger)] hover:bg-[var(--danger-soft)]"
-                              title="Delete examination"
-                              onClick={() => handleDeleteExam(exam.id)}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
                         </td>
                       </tr>
                     );

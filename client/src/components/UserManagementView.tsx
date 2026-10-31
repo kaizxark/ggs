@@ -757,59 +757,48 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3.5">
+        <div className="flex flex-wrap items-center gap-3">
           {superAdmin && (
             <button
-              className="secondary-button h-11 px-4 rounded-xl text-sm font-semibold flex items-center gap-2 shadow-sm"
+              className="secondary-button h-10 px-3.5 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm"
               disabled={backfilling}
               onClick={() => void runBackfill()}
               title="Verify and generate credentials for any missing accounts"
             >
-              <RefreshCw size={15} className={backfilling ? "animate-spin" : ""} />
+              <RefreshCw size={14} className={backfilling ? "animate-spin" : ""} />
               <span>{backfilling ? "Syncing…" : "Sync USN Logins"}</span>
             </button>
           )}
-
-          <button
-            className="primary-button h-11 px-5 rounded-xl text-sm font-semibold shadow-md flex items-center gap-2"
-            onClick={() => {
-              setIssuedSlip(null);
-              setInviteModalOpen(true);
-            }}
-          >
-            <UserPlus size={16} />
-            <span>+ Invite Staff Member</span>
-          </button>
         </div>
       </div>
 
-      {/* Top Metric Cards with Generous Spacing */}
+      {/* Top Metric Cards - Compact & Responsive */}
       <div
-        className={`grid grid-cols-1 sm:grid-cols-2 ${
+        className={`grid grid-cols-2 ${
           principalCount > 0
             ? "lg:grid-cols-4"
             : !isAdministrativeStaffUser
             ? "lg:grid-cols-3"
             : "lg:grid-cols-2"
-        } gap-5`}
+        } gap-3 sm:gap-4`}
       >
         {/* Metric 1: Principal (Admin) */}
         {principalCount > 0 && (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-4 sm:p-5 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                School Principal
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                Principal
               </span>
-              <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
-                <Shield size={20} />
+              <span className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+                <Shield size={16} />
               </span>
             </div>
-            <div className="my-3">
-              <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+            <div className="my-2">
+              <div className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
                 {principalCount}
               </div>
-              <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-                Dr. Meera Iyer · Sole school administrator & authority
+              <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug truncate">
+                Dr. Meera Iyer · Authority
               </p>
             </div>
           </div>
@@ -817,62 +806,62 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
         {/* Metric 2: Administrative Staff */}
         {!isAdministrativeStaffUser && (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-4 sm:p-5 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                Administrative Staff
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+                Admin Staff
               </span>
-              <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
-                <Building2 size={20} />
+              <span className="p-2 rounded-lg bg-sky-500/10 text-sky-400">
+                <Building2 size={16} />
               </span>
             </div>
-            <div className="my-3">
-              <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+            <div className="my-2">
+              <div className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
                 {adminStaffCount}
               </div>
-              <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-                Vice Principal, exam coordination & school operations
+              <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug truncate">
+                Operations & coordination
               </p>
             </div>
           </div>
         )}
 
         {/* Metric 3: Teachers */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-4 sm:p-5 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
-              Teaching Faculty
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
+              Faculty
             </span>
-            <span className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
-              <BookOpen size={20} />
+            <span className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+              <BookOpen size={16} />
             </span>
           </div>
-          <div className="my-3">
-            <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+          <div className="my-2">
+            <div className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
               {teacherCount}
             </div>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Classroom teachers across all grades & subjects
+            <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug truncate">
+              Educators across cohorts
             </p>
           </div>
         </div>
 
         {/* Metric 4: Students */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-panel)] p-4 sm:p-5 shadow-sm hover:border-[var(--border-strong)] transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
               Student Portals
             </span>
-            <span className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <GraduationCap size={20} />
+            <span className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+              <GraduationCap size={16} />
             </span>
           </div>
-          <div className="my-3">
-            <div className="text-3xl font-black tracking-tight text-[var(--text-primary)]">
+          <div className="my-2">
+            <div className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">
               {summary?.pupils ?? studentAccounts.length ?? students.length}
             </div>
-            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Pupil USN active logins across grades
+            <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug truncate">
+              Active pupil logins
             </p>
           </div>
         </div>
@@ -902,7 +891,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as "staff" | "students")}
-                className={`relative flex items-center gap-2 sm:gap-3 px-3.5 sm:px-6 py-2.5 sm:py-3.5 rounded-xl font-semibold text-xs sm:text-sm cursor-pointer z-10 transition-colors duration-200 whitespace-nowrap ${
+                className={`relative flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-semibold text-xs cursor-pointer z-10 transition-colors duration-200 whitespace-nowrap ${
                   isActive
                     ? "text-white font-bold"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -915,10 +904,10 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                     transition={{ type: "spring", stiffness: 450, damping: 35 }}
                   />
                 )}
-                <Icon size={18} className="relative z-10" />
+                <Icon size={16} className="relative z-10" />
                 <span className="relative z-10">{tab.label}</span>
                 <span
-                  className={`relative z-10 rounded-full px-2.5 py-0.5 text-xs font-mono font-semibold transition-colors ${
+                  className={`relative z-10 rounded-full px-2 py-0.5 text-[11px] font-mono font-semibold transition-colors ${
                     isActive
                       ? "bg-white/20 text-white"
                       : "bg-[var(--bg-raised)] text-[var(--text-muted)]"
@@ -933,12 +922,12 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* ==================================================================== */}
-      {/* TAB 1: Staff & Faculty Accounts (ALL 10 STAFF IN DATABASE)           */}
+      {/* TAB 1: Staff & Faculty Accounts                                      */}
       {/* ==================================================================== */}
       {activeTab === "staff" && (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
           {/* Header Title Bar */}
-          <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="p-4 sm:p-5 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="space-y-1">
               <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
                 Faculty Registry
@@ -1223,7 +1212,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       {activeTab === "students" && (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
           {/* Header Title Bar */}
-          <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="p-4 sm:p-5 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="space-y-1">
               <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
                 Student Portals
@@ -1434,467 +1423,6 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
         </section>
       )}
 
-      {/* ==================================================================== */}
-      {/* MODAL 1: Invite Staff Member (TEACHER or ADMINISTRATOR ONLY)        */}
-      {/* ==================================================================== */}
-      {inviteModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/65 backdrop-blur-md"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="relative w-full max-w-2xl bg-[var(--bg-panel)] border border-[var(--border)] rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-7 py-6 border-b border-[var(--border)] bg-[var(--bg-raised)]/60 flex-shrink-0">
-              <div className="space-y-0.5">
-                <h3 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2.5">
-                  <UserPlus size={21} className="text-[var(--brand)]" />
-                  Invite Staff Member
-                </h3>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Invite a <strong>Teacher</strong> (with assigned classes) or an <strong>Administrator</strong> (with access modules).
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInviteModalOpen(false)}
-                className="p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="overflow-y-auto p-7 space-y-6 flex-1">
-              {!issuedSlip ? (
-                <form onSubmit={submitInvite} className="space-y-6">
-                  {/* Basic Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                        Full Name *
-                      </label>
-                      <input
-                        required
-                        type="text"
-                        value={inviteName}
-                        onChange={e => setInviteName(e.target.value)}
-                        placeholder="e.g. Dr. Sunita Rao"
-                        className="w-full h-12 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] transition-all"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                        Email Address *
-                      </label>
-                      <input
-                        required
-                        type="email"
-                        value={inviteEmail}
-                        onChange={e => setInviteEmail(e.target.value)}
-                        placeholder="e.g. sunita.rao@globalkids.edu.in"
-                        className="w-full h-12 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Role Selection: STRICTLY 2 TYPES (Teacher or Administrator) */}
-                  <div className="space-y-2.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                      Select Staff Role *
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Teacher Card */}
-                      <label
-                        className={`flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${
-                          inviteRole === "teacher"
-                            ? "border-[var(--brand)] bg-[var(--brand-soft)] shadow-md text-[var(--text-primary)]"
-                            : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-strong)] text-[var(--text-secondary)]"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="inviteRole"
-                          value="teacher"
-                          checked={inviteRole === "teacher"}
-                          onChange={() => setInviteRole("teacher")}
-                          className="mt-1"
-                        />
-                        <div className="space-y-1">
-                          <strong className="block text-base font-bold flex items-center gap-2">
-                            <BookOpen size={17} className="text-[var(--brand)]" />
-                            Teacher
-                          </strong>
-                          <span className="text-xs text-[var(--text-muted)] block leading-relaxed">
-                            Subject teaching, assigned grade levels, classroom attendance & marks recording.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* Administrative Staff Card - only Principal and Super Admin can invite Administrative Staff */}
-                      {!isAdministrativeStaffUser && (
-                        <label
-                          className={`flex items-start gap-4 p-5 rounded-2xl border-2 cursor-pointer transition-all ${
-                            inviteRole === "staff"
-                              ? "border-sky-500 bg-sky-500/10 shadow-md text-[var(--text-primary)]"
-                              : "border-[var(--border)] bg-[var(--bg-card)] hover:border-[var(--border-strong)] text-[var(--text-secondary)]"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="inviteRole"
-                            value="staff"
-                            checked={inviteRole === "staff"}
-                            onChange={() => setInviteRole("staff")}
-                            className="mt-1"
-                          />
-                          <div className="space-y-1">
-                            <strong className="block text-base font-bold flex items-center gap-2">
-                              <Building2 size={17} className="text-sky-400" />
-                              Administrative Staff
-                            </strong>
-                            <span className="text-xs text-[var(--text-muted)] block leading-relaxed">
-                              Access to school operations: Admissions, Finance, Staff directory, Academics & Timetables.
-                            </span>
-                          </div>
-                        </label>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* DYNAMIC SCOPE: TEACHER ASSIGNMENTS */}
-                  {inviteRole === "teacher" && (
-                    <div className="p-6 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)]/50 space-y-5">
-                      <div className="flex items-center gap-2.5 text-sm font-bold text-[var(--text-primary)] pb-2 border-b border-[var(--border)]">
-                        <BookOpen size={17} className="text-[var(--brand)]" />
-                        <span>Teacher Scope: Subject Specialty & Classes</span>
-                      </div>
-
-                      {/* Subject Selection */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                          Subject Specialty *
-                        </label>
-                        <select
-                          value={teacherSubject}
-                          onChange={e => setTeacherSubject(e.target.value)}
-                          className="w-full h-11 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] font-medium"
-                        >
-                          {COMMON_SUBJECTS.map(subj => (
-                            <option key={subj} value={subj}>
-                              {subj}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Assigned Classes / Grades */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                            Assigned Classes ({assignedGrades.length} Selected)
-                          </label>
-                          <div className="flex items-center gap-2.5 text-xs font-medium">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setAssignedGrades([
-                                  "Grade 1",
-                                  "Grade 2",
-                                  "Grade 3",
-                                  "Grade 4",
-                                  "Grade 5",
-                                ])
-                              }
-                              className="text-[var(--brand)] hover:underline cursor-pointer"
-                            >
-                              G1–5
-                            </button>
-                            <span className="text-[var(--text-muted)]">·</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setAssignedGrades(["Grade 6", "Grade 7", "Grade 8"])
-                              }
-                              className="text-[var(--brand)] hover:underline cursor-pointer"
-                            >
-                              G6–8
-                            </button>
-                            <span className="text-[var(--text-muted)]">·</span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setAssignedGrades([
-                                  "Grade 9",
-                                  "Grade 10",
-                                  "Grade 11",
-                                  "Grade 12",
-                                ])
-                              }
-                              className="text-[var(--brand)] hover:underline cursor-pointer"
-                            >
-                              G9–12
-                            </button>
-                            <span className="text-[var(--text-muted)]">·</span>
-                            <button
-                              type="button"
-                              onClick={() => setAssignedGrades([...ALL_GRADES])}
-                              className="text-[var(--brand)] hover:underline cursor-pointer"
-                            >
-                              All
-                            </button>
-                            <span className="text-[var(--text-muted)]">·</span>
-                            <button
-                              type="button"
-                              onClick={() => setAssignedGrades([])}
-                              className="text-[var(--text-muted)] hover:underline cursor-pointer"
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Grade selection pills */}
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
-                          {ALL_GRADES.map(grade => {
-                            const isSelected = assignedGrades.includes(grade);
-                            return (
-                              <button
-                                key={grade}
-                                type="button"
-                                onClick={() => {
-                                  setAssignedGrades(prev =>
-                                    isSelected
-                                      ? prev.filter(g => g !== grade)
-                                      : [...prev, grade]
-                                  );
-                                }}
-                                className={`py-2 px-3 text-xs font-semibold rounded-xl border text-center transition-all cursor-pointer ${
-                                  isSelected
-                                    ? "bg-[var(--brand)] text-white border-[var(--brand)] shadow-sm"
-                                    : "bg-[var(--bg-card)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--brand-soft)]"
-                                }`}
-                              >
-                                {grade}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Class Teacher / Homeroom in-charge */}
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                          Class Teacher / Homeroom In-Charge (Optional)
-                        </label>
-                        <select
-                          value={classTeacherOf}
-                          onChange={e => setClassTeacherOf(e.target.value)}
-                          className="w-full h-11 bg-[var(--bg-input)] border border-[var(--border)] rounded-xl px-4 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)]"
-                        >
-                          <option value="none">None (Subject Teacher only)</option>
-                          {CLASSROOM_OPTIONS.filter(c => c !== "none").map(cls => (
-                            <option key={cls} value={cls}>
-                              Class Teacher of {cls} (Full attendance & marks authority)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* DYNAMIC SCOPE: ADMINISTRATIVE STAFF MODULES */}
-                  {inviteRole === "staff" && (
-                    <div className="p-6 rounded-2xl border border-sky-500/20 bg-sky-500/5 space-y-4">
-                      <div className="flex items-center gap-2.5 text-sm font-bold text-sky-400 pb-2 border-b border-sky-500/20">
-                        <Building2 size={17} />
-                        <span>Administrative Staff Delegated Modules & Permissions</span>
-                      </div>
-                      <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                        Select which school administrative functions this staff member will oversee (Principal holds overall authority):
-                      </p>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                        {ADMIN_MODULES_LIST.map(mod => {
-                          const isChecked = adminModules.includes(mod.id);
-                          return (
-                            <label
-                              key={mod.id}
-                              className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                isChecked
-                                  ? "bg-blue-500/15 border-blue-500/40 text-[var(--text-primary)] shadow-sm"
-                                  : "bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => {
-                                  setAdminModules(prev =>
-                                    isChecked
-                                      ? prev.filter(m => m !== mod.id)
-                                      : [...prev, mod.id]
-                                  );
-                                }}
-                                className="mt-1"
-                              />
-                              <div className="space-y-0.5">
-                                <span className="block text-xs font-bold">{mod.label}</span>
-                                <span className="text-[11px] text-[var(--text-muted)] block leading-tight">
-                                  {mod.desc}
-                                </span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Buttons with Generous Spacing */}
-                  <div className="flex items-center justify-end gap-3.5 pt-5 border-t border-[var(--border)]">
-                    <button
-                      type="button"
-                      onClick={() => setInviteModalOpen(false)}
-                      className="secondary-button h-11 px-5 rounded-xl text-sm font-semibold"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={inviting}
-                      className="primary-button h-11 px-6 rounded-xl text-sm font-bold shadow-md flex items-center gap-2"
-                    >
-                      {inviting ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span>Provisioning Account…</span>
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus size={16} />
-                          <span>Create Account & Issue Login</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                /* Success Credential Slip */
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3.5 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                    <span className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400">
-                      <Check size={22} />
-                    </span>
-                    <div className="space-y-0.5">
-                      <h4 className="font-bold text-sm text-[var(--text-primary)]">
-                        Account Provisioned for {issuedSlip.name}
-                      </h4>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        Staff credentials and permissions have been recorded successfully.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* High-Contrast Login Slip */}
-                  <div className="rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-card)] p-5 space-y-4 shadow-sm">
-                    <div className="flex items-center justify-between text-xs text-[var(--text-muted)] border-b border-[var(--border)] pb-3 font-mono">
-                      <span>GLOBAL KIDS SCHOOL · STAFF LOGIN SLIP</span>
-                      <span className="uppercase text-[var(--brand)] font-bold">
-                        {issuedSlip.role}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="space-y-1">
-                        <span className="text-xs text-[var(--text-muted)] block">Email</span>
-                        <strong className="text-[var(--text-primary)] font-mono text-xs truncate block">
-                          {issuedSlip.email}
-                        </strong>
-                      </div>
-
-                      <div className="space-y-1">
-                        <span className="text-xs text-[var(--text-muted)] block">Department</span>
-                        <strong className="text-[var(--text-secondary)] block text-xs">
-                          {issuedSlip.department}
-                        </strong>
-                      </div>
-
-                      <div className="col-span-2 space-y-1">
-                        <span className="text-xs text-[var(--text-muted)] block">Assigned Scope</span>
-                        <strong className="text-xs text-[var(--text-primary)] block">
-                          {issuedSlip.designation}
-                        </strong>
-                      </div>
-
-                      <div className="space-y-1">
-                        <span className="text-xs text-[var(--text-muted)] block">Username (Login ID)</span>
-                        <code className="text-xs font-mono font-bold text-[var(--brand)] bg-[var(--bg-input)] px-2.5 py-1 rounded-md border border-[var(--border)] inline-block">
-                          {issuedSlip.username}
-                        </code>
-                      </div>
-
-                      <div className="space-y-1">
-                        <span className="text-xs text-[var(--text-muted)] block">Temporary Password</span>
-                        <code className="text-xs font-mono font-bold text-emerald-400 bg-[var(--bg-input)] px-2.5 py-1 rounded-md border border-[var(--border)] inline-block">
-                          {issuedSlip.password}
-                        </code>
-                      </div>
-                    </div>
-
-                    <div className="text-xs text-[var(--text-muted)] pt-3 border-t border-[var(--border)]">
-                      Portal URL: <span className="text-[var(--brand)] font-bold">https://ggs-erp.vercel.app/login</span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-wrap items-center justify-end gap-3.5 pt-3">
-                    <button
-                      type="button"
-                      className="secondary-button h-11 px-5 rounded-xl text-sm font-semibold"
-                      onClick={() => {
-                        setIssuedSlip(null);
-                        setInviteName("");
-                        setInviteEmail("");
-                      }}
-                    >
-                      + Invite Another Staff Member
-                    </button>
-                    <button
-                      type="button"
-                      className="primary-button h-11 px-6 rounded-xl text-sm font-bold shadow-md flex items-center gap-2"
-                      onClick={() => {
-                        const slip = [
-                          `======================================`,
-                          `GLOBAL KIDS SCHOOL · STAFF LOGIN CREDENTIALS`,
-                          `======================================`,
-                          `Staff Member: ${issuedSlip.name}`,
-                          `Staff Role: ${issuedSlip.role.toUpperCase()}`,
-                          `Department: ${issuedSlip.department}`,
-                          `Assigned Scope: ${issuedSlip.designation}`,
-                          `Portal URL: https://ggs-erp.vercel.app/login`,
-                          `Username: ${issuedSlip.username}`,
-                          `Temporary Password: ${issuedSlip.password}`,
-                          `======================================`,
-                          `Please sign in and change your temporary password upon first login.`,
-                        ].join("\n");
-                        void navigator.clipboard.writeText(slip);
-                        toast.success("Full credentials slip copied to clipboard!");
-                      }}
-                    >
-                      <Copy size={16} />
-                      <span>Copy Login Slip</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
       {/* MODAL 2: Edit Staff Role & Scope (TEACHER or ADMINISTRATOR ONLY)     */}
       {/* ==================================================================== */}
       {editingPerson && (

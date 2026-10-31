@@ -719,15 +719,15 @@ export function ReportsView({ onBack }: ReportsViewProps) {
             <div className="modal-body overflow-y-auto p-0 flex-1">
               {activePreview === "fees" && (
                 <table className="data-table w-full text-left">
-                  <thead>
-                    <tr>
-                      <th>Pupil USN</th>
-                      <th>Student Name</th>
-                      <th>Class</th>
-                      <th>Assessed</th>
-                      <th>Paid</th>
-                      <th>Outstanding</th>
-                      <th>Fee Status</th>
+                  <thead className="sticky top-0 z-10 bg-[#161820]">
+                    <tr className="bg-[#161820]">
+                      <th className="bg-[#161820]">Pupil USN</th>
+                      <th className="bg-[#161820]">Student Name</th>
+                      <th className="bg-[#161820]">Class</th>
+                      <th className="bg-[#161820]">Assessed</th>
+                      <th className="bg-[#161820]">Paid</th>
+                      <th className="bg-[#161820]">Outstanding</th>
+                      <th className="bg-[#161820]">Fee Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -776,14 +776,14 @@ export function ReportsView({ onBack }: ReportsViewProps) {
 
               {activePreview === "attendance" && (
                 <table className="data-table w-full text-left">
-                  <thead>
-                    <tr>
-                      <th>Pupil USN</th>
-                      <th>Student Name</th>
-                      <th>Class</th>
-                      <th>Attendance</th>
-                      <th>Statutory Compliance</th>
-                      <th>Marked Sessions</th>
+                  <thead className="sticky top-0 z-10 bg-[#161820]">
+                    <tr className="bg-[#161820]">
+                      <th className="bg-[#161820]">Pupil USN</th>
+                      <th className="bg-[#161820]">Student Name</th>
+                      <th className="bg-[#161820]">Class</th>
+                      <th className="bg-[#161820]">Attendance</th>
+                      <th className="bg-[#161820]">Statutory Compliance</th>
+                      <th className="bg-[#161820]">Marked Sessions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -839,15 +839,15 @@ export function ReportsView({ onBack }: ReportsViewProps) {
 
               {activePreview === "students" && (
                 <table className="data-table w-full text-left">
-                  <thead>
-                    <tr>
-                      <th>Pupil USN</th>
-                      <th>Student Name</th>
-                      <th>Enrolled Class</th>
-                      <th>Section</th>
-                      <th>Status</th>
-                      <th>Attendance</th>
-                      <th>Fee Status</th>
+                  <thead className="sticky top-0 z-10 bg-[#161820]">
+                    <tr className="bg-[#161820]">
+                      <th className="bg-[#161820]">Pupil USN</th>
+                      <th className="bg-[#161820]">Student Name</th>
+                      <th className="bg-[#161820]">Enrolled Class</th>
+                      <th className="bg-[#161820]">Section</th>
+                      <th className="bg-[#161820]">Status</th>
+                      <th className="bg-[#161820]">Attendance</th>
+                      <th className="bg-[#161820]">Fee Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -893,14 +893,14 @@ export function ReportsView({ onBack }: ReportsViewProps) {
 
               {activePreview === "staff" && (
                 <table className="data-table w-full text-left">
-                  <thead>
-                    <tr>
-                      <th>Staff USN</th>
-                      <th>Faculty Name</th>
-                      <th>Designation</th>
-                      <th>Department</th>
-                      <th>Official Email</th>
-                      <th>Campus Status</th>
+                  <thead className="sticky top-0 z-10 bg-[#161820]">
+                    <tr className="bg-[#161820]">
+                      <th className="bg-[#161820]">Staff USN</th>
+                      <th className="bg-[#161820]">Faculty Name</th>
+                      <th className="bg-[#161820]">Designation</th>
+                      <th className="bg-[#161820]">Department</th>
+                      <th className="bg-[#161820]">Official Email</th>
+                      <th className="bg-[#161820]">Campus Status</th>
                     </tr>
                   </thead>
                   <tbody>

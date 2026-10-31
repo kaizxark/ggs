@@ -34,6 +34,7 @@ import {
   IndianRupee,
   Layers,
   LayoutDashboard,
+  Loader2,
   Lock,
   LogOut,
   Mail,
@@ -86,6 +87,8 @@ import { notifyDataChanged } from "../lib/live-data";
 import { useLocation } from "wouter";
 import {
   changePortalCredentials,
+  requestSignInCode,
+  verifySignInCode,
   resetPasswordByUsername,
   signOut as supabaseSignOut,
   useSession,
@@ -142,6 +145,7 @@ import {
   useCurrentUser,
   type RowId,
   type Settings,
+  type Student,
 } from "../lib/school-data";
 import {
   SkeletonChart,
@@ -171,6 +175,8 @@ import { StaffDrawer } from "../components/StaffDrawer";
 import { StaffCreateDialog } from "../components/StaffCreateDialog";
 import { ReportsView } from "../components/ReportsView";
 import { ExaminationsView } from "../components/ExaminationsView";
+import { FormSelect } from "../components/FormSelect";
+import { DateDropdowns } from "../components/DateDropdowns";
 import { SmoothFilterDropdown } from "../components/SmoothFilterDropdown";
 import SmoothScroll, { smoothScrollTo, usePageScrollLock } from "../components/SmoothScroll";
 import {
@@ -2024,7 +2030,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
       <div className="page-intro">
         <div>
           <div className="flex items-center gap-2">
-            <span className="count-badge">Term 2 · 2026–27</span>
+            <span className="count-badge">AY 2026–27</span>
           </div>
           <h1 className="page-title mt-1">
             {greeting}
@@ -2603,13 +2609,17 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
         )}
       </div>
       <div className="panel table-panel">
-        <div className="panel-header">
+        <div className="panel-header" style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)" }}>
           <div>
             <h2 className="panel-title">Class attendance</h2>
+            <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
+              Daily presence and roll call metrics across active grade cohorts.
+            </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div style={{ marginLeft: "auto" }}>
             <button
-              className="secondary-button compact"
+              className="secondary-button"
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 16px", fontSize: "13px" }}
               onClick={() => toast.success("Attendance CSV exported")}
             >
               <Download size={14} />
@@ -2626,12 +2636,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                 <th>Attendance</th>
                 <th>Signal</th>
                 <th>Teacher</th>
-                <th className="text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {classAttendanceLoading ? (
-                <SkeletonTableRows rows={5} columns={6} />
+                <SkeletonTableRows rows={5} columns={5} />
               ) : (
                 pageClasses.map(row => (
                   <tr key={row.label}>
@@ -2669,31 +2678,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                       </span>
                     </td>
                     <td className="muted-cell">{row.teacher}</td>
-                    <td>
-                      <button
-                        className={
-                          marked.includes(row.label)
-                            ? "tiny-action done"
-                            : "tiny-action"
-                        }
-                        onClick={() =>
-                          setMarked(current =>
-                            current.includes(row.label)
-                              ? current.filter(item => item !== row.label)
-                              : [...current, row.label]
-                          )
-                        }
-                      >
-                        {marked.includes(row.label) ? (
-                          <>
-                            <Check size={13} />
-                            Marked
-                          </>
-                        ) : (
-                          "Review"
-                        )}
-                      </button>
-                    </td>
                   </tr>
                 ))
               )}
@@ -2713,6 +2697,21 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const { rows: feeCategories, loading: feeCategoriesLoading } =
     useFeeCategories();
   const { rows: invoices, loading: invoicesViewLoading } = useInvoices();
+  const { rows: enrolledStudents } = useStudents();
+  const [recordStudent, setRecordStudent] = useState<Student | null>(null);
+  const [studentSearchQuery, setStudentSearchQuery] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
+
+  const matchingStudents = useMemo(() => {
+    if (!studentSearchQuery.trim()) return [];
+    const q = studentSearchQuery.toLowerCase();
+    return enrolledStudents
+      .filter(s => s.name.toLowerCase().includes(q) || s.usn?.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [enrolledStudents, studentSearchQuery]);
+
   const invoicesPager = usePagination(invoices);
   const pageInvoices = invoicesPager.pageRows;
 
@@ -2783,7 +2782,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             <MetricBlock
               label="Collection rate"
               value={`${rate}%`}
-              comparison="Term 2"
+              comparison="AY 2026–27"
               icon={Activity}
               spark={[18, 19, 20, 22, 23, 26, 29]}
             />
@@ -2796,10 +2795,15 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             <div>
               <h2 className="panel-title">Revenue movement</h2>
             </div>
-            <span className="mini-label">
-              <i className="legend-dot bg-[var(--success)]" />
-              Collected <i className="legend-dot bg-[var(--border)] ml-3" />
-              Pending
+            <span className="mini-label" style={{ display: "inline-flex", alignItems: "center", gap: "14px", fontSize: "12px" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)", fontWeight: 500 }}>
+                <i className="legend-dot" style={{ background: "#10b981" }} />
+                Collected
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)", fontWeight: 500 }}>
+                <i className="legend-dot" style={{ background: "#f59e0b" }} />
+                Pending
+              </span>
             </span>
           </div>
           <div className="chart-wrap">
@@ -2827,22 +2831,46 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     tickFormatter={value => `₹${value}L`}
                   />
                   <Tooltip
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: "1px solid var(--border-strong)",
-                      background: "var(--bg-panel)",
-                      color: "var(--text-secondary)",
-                      fontSize: 12,
+                    cursor={{ fill: "rgba(255, 255, 255, 0.04)", radius: 6 }}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const collectedVal = payload.find(p => p.dataKey === "collected")?.value;
+                      const pendingVal = payload.find(p => p.dataKey === "pending")?.value;
+                      return (
+                        <div
+                          style={{
+                            background: "rgba(18, 20, 26, 0.96)",
+                            backdropFilter: "blur(16px)",
+                            border: "1px solid var(--border-strong)",
+                            borderRadius: "12px",
+                            padding: "10px 14px",
+                            boxShadow: "0 14px 36px rgba(0,0,0,0.6)",
+                            fontSize: "12px",
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, color: "#ffffff", marginBottom: 6 }}>
+                            {label} 2026
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#10b981", fontWeight: 600 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981" }} />
+                            <span>Collected: ₹{collectedVal}L</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#f59e0b", fontWeight: 600, marginTop: 4 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
+                            <span>Pending: ₹{pendingVal}L</span>
+                          </div>
+                        </div>
+                      );
                     }}
                   />
                   <Bar
                     dataKey="collected"
-                    fill="var(--brand)"
+                    fill="#10b981"
                     radius={[5, 5, 0, 0]}
                   />
                   <Bar
                     dataKey="pending"
-                    fill="var(--border)"
+                    fill="#f59e0b"
                     radius={[5, 5, 0, 0]}
                   />
                 </BarChart>
@@ -2985,46 +3013,165 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       {showDialog && (
         <AppDialog
           title="Record payment"
-          description="Log a payment against an existing family invoice."
-          onClose={() => setShowDialog(false)}
+          description="Log a verified fee collection against an existing pupil ledger."
+          onClose={() => {
+            setShowDialog(false);
+            setRecordStudent(null);
+            setStudentSearchQuery("");
+            setPaymentAmount("");
+          }}
         >
           <div className="form-grid">
+            <div style={{ gridColumn: "span 2", position: "relative" }}>
+              <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block mb-1">
+                Student Candidate *
+              </label>
+              {recordStudent ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    borderRadius: "10px",
+                    background: "var(--brand-soft)",
+                    border: "1px solid var(--brand-border)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span className="font-semibold text-sm text-[var(--text-primary)]">{recordStudent.name}</span>
+                    <span className="grade-chip">{recordStudent.grade}</span>
+                    {recordStudent.usn && <code className="text-xs text-[var(--brand)] font-mono">{recordStudent.usn}</code>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRecordStudent(null)}
+                    className="p-1 rounded text-[var(--text-muted)] hover:text-white"
+                    title="Change selected student"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={studentSearchQuery}
+                    onChange={(e) => setStudentSearchQuery(e.target.value)}
+                    placeholder="Search by student name or USN..."
+                    autoFocus
+                  />
+                  {matchingStudents.length > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        zIndex: 50,
+                        marginTop: 4,
+                        background: "#181a22",
+                        border: "1px solid var(--border-strong)",
+                        borderRadius: 10,
+                        boxShadow: "0 14px 36px rgba(0,0,0,0.75)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {matchingStudents.map((stu) => (
+                        <button
+                          key={stu.id}
+                          type="button"
+                          onClick={() => {
+                            setRecordStudent(stu);
+                            setStudentSearchQuery("");
+                            if (!paymentAmount) setPaymentAmount("15000");
+                          }}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "9px 14px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            borderBottom: "1px solid rgba(255,255,255,0.05)",
+                            background: "transparent",
+                            cursor: "pointer",
+                          }}
+                          className="hover:bg-[var(--bg-hover)]"
+                        >
+                          <div>
+                            <span className="font-semibold text-xs text-[var(--text-primary)] block">{stu.name}</span>
+                            <span className="text-[11px] text-[var(--text-muted)]">{stu.grade} · {stu.usn || "No USN"}</span>
+                          </div>
+                          <span className="text-xs font-mono text-[var(--brand)] font-semibold">Select →</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             <label>
-              Student
-              <input placeholder="Search student..." />
+              Amount (₹) *
+              <input
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="₹ 15,000"
+              />
             </label>
+
             <label>
-              Amount
-              <input placeholder="₹ 0.00" />
+              Payment Method *
+              <FormSelect
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                options={[
+                  { value: "Bank transfer", label: "Bank Transfer (NEFT/RTGS/IMPS)" },
+                  { value: "UPI", label: "UPI (GooglePay / PhonePe / Paytm)" },
+                  { value: "Cash", label: "Cash Counter" },
+                  { value: "Card", label: "Debit / Credit Card (POS)" },
+                  { value: "Cheque", label: "Cheque / Demand Draft" },
+                ]}
+              />
             </label>
-            <label>
-              Payment date
-              <input type="date" defaultValue="2026-09-28" />
-            </label>
-            <label>
-              Method
-              <select defaultValue="Bank transfer">
-                <option>Bank transfer</option>
-                <option>UPI</option>
-                <option>Cash</option>
-                <option>Card</option>
-              </select>
+
+            <label style={{ gridColumn: "span 2" }}>
+              Payment Date *
+              <DateDropdowns
+                value={paymentDate}
+                onChange={setPaymentDate}
+                defaultToToday
+                minYear={2020}
+                maxYear={2030}
+              />
             </label>
           </div>
           <div className="dialog-actions">
             <button
               className="secondary-button"
-              onClick={() => setShowDialog(false)}
+              onClick={() => {
+                setShowDialog(false);
+                setRecordStudent(null);
+                setStudentSearchQuery("");
+                setPaymentAmount("");
+              }}
             >
               Cancel
             </button>
             <button
               className="primary-button"
               onClick={() => {
+                if (!recordStudent && !studentSearchQuery) {
+                  toast.error("Student required", { description: "Please search and select a student to record fee payment." });
+                  return;
+                }
+                const targetName = recordStudent?.name || studentSearchQuery;
                 setShowDialog(false);
+                setRecordStudent(null);
+                setStudentSearchQuery("");
+                setPaymentAmount("");
                 toast.success("Payment recorded", {
-                  description:
-                    "The family ledger and collection rate were updated.",
+                  description: `₹${paymentAmount || "15,000"} successfully recorded for ${targetName} via ${paymentMethod}.`,
                 });
               }}
             >
@@ -3744,7 +3891,7 @@ function AnalyticsView({
   const [analyticsTab, setAnalyticsTab] = useState<
     "overview" | "staff" | "academics" | "attendance"
   >("overview");
-  const [selectedTerm, setSelectedTerm] = useState("All Terms (2024–25)");
+  const [selectedTerm, setSelectedTerm] = useState("2026–2027");
   const [staffSearch, setStaffSearch] = useState("");
   const [staffFilter, setStaffFilter] = useState<"all" | "teacher" | "admin" | "principal">("all");
 
@@ -4209,16 +4356,19 @@ function AnalyticsView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
-          <select
-            value={selectedTerm}
-            onChange={e => setSelectedTerm(e.target.value)}
-            className="flex-1 sm:flex-initial min-w-0 px-3 py-2 text-xs font-semibold rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--brand)] transition-colors cursor-pointer"
-          >
-            <option value="All Terms (2024–25)">All Terms (Annual 2024–25)</option>
-            <option value="Term 1 (Autumn)">Term 1 (Autumn Term)</option>
-            <option value="Term 2 (Spring)">Term 2 (Spring Term)</option>
-            <option value="Annual Board Prep">Annual Board Exam Track</option>
-          </select>
+          <div style={{ minWidth: "160px" }}>
+            <FormSelect
+              value={selectedTerm}
+              onChange={setSelectedTerm}
+              options={[
+                { value: "2024–2025", label: "2024–2025" },
+                { value: "2025–2026", label: "2025–2026" },
+                { value: "2026–2027", label: "2026–2027" },
+                { value: "2027–2028", label: "2027–2028" },
+              ]}
+              ariaLabel="Select academic year"
+            />
+          </div>
 
           <button
             onClick={handleExportReport}
@@ -5367,17 +5517,23 @@ function SettingsView({ onBack }: { onBack: () => void }) {
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<
-    "account" | "workspace" | "academics" | "ai" | "system"
+    "account" | "workspace" | "ai" | "system"
   >("account");
 
   // Account state
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+
+  // OTP identity verification state
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
 
   // Super admin & AI state
   const [superAdmin, setSuperAdmin] = useState(false);
@@ -5394,12 +5550,6 @@ function SettingsView({ onBack }: { onBack: () => void }) {
   const [academicYear, setAcademicYear] = useState(settings.academicYear);
   const [currentTerm, setCurrentTerm] = useState(settings.currentTerm);
   const [savingWorkspace, setSavingWorkspace] = useState(false);
-
-  // Academics settings state
-  const [gradeScale, setGradeScale] = useState(settings.gradeScale);
-  const [threshold, setThreshold] = useState(settings.threshold);
-  const [prefs, setPrefs] = useState(settings.prefs);
-  const [savingAcademics, setSavingAcademics] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -5424,8 +5574,53 @@ function SettingsView({ onBack }: { onBack: () => void }) {
     });
   }, []);
 
-  const toggle = (key: keyof typeof prefs) =>
-    setPrefs(current => ({ ...current, [key]: !current[key] }));
+  const handleSendOtp = async () => {
+    if (!currentUser?.email && !currentUser?.username) {
+      toast.error("No registered address for this account.");
+      return;
+    }
+    const identifier = currentUser.email || currentUser.username;
+    setSendingOtp(true);
+    try {
+      const res = await requestSignInCode(identifier);
+      if (res.status === "ok") {
+        setOtpSent(true);
+        toast.success("Verification OTP sent", {
+          description: `A 6-digit one-time code has been sent to ${currentUser.email || identifier}.`,
+        });
+      } else {
+        toast.error("Could not send code", { description: res.message });
+      }
+    } catch {
+      toast.error("Network error sending code");
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otpCode.trim().length !== 6) {
+      toast.warning("Please enter the complete 6-digit OTP code");
+      return;
+    }
+    const identifier = currentUser?.email || currentUser?.username || "";
+    setVerifyingOtp(true);
+    try {
+      const res = await verifySignInCode(identifier, otpCode.trim());
+      if (res.status === "ok") {
+        setOtpVerified(true);
+        toast.success("Identity verified successfully", {
+          description: "You may now set and confirm your new password.",
+        });
+      } else {
+        toast.error("Invalid verification code", { description: res.message });
+      }
+    } catch {
+      toast.error("Could not verify OTP. Please try again.");
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
 
   const saveProfile = async () => {
     if (!currentUser) return;
@@ -5477,8 +5672,8 @@ function SettingsView({ onBack }: { onBack: () => void }) {
       toast.warning("Usernames use letters, numbers, dots, dashes and underscores");
       return;
     }
-    if (!currentPassword) {
-      toast.warning("Enter your current password to confirm this change");
+    if (!otpVerified) {
+      toast.warning("Please verify your identity using the OTP code sent to your email first");
       return;
     }
     if (newPassword && newPassword.length < 8) {
@@ -5499,15 +5694,18 @@ function SettingsView({ onBack }: { onBack: () => void }) {
       const result = await changePortalCredentials(
         nameChanged ? wanted : undefined,
         newPassword ? newPassword : undefined,
-        currentPassword
+        undefined,
+        true
       );
       if (result.status !== "ok") {
         toast.error("That could not be saved", { description: result.message });
         return;
       }
-      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setOtpVerified(false);
+      setOtpSent(false);
+      setOtpCode("");
       toast.success("Sign-in details updated", {
         description: nameChanged
           ? `You can now sign in with "${wanted}". Your email is unchanged.`
@@ -5541,26 +5739,6 @@ function SettingsView({ onBack }: { onBack: () => void }) {
       }
     } finally {
       setSavingWorkspace(false);
-    }
-  };
-
-  const saveAcademicRules = async () => {
-    setSavingAcademics(true);
-    try {
-      const ok = await save({
-        ...settings,
-        prefs,
-        academicYear,
-        gradeScale,
-        threshold,
-      });
-      if (ok) {
-        toast.success("Academic & alert policies saved", {
-          description: "Your configuration is live for all staff.",
-        });
-      }
-    } finally {
-      setSavingAcademics(false);
     }
   };
 
@@ -5620,42 +5798,13 @@ function SettingsView({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const alerts = [
-    {
-      key: "attendance" as const,
-      title: "Attendance Alerts",
-      detail: "Trigger notifications when a class attendance drops below threshold.",
-    },
-    {
-      key: "fees" as const,
-      title: "Fee Reminders",
-      detail: "Automated balance notifications for outstanding pupil tuition fees.",
-    },
-    {
-      key: "messages" as const,
-      title: "Parent Messages",
-      detail: "Alert staff on new incoming messages from students' guardians.",
-    },
-    {
-      key: "exams" as const,
-      title: "Exam Countdowns",
-      detail: "Timely reminders before test windows and examination schedules.",
-    },
-    {
-      key: "digest" as const,
-      title: "Weekly Leadership Digest",
-      detail: "A Monday briefing email for school administration and leadership.",
-    },
-  ];
-
   const tabs: Array<{
-    id: "account" | "workspace" | "academics" | "ai" | "system";
+    id: "account" | "workspace" | "ai" | "system";
     label: string;
     icon: LucideIcon;
   }> = [
     { id: "account", label: "My Account & Security", icon: ShieldCheck },
     { id: "workspace", label: "School Workspace", icon: Building2 },
-    { id: "academics", label: "Academics & Alerts", icon: GraduationCap },
   ];
   if (superAdmin) {
     tabs.push({ id: "ai", label: "AI Assistant", icon: Sparkles });
@@ -5814,18 +5963,87 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   </p>
                 </div>
 
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                    Current Password *
-                  </label>
-                  <input
-                    type="password"
-                    value={currentPassword}
-                    autoComplete="current-password"
-                    onChange={event => setCurrentPassword(event.target.value)}
-                    placeholder="Enter your current password to authorize changes"
-                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
-                  />
+                {/* Interactive OTP Identity Verification Block */}
+                <div className="md:col-span-2 space-y-3">
+                  {!otpVerified ? (
+                    <div className="p-4.5 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)]/30 space-y-3.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <ShieldAlert size={16} className="text-amber-400" />
+                            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                              Identity Verification via OTP
+                            </span>
+                          </div>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            To authorize changes to your password or sign-in handle, request an OTP to your registered email (
+                            <span className="font-mono text-[var(--brand)]">{currentUser?.email || "your email"}</span>).
+                          </p>
+                        </div>
+                        {!otpSent ? (
+                          <button
+                            type="button"
+                            onClick={() => void handleSendOtp()}
+                            disabled={sendingOtp}
+                            className="h-9 px-4 rounded-xl text-xs font-semibold bg-[var(--brand)] text-white hover:bg-[var(--brand-strong)] transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap self-start sm:self-auto disabled:opacity-50"
+                          >
+                            {sendingOtp ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
+                            <span>{sendingOtp ? "Sending Code…" : "Send Verification OTP"}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleSendOtp()}
+                            disabled={sendingOtp}
+                            className="text-xs text-[var(--brand)] hover:underline whitespace-nowrap font-medium self-start sm:self-auto cursor-pointer"
+                          >
+                            {sendingOtp ? "Resending…" : "Resend Code"}
+                          </button>
+                        )}
+                      </div>
+
+                      {otpSent && (
+                        <div className="pt-3 border-t border-[var(--border)]/60 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                          <div className="relative flex-1 sm:max-w-xs">
+                            <input
+                              type="text"
+                              maxLength={6}
+                              value={otpCode}
+                              onChange={e => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                              placeholder="Enter 6-digit OTP"
+                              className="w-full h-10 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] font-mono text-center text-sm tracking-widest text-[var(--text-primary)] focus:border-[var(--brand)] outline-none"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleVerifyOtp()}
+                            disabled={verifyingOtp || otpCode.length !== 6}
+                            className="h-10 px-5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                          >
+                            {verifyingOtp ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                            <span>{verifyingOtp ? "Verifying…" : "Verify OTP"}</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                          <CheckCircle2 size={18} />
+                        </span>
+                        <div>
+                          <p className="text-xs font-bold text-emerald-300">Identity Verified via OTP</p>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            One-time authorization active. You may now enter and confirm your new password.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold uppercase tracking-wider">
+                        Authorized
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -5835,10 +6053,11 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   <input
                     type="password"
                     value={newPassword}
+                    disabled={!otpVerified}
                     autoComplete="new-password"
                     onChange={event => setNewPassword(event.target.value)}
-                    placeholder="At least 8 characters"
-                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
+                    placeholder={otpVerified ? "At least 8 characters" : "Verify OTP to unlock"}
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -5849,10 +6068,11 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   <input
                     type="password"
                     value={confirmPassword}
+                    disabled={!otpVerified}
                     autoComplete="new-password"
                     onChange={event => setConfirmPassword(event.target.value)}
-                    placeholder="Re-enter your new password"
-                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
+                    placeholder={otpVerified ? "Re-enter your new password" : "Verify OTP to unlock"}
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)] disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -6013,140 +6233,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
       )}
 
       {/* ==================================================================== */}
-      {/* TAB 3: Academics & Alerts                                           */}
-      {/* ==================================================================== */}
-      {activeTab === "academics" && (
-        <div className="space-y-8 animate-in fade-in duration-200">
-          {/* Grading & Policies Card */}
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
-            <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
-                  Academic Standards
-                </p>
-                <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                  Grading Scale & Attendance Policy
-                </h3>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Rules that govern grade evaluation, warning thresholds, and student result publishing.
-                </p>
-              </div>
-              <span className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400">
-                <GraduationCap size={20} />
-              </span>
-            </div>
-
-            <div className="p-6 sm:p-7 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                    Institutional Grading Scale
-                  </label>
-                  <select
-                    value={gradeScale}
-                    onChange={e => setGradeScale(e.target.value)}
-                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
-                  >
-                    <option value="Percentage (0–100)">Percentage (0–100)</option>
-                    <option value="CGPA (10-point)">CGPA (10-point)</option>
-                    <option value="Letter grades (A–F)">Letter grades (A–F)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
-                    Attendance Warning Threshold
-                  </label>
-                  <select
-                    value={threshold}
-                    onChange={e => setThreshold(e.target.value)}
-                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
-                  >
-                    <option value="90%">90% (Strict Compliance)</option>
-                    <option value="85%">85% (Standard CBSE/ICSE)</option>
-                    <option value="80%">80% (Moderate)</option>
-                    <option value="75%">75% (Minimum Passing)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Auto-publish toggle row */}
-              <div className="p-4.5 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <span className="text-sm font-bold text-[var(--text-primary)] block">
-                    Auto-Publish Examination Results
-                  </span>
-                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                    Instantly release report cards and marks to pupil & parent portals once paper marking is completed.
-                  </p>
-                </div>
-                <SettingToggle
-                  checked={prefs.exams}
-                  onChange={() => toggle("exams")}
-                  label="Auto-publish results"
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* Notifications Card */}
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
-            <div className="p-6 sm:p-7 border-b border-[var(--border)] bg-[var(--bg-raised)]/30 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
-                  Automations
-                </p>
-                <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                  Automated Notification Preferences
-                </h3>
-                <p className="text-xs text-[var(--text-muted)]">
-                  Configure automated dispatch alerts for attendance, payments, messages, and schedules.
-                </p>
-              </div>
-              <span className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400">
-                <Bell size={20} />
-              </span>
-            </div>
-
-            <div className="p-6 sm:p-7 space-y-3.5">
-              {alerts.map(alert => (
-                <div
-                  key={alert.key}
-                  className="flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-raised)]/30 hover:bg-[var(--bg-hover)] transition-colors"
-                >
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
-                      {alert.title}
-                    </div>
-                    <div className="text-xs text-[var(--text-muted)]">
-                      {alert.detail}
-                    </div>
-                  </div>
-                  <SettingToggle
-                    checked={prefs[alert.key]}
-                    onChange={() => toggle(alert.key)}
-                    label={alert.title}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="px-6 sm:px-7 py-4 bg-[var(--bg-raised)]/40 border-t border-[var(--border)] flex items-center justify-end">
-              <button
-                className="primary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2"
-                onClick={() => void saveAcademicRules()}
-                disabled={savingAcademics}
-              >
-                <Save size={15} />
-                <span>{savingAcademics ? "Saving…" : "Save Policies & Alerts"}</span>
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {/* ==================================================================== */}
-      {/* TAB 4: AI Assistant (Super Admin Only)                              */}
+      {/* TAB 3: AI Assistant (Super Admin Only)                              */}
       {/* ==================================================================== */}
       {activeTab === "ai" && superAdmin && (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden animate-in fade-in duration-200">
@@ -6156,17 +6243,6 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 <p className="eyebrow text-xs font-bold text-[var(--brand)] uppercase tracking-wider">
                   Super Admin
                 </p>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                    isAiConfigured(aiConfig) && sharedReady
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-                      : "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                  }`}
-                >
-                  {isAiConfigured(aiConfig) && sharedReady
-                    ? `Live · ${getProvider(aiConfig.providerId).label}`
-                    : "Not Configured"}
-                </span>
               </div>
               <h3 className="text-lg font-bold text-[var(--text-primary)]">
                 School-Wide AI Assistant Provider
@@ -6186,47 +6262,37 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   AI Provider Engine
                 </label>
-                <select
+                <FormSelect
                   value={aiConfig.providerId}
-                  onChange={event => selectAiProvider(event.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
-                >
-                  {AI_PROVIDERS.map(provider => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={value => selectAiProvider(value)}
+                  options={AI_PROVIDERS.map(provider => ({
+                    value: provider.id,
+                    label: provider.label,
+                  }))}
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Model Endpoint
                 </label>
-                <select
+                <FormSelect
                   value={aiConfig.model}
-                  onChange={event => updateAiConfig({ model: event.target.value })}
+                  onChange={value => updateAiConfig({ model: value })}
                   disabled={aiConfig.providerId === "custom"}
-                  className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all cursor-pointer"
-                >
-                  {aiConfig.providerId.startsWith("gemini") &&
-                    GEMINI_MODELS.map(m => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  {!aiConfig.providerId.startsWith("gemini") &&
-                    AI_PROVIDERS.filter(p => !p.id.startsWith("gemini")).map(provider => (
-                      <optgroup key={provider.id} label={provider.label}>
-                        {(provider.models ?? [provider.model]).map(m => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  <option value={aiConfig.model}>{aiConfig.model} (custom)</option>
-                </select>
+                  options={(() => {
+                    if (aiConfig.providerId.startsWith("gemini")) {
+                      return GEMINI_MODELS.map(m => ({ value: m, label: m }));
+                    }
+                    const provider = getProvider(aiConfig.providerId);
+                    const models = provider.models ?? [provider.model];
+                    const opts = models.map(m => ({ value: m, label: m }));
+                    if (!models.includes(aiConfig.model)) {
+                      opts.push({ value: aiConfig.model, label: `${aiConfig.model} (custom)` });
+                    }
+                    return opts;
+                  })()}
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -6344,7 +6410,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   const data = {
                     school: schoolName || "Global Kids School",
                     exportedAt: new Date().toISOString(),
-                    settings: { academicYear, gradeScale, threshold, prefs, campus, address, phone, currentTerm },
+                    settings: { academicYear, campus, address, phone, currentTerm },
                   };
                   const blob = new Blob([JSON.stringify(data, null, 2)], {
                     type: "application/json",
@@ -6415,17 +6481,19 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                     Reset Settings to Default
                   </div>
                   <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                    Restores notification preferences and alert triggers to their original school presets.
+                    Restores school workspace details and academic year to default configuration.
                   </p>
                 </div>
 
                 <button
                   className="secondary-button h-10 px-5 rounded-xl text-xs font-semibold flex items-center gap-2 flex-shrink-0"
                   onClick={() => {
-                    setPrefs(settings.prefs);
                     setAcademicYear(settings.academicYear);
-                    setGradeScale(settings.gradeScale);
-                    setThreshold(settings.threshold);
+                    setSchoolName(settings.schoolName);
+                    setCampus(settings.campus);
+                    setAddress(settings.address);
+                    setPhone(settings.phone);
+                    setCurrentTerm(settings.currentTerm);
                     toast.success("Settings restored to defaults");
                   }}
                 >

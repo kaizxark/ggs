@@ -688,9 +688,12 @@ export type SaveResult =
 export async function changePortalCredentials(
   username: string | undefined,
   password: string | undefined,
-  currentPassword: string
+  currentPassword?: string,
+  otpVerified?: boolean
 ): Promise<SaveResult> {
-  const body: Record<string, string> = { currentPassword };
+  const body: Record<string, string | boolean> = {};
+  if (currentPassword) body.currentPassword = currentPassword;
+  if (otpVerified) body.otpVerified = true;
   if (username !== undefined) body.username = username;
   if (password !== undefined) body.password = password;
   return saveAccount("/api/portal-admin", "PATCH", body);
@@ -699,7 +702,7 @@ export async function changePortalCredentials(
 async function saveAccount(
   path: string,
   method: "POST" | "PATCH",
-  body: Record<string, string>
+  body: Record<string, unknown>
 ): Promise<SaveResult> {
   const { data } = await supabase.auth.getSession();
   if (!data.session?.access_token) {

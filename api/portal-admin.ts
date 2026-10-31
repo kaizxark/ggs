@@ -187,24 +187,26 @@ async function changeCredentials(req: Request): Promise<Response> {
     if (problem) return fail(problem, 400, "weak_password");
   }
 
-  if (!body.currentPassword) {
+  if (!body.currentPassword && !body.otpVerified) {
     return fail(
-      "Enter your current password to make this change.",
+      "Verify your identity via OTP or enter your current password to make this change.",
       400,
       "current_password_required"
     );
   }
 
-  const verified = await verifyCurrentPassword(
-    caller.email,
-    String(body.currentPassword)
-  );
-  if (!verified) {
-    return fail(
-      "That current password is not right.",
-      401,
-      "current_password_wrong"
+  if (body.currentPassword) {
+    const verified = await verifyCurrentPassword(
+      caller.email,
+      String(body.currentPassword)
     );
+    if (!verified) {
+      return fail(
+        "That current password is not right.",
+        401,
+        "current_password_wrong"
+      );
+    }
   }
 
   const result = await changePortalCredentials({

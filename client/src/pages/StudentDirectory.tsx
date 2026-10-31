@@ -29,6 +29,7 @@ import { useDataRevision } from "@/lib/live-data";
 import { MetricBlock } from "@/components/MetricBlock";
 import { SkeletonMetric } from "@/components/ErpSkeleton";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
+import { DateDropdowns } from "@/components/DateDropdowns";
 import { ServerPager } from "@/components/ErpServerPager";
 import {
   ApiError,
@@ -1397,9 +1398,8 @@ function StudentDialog({
   }, [options]);
 
   const availableSections = useMemo(() => {
-    if (options?.sections && options.sections.length > 0) return options.sections;
-    return ["A", "B", "C", "D"];
-  }, [options]);
+    return ["A", "B", "C", "D", "E"];
+  }, []);
 
   const validateTab = (tab: "academic" | "personal" | "guardian" | "address"): Record<string, string> => {
     const errs: Record<string, string> = {};
@@ -1407,25 +1407,17 @@ function StudentDialog({
       if (!form.full_name.trim()) errs.full_name = "Enter student's full name.";
       if (!form.grade) errs.grade = "Select student's class.";
       if (!form.section) errs.section = "Select student's section.";
-      if (!form.roll_no.trim()) errs.roll_no = "Enter roll number.";
       if (!form.joined_on) errs.joined_on = "Select admission date.";
     } else if (tab === "personal") {
       if (!form.date_of_birth) errs.date_of_birth = "Enter date of birth.";
       if (!form.gender) errs.gender = "Select student's gender.";
-      if (!form.blood_group) errs.blood_group = "Select blood group.";
     } else if (tab === "guardian") {
       if (!form.guardian_name.trim()) errs.guardian_name = "Enter primary guardian's full name.";
       if (!form.guardian_relation) errs.guardian_relation = "Select relationship.";
       const gPhone = form.guardian_phone.trim().replace(/\D/g, "");
       if (!gPhone || gPhone.length < 10) errs.guardian_phone = "Enter a valid 10-digit mobile number.";
     } else if (tab === "address") {
-      if (!form.address_line1.trim()) errs.address_line1 = "Enter street / flat / house address.";
-      if (!form.city.trim()) errs.city = "Enter city.";
-      const pin = form.pincode.trim().replace(/\D/g, "");
-      if (!pin || pin.length < 6) errs.pincode = "Enter a valid 6-digit postal PIN code.";
-      if (!form.emergency_contact_name.trim()) errs.emergency_contact_name = "Enter emergency contact name.";
-      const ePhone = form.emergency_contact_phone.trim().replace(/\D/g, "");
-      if (!ePhone || ePhone.length < 10) errs.emergency_contact_phone = "Enter a valid 10-digit contact number.";
+      // Address is completely optional
     }
     return errs;
   };
@@ -1463,9 +1455,9 @@ function StudentDialog({
     const allErrs = validateAll();
     if (Object.keys(allErrs).length > 0) {
       setFieldErrors(allErrs);
-      if (allErrs.full_name || allErrs.grade || allErrs.section || allErrs.roll_no || allErrs.joined_on) {
+      if (allErrs.full_name || allErrs.grade || allErrs.section || allErrs.joined_on) {
         setActiveTab("academic");
-      } else if (allErrs.date_of_birth || allErrs.gender || allErrs.blood_group) {
+      } else if (allErrs.date_of_birth || allErrs.gender) {
         setActiveTab("personal");
       } else if (allErrs.guardian_name || allErrs.guardian_relation || allErrs.guardian_phone) {
         setActiveTab("guardian");
@@ -1488,10 +1480,8 @@ function StudentDialog({
         name: trimmedFullName,
         first_name: firstName,
         last_name: lastName,
-        usn: form.usn.trim() || undefined,
         grade: form.grade || undefined,
         section: form.section || undefined,
-        roll_no: form.roll_no.trim() || undefined,
         date_of_birth: form.date_of_birth || undefined,
         gender: form.gender || undefined,
         status: form.status,
@@ -1506,8 +1496,6 @@ function StudentDialog({
         guardian_relation: form.guardian_relation.trim() || undefined,
         guardian_phone: form.guardian_phone.trim() || undefined,
         guardian_email: form.guardian_email.trim() || undefined,
-        emergency_contact_name: form.emergency_contact_name.trim() || undefined,
-        emergency_contact_phone: form.emergency_contact_phone.trim() || undefined,
         ...(form.photo_url !== (student?.photo_url ?? "") ? { photo_url: form.photo_url } : {}),
         address: form.address_line1.trim()
           ? {
@@ -1533,10 +1521,10 @@ function StudentDialog({
     }
   };
 
-  const hasAcademicError = Boolean(fieldErrors.full_name || fieldErrors.grade || fieldErrors.section || fieldErrors.roll_no || fieldErrors.joined_on);
-  const hasPersonalError = Boolean(fieldErrors.date_of_birth || fieldErrors.gender || fieldErrors.blood_group);
+  const hasAcademicError = Boolean(fieldErrors.full_name || fieldErrors.grade || fieldErrors.section || fieldErrors.joined_on);
+  const hasPersonalError = Boolean(fieldErrors.date_of_birth || fieldErrors.gender);
   const hasGuardianError = Boolean(fieldErrors.guardian_name || fieldErrors.guardian_relation || fieldErrors.guardian_phone);
-  const hasAddressError = Boolean(fieldErrors.address_line1 || fieldErrors.city || fieldErrors.pincode || fieldErrors.emergency_contact_name || fieldErrors.emergency_contact_phone);
+  const hasAddressError = false;
 
   return (
     <div
@@ -1632,10 +1620,7 @@ function StudentDialog({
               onClick={() => setActiveTab("address")}
               style={{ flex: 1, position: "relative" }}
             >
-              Address & Emergency
-              {hasAddressError && (
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 6, display: "inline-block" }} />
-              )}
+              Address
             </button>
           </div>
         </div>
@@ -1700,37 +1685,19 @@ function StudentDialog({
                   {fieldErrors.section && <span className="field-error">{fieldErrors.section}</span>}
                 </label>
 
-                <label>
-                  Roll Number *
-                  <input
-                    value={form.roll_no}
-                    onChange={(e) => set("roll_no")(e.target.value)}
-                    placeholder="e.g. 14"
-                  />
-                  {fieldErrors.roll_no && <span className="field-error">{fieldErrors.roll_no}</span>}
-                </label>
-
-                <label>
+                <label style={{ gridColumn: "span 2" }}>
                   Admission date *
-                  <input
-                    type="date"
-                    value={form.joined_on ?? ""}
-                    onChange={(e) => set("joined_on")(e.target.value)}
+                  <DateDropdowns
+                    value={form.joined_on}
+                    onChange={set("joined_on")}
+                    defaultToToday
+                    minYear={2015}
+                    maxYear={2030}
+                    error={fieldErrors.joined_on}
                   />
-                  {fieldErrors.joined_on && <span className="field-error">{fieldErrors.joined_on}</span>}
                 </label>
 
-                <label>
-                  USN / Admission Number
-                  <input
-                    value={form.usn}
-                    onChange={(e) => set("usn")(e.target.value)}
-                    placeholder={student ? undefined : "Auto-generated (e.g. GGS1001) if blank"}
-                  />
-                  {fieldErrors.usn && <span className="field-error">{fieldErrors.usn}</span>}
-                </label>
-
-                <label>
+                <label style={{ gridColumn: "span 2" }}>
                   Enrollment status
                   <FormSelect
                     value={form.status ?? "active"}
@@ -1749,14 +1716,15 @@ function StudentDialog({
 
           {activeTab === "personal" && (
             <div className="form-grid">
-              <label>
+              <label style={{ gridColumn: "span 2" }}>
                 Date of birth *
-                <input
-                  type="date"
-                  value={form.date_of_birth ?? ""}
-                  onChange={(e) => set("date_of_birth")(e.target.value)}
+                <DateDropdowns
+                  value={form.date_of_birth}
+                  onChange={set("date_of_birth")}
+                  minYear={1995}
+                  maxYear={2026}
+                  error={fieldErrors.date_of_birth}
                 />
-                {fieldErrors.date_of_birth && <span className="field-error">{fieldErrors.date_of_birth}</span>}
               </label>
 
               <label>
@@ -1776,7 +1744,7 @@ function StudentDialog({
               </label>
 
               <label>
-                Blood group *
+                Blood group (Optional)
                 <FormSelect
                   value={form.blood_group}
                   onChange={set("blood_group")}
@@ -1785,9 +1753,7 @@ function StudentDialog({
                     label: bg,
                   }))}
                   placeholder="Select blood group…"
-                  error={fieldErrors.blood_group}
                 />
-                {fieldErrors.blood_group && <span className="field-error">{fieldErrors.blood_group}</span>}
               </label>
 
               <label>
@@ -1896,13 +1862,12 @@ function StudentDialog({
           {activeTab === "address" && (
             <div className="form-grid">
               <label style={{ gridColumn: "span 2" }}>
-                Residential address (House/Flat No, Building, Street) *
+                Residential address (House/Flat No, Building, Street)
                 <input
                   value={form.address_line1}
                   onChange={(e) => set("address_line1")(e.target.value)}
                   placeholder="e.g. Flat 402, Palm Meadows"
                 />
-                {fieldErrors.address_line1 && <span className="field-error">{fieldErrors.address_line1}</span>}
               </label>
 
               <label style={{ gridColumn: "span 2" }}>
@@ -1915,13 +1880,12 @@ function StudentDialog({
               </label>
 
               <label>
-                City *
+                City
                 <input
                   value={form.city}
                   onChange={(e) => set("city")(e.target.value)}
                   placeholder="e.g. Bengaluru"
                 />
-                {fieldErrors.city && <span className="field-error">{fieldErrors.city}</span>}
               </label>
 
               <label>
@@ -1943,34 +1907,12 @@ function StudentDialog({
               </label>
 
               <label>
-                Postal PIN code *
+                Postal PIN code
                 <input
                   value={form.pincode}
                   onChange={(e) => set("pincode")(e.target.value)}
                   placeholder="e.g. 560066"
                 />
-                {fieldErrors.pincode && <span className="field-error">{fieldErrors.pincode}</span>}
-              </label>
-
-              <label>
-                Emergency contact person *
-                <input
-                  value={form.emergency_contact_name}
-                  onChange={(e) => set("emergency_contact_name")(e.target.value)}
-                  placeholder="Name of emergency contact"
-                />
-                {fieldErrors.emergency_contact_name && <span className="field-error">{fieldErrors.emergency_contact_name}</span>}
-              </label>
-
-              <label>
-                Emergency phone number *
-                <input
-                  type="tel"
-                  value={form.emergency_contact_phone}
-                  onChange={(e) => set("emergency_contact_phone")(e.target.value)}
-                  placeholder="10-digit mobile number"
-                />
-                {fieldErrors.emergency_contact_phone && <span className="field-error">{fieldErrors.emergency_contact_phone}</span>}
               </label>
             </div>
           )}

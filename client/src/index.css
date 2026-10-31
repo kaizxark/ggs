@@ -449,8 +449,13 @@ button.breadcrumb-root:hover { color: var(--brand); }
 /* The right column holds dense lists (today's schedule, the fee mix) that were
    being squeezed into 35% of the width and wrapping awkwardly. Handing it more
    room costs the chart column little, because the chart is fluid anyway. */
-.dashboard-grid-top { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
-.dashboard-grid-mid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+.dashboard-grid-top { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: stretch; }
+.dashboard-grid-top > .panel { display: flex; flex-direction: column; height: 100%; }
+.dashboard-grid-top > .panel > .class-watch-list { flex: 1; }
+.dashboard-grid-mid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; }
+.dashboard-grid-mid > .panel { display: flex; flex-direction: column; height: 100%; }
+.dashboard-grid-mid > .panel > .attention-list,
+.dashboard-grid-mid > .panel > .activity-list { flex: 1; }
 .panel { min-width: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-panel); backdrop-filter: blur(24px) saturate(175%); -webkit-backdrop-filter: blur(24px) saturate(175%); box-shadow: 0 8px 24px -2px rgba(0, 0, 0, 0.42), inset 0 1px 0 0 rgba(255, 255, 255, 0.09); }
 .panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; padding: 20px 21px 0; }
 .dashboard-attendance-controls { display: flex; min-width: 0; align-items: center; gap: 8px; }
@@ -839,8 +844,8 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .clear-all-filters-btn:hover { color: var(--text-primary); }
 .table-scroll { width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .data-table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: auto; font-size: 13px; line-height: 1.5; }
-.data-table thead { position: sticky; top: 0; z-index: 2; }
-.data-table th { border-bottom: 1px solid var(--border); background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 13px 18px; color: var(--text-muted); font-size: 11.5px; font-weight: 600; letter-spacing: .04em; line-height: 1.45; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.data-table thead { position: sticky; top: 0; z-index: 2; background: #15171e; }
+.data-table th { border-bottom: 1px solid var(--border); background: #15171e; padding: 13px 18px; color: var(--text-muted); font-size: 11.5px; font-weight: 600; letter-spacing: .04em; line-height: 1.45; text-align: left; text-transform: uppercase; white-space: nowrap; }
 .data-table td { border-bottom: 1px solid var(--border); padding: 14px 18px; white-space: nowrap; vertical-align: middle; }
 .data-table tbody tr { transition: background .14s ease; }
 /* Only rows carrying an onClick are marked .row-clickable. Hover highlight and
