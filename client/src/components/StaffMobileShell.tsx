@@ -101,19 +101,7 @@ export function StaffMobileShell({
         >
           <img src="/global-kids-logo.svg" alt="Global Kids" />
           <span>
-            <div className="staff-mobile-brand-title">
-              <strong>Global Kids</strong>
-              {isExecutive && (
-                <span
-                  className={`mobile-exec-pill ${
-                    role.toLowerCase().includes("super") ? "super" : ""
-                  }`}
-                >
-                  <ShieldCheck size={10} />
-                  {role.toLowerCase().includes("super") ? "Super" : "Admin"}
-                </span>
-              )}
-            </div>
+            <strong className="staff-mobile-brand-title">Global Kids</strong>
             <small>
               {name || (isExecutive ? "Administrator" : "Staff")} · {role}
             </small>
