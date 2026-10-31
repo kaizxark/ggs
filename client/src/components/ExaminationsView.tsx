@@ -53,7 +53,71 @@ export interface ExaminationsViewProps {
   onBack: () => void;
 }
 
-type TabKey = "schedule" | "marks" | "publishing" | "report-cards";
+export type TabKey = "schedule" | "marks" | "publishing" | "report-cards";
+
+export type AttendanceStatus = "Present" | "Late" | "Leave" | "Half Day" | "Absent";
+
+export const ATTENDANCE_STATUS_META: Record<AttendanceStatus, {
+  label: string;
+  shortLabel: string;
+  badge: string;
+  color: string;
+  bg: string;
+  border: string;
+  defaultRemarks: string;
+  canScore: boolean;
+}> = {
+  Present: {
+    label: "Present",
+    shortLabel: "P",
+    badge: "status-pill success",
+    color: "var(--success)",
+    bg: "var(--success-soft)",
+    border: "var(--success-border)",
+    defaultRemarks: "Candidate attended on time and completed examination.",
+    canScore: true,
+  },
+  Late: {
+    label: "Late Arrival",
+    shortLabel: "Late",
+    badge: "status-pill warning",
+    color: "var(--warning)",
+    bg: "var(--warning-soft)",
+    border: "var(--warning-border)",
+    defaultRemarks: "Admitted with late entry pass; completed paper.",
+    canScore: true,
+  },
+  Leave: {
+    label: "Approved Leave",
+    shortLabel: "Leave",
+    badge: "status-pill brand",
+    color: "var(--brand)",
+    bg: "var(--brand-soft)",
+    border: "var(--brand-border)",
+    defaultRemarks: "Excused on authorized medical/school leave — re-test scheduled.",
+    canScore: false,
+  },
+  "Half Day": {
+    label: "Half Day",
+    shortLabel: "Half Day",
+    badge: "status-pill violet",
+    color: "var(--violet)",
+    bg: "var(--violet-soft)",
+    border: "var(--violet-border)",
+    defaultRemarks: "Half day session permitted for official institutional event.",
+    canScore: true,
+  },
+  Absent: {
+    label: "Absent",
+    shortLabel: "Absent",
+    badge: "status-pill danger",
+    color: "var(--danger)",
+    bg: "var(--danger-soft)",
+    border: "var(--danger-border)",
+    defaultRemarks: "Unexcused absence from assessment session.",
+    canScore: false,
+  },
+};
 
 export interface StudentMarkEntry {
   studentId: string;
@@ -62,7 +126,7 @@ export interface StudentMarkEntry {
   rollNo: string;
   marks: number | null;
   maxMarks: number;
-  status: "Present" | "Absent";
+  status: AttendanceStatus;
   remarks: string;
 }
 
@@ -258,7 +322,7 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
   }, [fetchedResults, publishingOverrides]);
 
   // Student Marks Storage: keyed by `${examId}__${studentId}`
-  const [marksStore, setMarksStore] = useState<Record<string, { marks: number | null; status: "Present" | "Absent"; remarks: string }>>(() => {
+  const [marksStore, setMarksStore] = useState<Record<string, { marks: number | null; status: AttendanceStatus; remarks: string }>>(() => {
     try {
       const stored = localStorage.getItem("erp_exam_marks_store_v2");
       if (stored) return JSON.parse(stored);
@@ -328,11 +392,11 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
     const publishedCount = publishingList.filter((p) => p.published).length;
     const publishRate = publishingList.length > 0 ? Math.round((publishedCount / publishingList.length) * 100) : 0;
 
-    // Calculate score average from marked students or publishing
+    // Calculate score average from marked students who took the paper (Present, Late, Half Day)
     let totalScoreSum = 0;
     let totalScoreN = 0;
     Object.values(marksStore).forEach((val) => {
-      if (val.marks !== null && val.status === "Present") {
+      if (val.marks !== null && (val.status === "Present" || val.status === "Late" || val.status === "Half Day")) {
         totalScoreSum += val.marks;
         totalScoreN += 1;
       }
@@ -376,14 +440,15 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
       const saved = marksStore[key];
       // realistic baseline default if not yet edited
       const defaultMarks = saved?.marks !== undefined ? saved.marks : 65 + ((idx * 7) % 31);
-      const status = saved?.status ?? "Present";
-      const remarks = saved?.remarks ?? (defaultMarks !== null && defaultMarks >= 85 ? "Consistent excellence" : "Satisfactory grasp of key concepts");
+      const status: AttendanceStatus = (saved?.status as AttendanceStatus) ?? "Present";
+      const remarks = saved?.remarks ?? (defaultMarks !== null && defaultMarks >= 85 ? "Consistent excellence" : ATTENDANCE_STATUS_META[status]?.defaultRemarks ?? "Satisfactory grasp of key concepts");
+      const canScore = ATTENDANCE_STATUS_META[status]?.canScore ?? true;
       return {
         studentId: String(stu.id),
         studentName: stu.name,
         usn: stu.usn ?? `ADM-2627-${String(idx + 1).padStart(3, "0")}`,
         rollNo: String(idx + 1).padStart(2, "0"),
-        marks: status === "Absent" ? null : defaultMarks,
+        marks: canScore ? defaultMarks : null,
         maxMarks: max,
         status,
         remarks,
@@ -393,11 +458,29 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
 
   // Marksheet stats
   const markSheetStats = useMemo(() => {
-    const present = currentMarksList.filter((m) => m.status === "Present" && m.marks !== null);
-    if (present.length === 0) {
-      return { avg: 0, highest: 0, lowest: 0, passRate: 100, count: 0 };
+    const presentCount = currentMarksList.filter((m) => m.status === "Present").length;
+    const lateCount = currentMarksList.filter((m) => m.status === "Late").length;
+    const leaveCount = currentMarksList.filter((m) => m.status === "Leave").length;
+    const halfDayCount = currentMarksList.filter((m) => m.status === "Half Day").length;
+    const absentCount = currentMarksList.filter((m) => m.status === "Absent").length;
+
+    // Evaluated candidates who took paper
+    const evaluated = currentMarksList.filter((m) => m.status !== "Absent" && m.status !== "Leave" && m.marks !== null);
+    if (evaluated.length === 0) {
+      return {
+        avg: 0,
+        highest: 0,
+        lowest: 0,
+        passRate: 100,
+        count: 0,
+        presentCount,
+        lateCount,
+        leaveCount,
+        halfDayCount,
+        absentCount,
+      };
     }
-    const scores = present.map((m) => m.marks as number);
+    const scores = evaluated.map((m) => m.marks as number);
     const sum = scores.reduce((a, b) => a + b, 0);
     const avg = Math.round(sum / scores.length);
     const highest = Math.max(...scores);
@@ -405,7 +488,18 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
     const passing = currentExam?.passing_marks ?? 40;
     const passed = scores.filter((s) => s >= passing).length;
     const passRate = Math.round((passed / scores.length) * 100);
-    return { avg, highest, lowest, passRate, count: present.length };
+    return {
+      avg,
+      highest,
+      lowest,
+      passRate,
+      count: evaluated.length,
+      presentCount,
+      lateCount,
+      leaveCount,
+      halfDayCount,
+      absentCount,
+    };
   }, [currentMarksList, currentExam]);
 
   // Handler: Update Mark
@@ -421,7 +515,7 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
       }
     }
     setMarksStore((prev) => {
-      const existing = prev[key] ?? { marks: null, status: "Present", remarks: "" };
+      const existing = prev[key] ?? { marks: null, status: "Present" as AttendanceStatus, remarks: "" };
       const updated = {
         ...prev,
         [key]: {
@@ -438,19 +532,24 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
     });
   };
 
-  // Handler: Toggle Attendance
-  const handleToggleAttendance = (studentId: string) => {
+  // Handler: Update Attendance Status (Present, Late, Leave, Half Day, Absent)
+  const handleStatusChange = (studentId: string, newStatus: AttendanceStatus) => {
     if (!currentExam) return;
     const key = `${currentExam.id}__${studentId}`;
     setMarksStore((prev) => {
-      const existing = prev[key] ?? { marks: 75, status: "Present" as const, remarks: "" };
-      const nextStatus: "Present" | "Absent" = existing.status === "Present" ? "Absent" : "Present";
+      const existing = prev[key] ?? { marks: 75, status: "Present" as AttendanceStatus, remarks: "" };
+      const canScore = ATTENDANCE_STATUS_META[newStatus].canScore;
+      const nextMarks = canScore ? (existing.marks ?? 70) : null;
+      const defaultRemark = ATTENDANCE_STATUS_META[newStatus].defaultRemarks;
       const updated = {
         ...prev,
         [key]: {
           ...existing,
-          status: nextStatus,
-          marks: nextStatus === "Absent" ? null : (existing.marks ?? 70),
+          status: newStatus,
+          marks: nextMarks,
+          remarks: existing.remarks && existing.remarks !== ATTENDANCE_STATUS_META[existing.status]?.defaultRemarks
+            ? existing.remarks
+            : defaultRemark,
         },
       };
       try {
@@ -462,6 +561,33 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
     });
   };
 
+  // Handler: Mark all candidates as Present
+  const handleMarkAllPresent = () => {
+    if (!currentExam) return;
+    setMarksStore((prev) => {
+      const next = { ...prev };
+      examStudents.forEach((stu, i) => {
+        const key = `${currentExam.id}__${stu.id}`;
+        const existing = prev[key];
+        const defaultMarks = existing?.marks ?? (65 + ((i * 7) % 31));
+        next[key] = {
+          marks: defaultMarks,
+          status: "Present",
+          remarks: existing?.remarks || ATTENDANCE_STATUS_META.Present.defaultRemarks,
+        };
+      });
+      try {
+        localStorage.setItem("erp_exam_marks_store_v2", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    toast.success("Attendance Updated", {
+      description: `All ${examStudents.length} candidates marked as Present.`,
+    });
+  };
+
   // Handler: Save Marks batch
   const handleSaveMarks = () => {
     toast.success("Marks Saved & Synchronized", {
@@ -469,18 +595,39 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
     });
   };
 
-  // Handler: Auto-fill demo marks
+  // Handler: Auto-fill demo marks with realistic diversity (Present, Late, Leave, Half Day, Absent)
   const handleAutofillMarks = () => {
     if (!currentExam) return;
     const max = currentExam.max_marks ?? 100;
-    const newEntries: Record<string, { marks: number; status: "Present" | "Absent"; remarks: string }> = {};
+    const newEntries: Record<string, { marks: number | null; status: AttendanceStatus; remarks: string }> = {};
     examStudents.forEach((stu, i) => {
       const key = `${currentExam.id}__${stu.id}`;
-      const score = Math.min(max, Math.round(52 + ((i * 13) % (max - 52))));
+      let status: AttendanceStatus = "Present";
+      let marks: number | null = Math.min(max, Math.round(58 + ((i * 11) % (max - 58))));
+      let remarks = marks >= 85 ? "Consistent excellence across all units." : "Solid grasp of core curriculum.";
+
+      if (i === 1) {
+        status = "Late";
+        marks = Math.min(max, marks - 4);
+        remarks = "Late arrival due to morning transit; late entry pass granted.";
+      } else if (i === 3) {
+        status = "Leave";
+        marks = null;
+        remarks = "Approved medical leave by school clinic · re-test scheduled.";
+      } else if (i === 5) {
+        status = "Half Day";
+        marks = Math.min(max, marks);
+        remarks = "Half day permitted for CBSE inter-school athletics competition.";
+      } else if (i === 7) {
+        status = "Absent";
+        marks = null;
+        remarks = "Unexcused absence from assessment session.";
+      }
+
       newEntries[key] = {
-        marks: score,
-        status: "Present",
-        remarks: score >= 80 ? "Exemplary understanding." : "Regular practice advised.",
+        marks,
+        status,
+        remarks,
       };
     });
     setMarksStore((prev) => {
@@ -492,8 +639,8 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
       }
       return updated;
     });
-    toast.success("Marks populated", {
-      description: `Generated realistic scores for all ${examStudents.length} candidates.`,
+    toast.success("Realistic Marks & Attendance Populated", {
+      description: `Sample data populated with Present, Late, Leave, Half Day & Absent candidates.`,
     });
   };
 
@@ -567,11 +714,11 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
   // Handler: Export Marksheet CSV
   const handleExportMarksheet = () => {
     if (!currentExam) return;
-    const headers = ["Roll No", "USN", "Student Name", "Grade", "Attendance", "Marks Obtained", "Max Marks", "Percentage", "Grade Letter", "Remarks"];
+    const headers = ["Roll No", "USN", "Student Name", "Grade", "Attendance Status", "Marks Obtained", "Max Marks", "Percentage", "Grade Letter", "Remarks"];
     const rows = currentMarksList.map((m) => {
-      const marksVal = m.status === "Absent" ? "Absent" : m.marks ?? 0;
-      const pct = m.marks !== null ? `${Math.round((m.marks / m.maxMarks) * 100)}%` : "—";
-      const letter = m.marks !== null ? getGradeLetter(m.marks, m.maxMarks).letter : "—";
+      const marksVal = m.status === "Leave" ? "Excused" : m.status === "Absent" ? "Absent" : m.marks ?? 0;
+      const pct = m.status === "Leave" ? "Excused" : m.marks !== null ? `${Math.round((m.marks / m.maxMarks) * 100)}%` : "—";
+      const letter = m.status === "Leave" ? "LV" : m.status === "Absent" ? "Ab" : m.marks !== null ? getGradeLetter(m.marks, m.maxMarks).letter : "—";
       return [
         m.rollNo,
         m.usn,
@@ -980,16 +1127,70 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
             </div>
           )}
 
+          {/* Live Attendance Breakdown Bar */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+              flexWrap: "wrap",
+              padding: "10px 16px",
+              background: "var(--bg-raised)",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "8px",
+              marginBottom: "14px",
+              fontSize: "12.5px",
+            }}
+          >
+            <div className="flex items-center gap-3.5 flex-wrap">
+              <span className="font-semibold text-[var(--text-muted)] text-[11px] uppercase tracking-wider">
+                Attendance:
+              </span>
+              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--success)] inline-block" />
+                <strong>{markSheetStats.presentCount}</strong> Present
+              </span>
+              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--warning)] inline-block" />
+                <strong>{markSheetStats.lateCount}</strong> Late
+              </span>
+              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--brand)] inline-block" />
+                <strong>{markSheetStats.leaveCount}</strong> Approved Leave
+              </span>
+              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--violet)] inline-block" />
+                <strong>{markSheetStats.halfDayCount}</strong> Half Day
+              </span>
+              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--danger)] inline-block" />
+                <strong>{markSheetStats.absentCount}</strong> Absent
+              </span>
+            </div>
+
+            <button
+              type="button"
+              className="secondary-button compact"
+              style={{ fontSize: "11.5px", padding: "4px 10px" }}
+              onClick={handleMarkAllPresent}
+              title="Reset all candidates to Present"
+            >
+              <Check size={12} />
+              Mark all Present
+            </button>
+          </div>
+
           {/* Marksheet Table */}
           <div className="table-scroll">
-            <table className="data-table" style={{ minWidth: 800 }}>
+            <table className="data-table" style={{ minWidth: 840 }}>
               <thead>
                 <tr>
                   <th style={{ width: "60px" }}>Roll</th>
                   <th>USN</th>
                   <th>Student Name</th>
-                  <th style={{ width: "110px" }}>Attendance</th>
-                  <th style={{ width: "130px" }}>Marks Obtained</th>
+                  <th style={{ width: "135px" }}>Attendance</th>
+                  <th style={{ width: "135px" }}>Marks Obtained</th>
                   <th style={{ width: "80px" }}>Out of</th>
                   <th style={{ width: "70px" }}>%</th>
                   <th style={{ width: "80px" }}>Grade</th>
@@ -1001,10 +1202,12 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
                   <SkeletonTableRows rows={6} columns={9} />
                 ) : currentMarksList.map((entry) => {
                   const isAbsent = entry.status === "Absent";
+                  const isLeave = entry.status === "Leave";
                   const scoreInfo = entry.marks !== null ? getGradeLetter(entry.marks, entry.maxMarks) : null;
                   const pct = entry.marks !== null ? Math.round((entry.marks / entry.maxMarks) * 100) : 0;
+                  const statusMeta = ATTENDANCE_STATUS_META[entry.status];
                   return (
-                    <tr key={entry.studentId} style={{ opacity: isAbsent ? 0.6 : 1 }}>
+                    <tr key={entry.studentId} style={{ opacity: isAbsent ? 0.65 : 1 }}>
                       <td className="font-mono text-[12px] muted-cell">{entry.rollNo}</td>
                       <td className="font-mono text-[12px] font-medium text-[var(--text-secondary)]">{entry.usn}</td>
                       <td className="font-medium text-[var(--text-primary)]">
@@ -1014,48 +1217,124 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
                         </div>
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className={`tiny-action ${isAbsent ? "" : "done"}`}
-                          onClick={() => handleToggleAttendance(entry.studentId)}
-                          title="Click to toggle Present/Absent"
+                        <select
+                          value={entry.status}
+                          onChange={(e) => handleStatusChange(entry.studentId, e.target.value as AttendanceStatus)}
+                          style={{
+                            padding: "4px 7px",
+                            borderRadius: "6px",
+                            fontSize: "11.5px",
+                            fontWeight: 600,
+                            border: `1px solid ${statusMeta.border}`,
+                            background: statusMeta.bg,
+                            color: statusMeta.color,
+                            cursor: "pointer",
+                            outline: "none",
+                          }}
                         >
-                          {isAbsent ? (
-                            <span className="text-[var(--danger)]">Absent</span>
-                          ) : (
-                            <span className="text-[var(--success)]">Present</span>
-                          )}
-                        </button>
+                          <option value="Present" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
+                            Present
+                          </option>
+                          <option value="Late" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
+                            Late Arrival
+                          </option>
+                          <option value="Leave" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
+                            Approved Leave
+                          </option>
+                          <option value="Half Day" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
+                            Half Day
+                          </option>
+                          <option value="Absent" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
+                            Absent
+                          </option>
+                        </select>
                       </td>
                       <td>
-                        <input
-                          type="number"
-                          min="0"
-                          max={entry.maxMarks}
-                          disabled={isAbsent}
-                          value={entry.marks ?? ""}
-                          onChange={(e) => handleMarkChange(entry.studentId, e.target.value)}
-                          placeholder={isAbsent ? "—" : "0"}
-                          className="erp-marks-input"
-                          style={{
-                            width: "84px",
-                            padding: "5px 8px",
-                            borderRadius: "6px",
-                            background: "var(--bg-input)",
-                            border: "1px solid var(--border)",
-                            color: "var(--text-primary)",
-                            fontSize: "13px",
-                            fontWeight: 600,
-                            textAlign: "center",
-                          }}
-                        />
+                        {isLeave ? (
+                          <span
+                            className="status-pill brand"
+                            style={{ fontSize: "11px", padding: "3px 8px" }}
+                            title="Excused on approved leave — re-test scheduled"
+                          >
+                            Excused
+                          </span>
+                        ) : isAbsent ? (
+                          <span
+                            className="status-pill danger"
+                            style={{ fontSize: "11px", padding: "3px 8px" }}
+                            title="Unexcused absence"
+                          >
+                            Absent
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="0"
+                              max={entry.maxMarks}
+                              value={entry.marks ?? ""}
+                              onChange={(e) => handleMarkChange(entry.studentId, e.target.value)}
+                              placeholder="0"
+                              className="erp-marks-input"
+                              style={{
+                                width: "75px",
+                                padding: "5px 8px",
+                                borderRadius: "6px",
+                                background: "var(--bg-input)",
+                                border: "1px solid var(--border)",
+                                color: "var(--text-primary)",
+                                fontSize: "13px",
+                                fontWeight: 600,
+                                textAlign: "center",
+                              }}
+                            />
+                            {entry.status === "Late" && (
+                              <span
+                                style={{
+                                  fontSize: "10px",
+                                  fontWeight: 700,
+                                  color: "var(--warning)",
+                                  background: "var(--warning-soft)",
+                                  padding: "2px 5px",
+                                  borderRadius: "4px",
+                                }}
+                                title="Candidate arrived late"
+                              >
+                                Late
+                              </span>
+                            )}
+                            {entry.status === "Half Day" && (
+                              <span
+                                style={{
+                                  fontSize: "10px",
+                                  fontWeight: 700,
+                                  color: "var(--violet)",
+                                  background: "var(--violet-soft)",
+                                  padding: "2px 5px",
+                                  borderRadius: "4px",
+                                }}
+                                title="Half day attendance"
+                              >
+                                HD
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="muted-cell text-[12px]">/ {entry.maxMarks}</td>
                       <td className="font-mono text-[12.5px] font-medium">
-                        {isAbsent ? "—" : `${pct}%`}
+                        {isLeave ? (
+                          <span className="text-[var(--brand)] text-[12px]">Excused</span>
+                        ) : isAbsent ? (
+                          <span className="text-[var(--danger)] text-[12px]">0%</span>
+                        ) : (
+                          `${pct}%`
+                        )}
                       </td>
                       <td>
-                        {isAbsent ? (
+                        {isLeave ? (
+                          <span className="status-pill brand">Leave</span>
+                        ) : isAbsent ? (
                           <span className="status-pill neutral">Ab</span>
                         ) : scoreInfo ? (
                           <span className={scoreInfo.badge}>
@@ -1068,7 +1347,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
                       <td>
                         <input
                           type="text"
-                          disabled={isAbsent}
                           value={entry.remarks}
                           onChange={(e) => {
                             const val = e.target.value;
