@@ -792,7 +792,7 @@ async function loadExams(): Promise<Exam[]> {
 }
 
 export function useExamsView() {
-  return useErpView<Exam>("exams", loadExams, mockExams);
+  return useErpView<Exam>("exams", loadExams, []);
 }
 
 async function loadExamResults(): Promise<ExamResult[]> {
@@ -851,7 +851,7 @@ async function loadExamResults(): Promise<ExamResult[]> {
 }
 
 export function useExamResultsView() {
-  return useErpView<ExamResult>("exam_results", loadExamResults, mockExamResults);
+  return useErpView<ExamResult>("exam_results", loadExamResults, []);
 }
 
 async function loadSubjects(): Promise<SubjectRow[]> {
@@ -892,7 +892,7 @@ async function loadSubjects(): Promise<SubjectRow[]> {
 }
 
 export function useSubjectsView() {
-  return useErpView<SubjectRow>("subjects", loadSubjects, mockSubjects);
+  return useErpView<SubjectRow>("subjects", loadSubjects, []);
 }
 
 async function loadSubjectAverages(): Promise<SubjectAverage[]> {
@@ -901,7 +901,7 @@ async function loadSubjectAverages(): Promise<SubjectAverage[]> {
 }
 
 export function useSubjectAveragesView() {
-  return useErpView<SubjectAverage>("subject_averages", loadSubjectAverages, mockSubjectAverages);
+  return useErpView<SubjectAverage>("subject_averages", loadSubjectAverages, []);
 }
 
 async function loadGradeOutcomes(): Promise<{ id: string; grade: string; average: number; attendance: number; change: string }[]> {
@@ -956,13 +956,7 @@ async function loadGradeOutcomes(): Promise<{ id: string; grade: string; average
 }
 
 export function useGradeOutcomesView() {
-  return useErpView("grade_outcomes", loadGradeOutcomes, [
-    { id: "go-1", grade: "Grade 6", average: 84, attendance: 94, change: "+1.4%" },
-    { id: "go-2", grade: "Grade 7", average: 86, attendance: 95, change: "+3.0%" },
-    { id: "go-3", grade: "Grade 8", average: 83, attendance: 93, change: "+0.8%" },
-    { id: "go-4", grade: "Grade 9", average: 88, attendance: 96, change: "+2.1%" },
-    { id: "go-5", grade: "Grade 10", average: 85, attendance: 97, change: "+2.6%" },
-  ]);
+  return useErpView("grade_outcomes", loadGradeOutcomes, []);
 }
 
 async function loadPerformanceTrend(): Promise<PerformanceTrend[]> {
@@ -993,7 +987,7 @@ async function loadPerformanceTrend(): Promise<PerformanceTrend[]> {
 }
 
 export function usePerformanceTrendView() {
-  return useErpView<PerformanceTrend>("performance_trend", loadPerformanceTrend, mockPerformanceTrend);
+  return useErpView<PerformanceTrend>("performance_trend", loadPerformanceTrend, []);
 }
 
 async function loadHealthMetrics(): Promise<HealthMetric[]> {
@@ -1010,14 +1004,14 @@ async function loadHealthMetrics(): Promise<HealthMetric[]> {
   const feePct = num(payload.feePct);
 
   return [
-    { id: "hm-1", label: "Attendance", value: `${attPct}%`, change: "12,234 sessions", progress: attPct, color: "#2f6f68" },
-    { id: "hm-2", label: "Academic average", value: `${avgPct}%`, change: "931 evaluated papers", progress: avgPct, color: "#7662bc" },
+    { id: "hm-1", label: "Attendance", value: `${attPct}%`, change: "", progress: attPct, color: "#2f6f68" },
+    { id: "hm-2", label: "Academic average", value: `${avgPct}%`, change: "", progress: avgPct, color: "#7662bc" },
     { id: "hm-3", label: "Fee collection", value: `${feePct}%`, change: "of billed tuition", progress: feePct, color: "#cf845a" },
   ];
 }
 
 export function useHealthMetricsView() {
-  return useErpView<HealthMetric>("health_metrics", loadHealthMetrics, mockHealthMetrics);
+  return useErpView<HealthMetric>("health_metrics", loadHealthMetrics, []);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1056,7 +1050,7 @@ function hashCode(s: string): number {
 }
 
 export function useAnnouncementsView() {
-  return useErpView<Announcement>("announcements", loadAnnouncements, mockAnnouncements);
+  return useErpView<Announcement>("announcements", loadAnnouncements, []);
 }
 
 async function loadMessages(): Promise<ParentMessage[]> {
@@ -1083,7 +1077,7 @@ async function loadMessages(): Promise<ParentMessage[]> {
 }
 
 export function useMessagesView() {
-  return useErpView<ParentMessage>("messages", loadMessages, mockMessages);
+  return useErpView<ParentMessage>("messages", loadMessages, []);
 }
 
 /**
@@ -1134,7 +1128,7 @@ async function loadNotifications() {
 }
 
 export function useNotificationsView() {
-  return useErpView<NotificationItem>("notifications", loadNotifications, mockNotifications);
+  return useErpView<NotificationItem>("notifications", loadNotifications, []);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1383,15 +1377,15 @@ export function usePeopleView() {
 /* ------------------------------------------------------------------ */
 
 export function useLibraryBooksView() {
-  return useErpView<LibraryBook>("library_books", async () => mockLibraryBooks, mockLibraryBooks);
+  return useErpView<LibraryBook>("library_books", async () => [], []);
 }
 
 export function useScheduleView() {
-  return useErpView<ScheduleItem>("schedule", async () => mockSchedule, mockSchedule);
+  return useErpView<ScheduleItem>("schedule", async () => [], []);
 }
 
 export function useReportExportsView() {
-  return useErpView<ReportExport>("report_exports", async () => mockReportExports, mockReportExports);
+  return useErpView<ReportExport>("report_exports", async () => [], []);
 }
 
 export function useTimetableView(day: string) {

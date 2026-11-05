@@ -252,15 +252,13 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
       }}
     >
       <div
-        className="modal"
+        className="modal modal-responsive"
         style={{
           width: "min(680px, 94vw)",
-          height: "min(720px, 92vh)",
-          minHeight: "min(720px, 92vh)",
           maxHeight: "min(720px, 92vh)",
+          height: "min(720px, 92vh)",
           display: "flex",
           flexDirection: "column",
-          borderRadius: 18,
           overflow: "hidden",
           background: "rgba(20, 21, 26, 0.95)",
           backdropFilter: "blur(36px) saturate(190%)",

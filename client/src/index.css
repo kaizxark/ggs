@@ -1429,6 +1429,14 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .metric-block:nth-child(4) { border-top: 1px solid var(--border); }
 }
 @media (max-width: 946px) {
+  :root {
+    --ui-zoom: 1;
+    --bg-panel: rgba(20, 21, 26, 0.94);
+    --bg-card: rgba(20, 21, 26, 0.92);
+  }
+  html {
+    zoom: 1 !important;
+  }
   .sidebar { width: 246px; transform: translateX(-100%); box-shadow: 10px 0 30px rgba(0,0,0,.5); }
   .sidebar.mobile-open { transform: translateX(0); }
   .sidebar-close-mobile { display: inline-grid; place-items: center; }
@@ -2520,28 +2528,37 @@ html:not(.dark) [data-sonner-toast][data-styled="true"] [data-description] {
   .bar-chart li { grid-template-columns: 1fr auto; }
   .bar-chart li .bar-track { grid-column: 1 / -1; }
   .modal-scrim {
-    padding: 0;
+    padding: 0 !important;
     background: rgba(0, 0, 0, 0.82);
     backdrop-filter: blur(32px) saturate(190%);
     -webkit-backdrop-filter: blur(32px) saturate(190%);
   }
-  /* A phone gets the whole screen, but the sheet must not grow past it: with
-     `height: 100%` the grid row sized itself to the form's content, which put
-     the footer below the viewport with no way to scroll to it. The viewport
-     unit keeps the sheet fixed to the screen so `.modal-body` scrolls, and the
-     footer stays visible. */
-  .modal {
-    max-height: calc(100vh / var(--ui-zoom));
-    height: calc(100vh / var(--ui-zoom));
-    border-radius: 0;
-    border: 0;
+  /* On mobile phones, modals expand into full-viewport sheets so footers are
+     never pushed below the fold and inputs aren't cramped by margins. */
+  .modal,
+  .modal.modal-responsive {
+    max-height: 100dvh !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
     background: rgba(18, 19, 24, 0.96);
     backdrop-filter: blur(40px) saturate(190%);
     -webkit-backdrop-filter: blur(40px) saturate(190%);
   }
-  .modal {
-    max-height: calc(100dvh / var(--ui-zoom));
-    height: calc(100dvh / var(--ui-zoom));
+  .modal-footer {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .form-grid > * {
+    grid-column: 1 / -1 !important;
   }
 }
 
@@ -2572,15 +2589,9 @@ html:not(.dark) [data-sonner-toast][data-styled="true"] [data-description] {
  */
 .drawer-backdrop {
   position: fixed; inset: 0; z-index: 45;
-  background: rgba(3,6,8,.42);
-  /*
-   * Standard property only. The `-webkit-` alias was here "for Safari", and it
-   * cost the effect entirely: current Chrome no longer honours it, and the CSS
-   * minifier treated it as the canonical spelling and dropped the unprefixed
-   * declaration that was the one actually working. The sheet rendered as a flat
-   * dim with no blur at all.
-   */
-  backdrop-filter: blur(4px) saturate(.85);
+  background: rgba(3, 6, 8, 0.72);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   animation: fade-in .22s var(--ease-out) both;
   /* `pointer-events` matter more than paint here: the sheet is invisible, and
      without this the page behind stays clickable straight through the blur. */
@@ -3647,12 +3658,146 @@ html:not(.dark) [data-sonner-toast][data-styled="true"] [data-description] {
   overscroll-behavior: contain;
   border-top: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 24px 24px 0 0;
-  background: rgba(20, 21, 26, 0.94);
+  background: rgba(18, 19, 24, 0.95);
   backdrop-filter: blur(36px) saturate(190%);
   -webkit-backdrop-filter: blur(36px) saturate(190%);
-  padding: 18px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
   box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   animation: staff-sheet-in .32s cubic-bezier(.22, 1, .36, 1);
+}
+
+.staff-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  margin: 0 auto 12px;
+  flex-shrink: 0;
+}
+
+.staff-account-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.staff-account-avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 16px;
+  font-weight: 700;
+  border: 1.5px solid var(--brand-border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.staff-account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.staff-account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.staff-account-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.staff-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--brand-soft);
+  color: var(--brand);
+  border: 1px solid var(--brand-border);
+  width: fit-content;
+}
+.staff-account-email {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono, monospace);
+}
+
+.staff-account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.staff-account-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+.staff-account-action:active {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.staff-account-action-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.staff-account-action-copy strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.staff-account-action-copy small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.staff-account-signout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 16px;
+  margin-top: 16px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: #f87171;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background 0.14s ease;
+}
+.staff-account-signout:active {
+  background: rgba(239, 68, 68, 0.22);
 }
 
 .staff-more-head {

@@ -143,7 +143,6 @@ import {
   useSubjects,
   useTimetable,
   useCurrentUser,
-  mockTimetable,
   type RowId,
   type Settings,
   type Student,
@@ -1892,7 +1891,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                 allStudents.length) *
                 10
             ) / 10
-          : 91.2;
+          : 0;
     return { totalRecords, presentRecords, overallPct };
   }, [classAttendance, allStudents]);
 
@@ -1902,7 +1901,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     [allStudents]
   );
   const cohortAverage = useMemo(() => {
-    if (gradedStudents.length === 0) return 69;
+    if (gradedStudents.length === 0) return 0;
     return Math.round(
       gradedStudents.reduce((sum, s) => sum + s.average, 0) / gradedStudents.length
     );
@@ -1912,7 +1911,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     () => gradedStudents.filter(s => s.average < 50).length,
     [gradedStudents]
   );
-
 
   // Faculty and staffing ratios
   const staffCount = allStaff.length;
@@ -1924,8 +1922,8 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           s.department
         )
     ).length;
-    const count = teachers > 0 ? teachers : Math.min(allStaff.length, 6);
-    return count > 0 ? Math.round(studentCount / count) : 10;
+    const count = teachers > 0 ? teachers : allStaff.length;
+    return count > 0 ? Math.round(studentCount / count) : 0;
   }, [allStaff, studentCount]);
 
   // Financial reconciliation
@@ -2015,7 +2013,15 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           className="overview-metric"
           label="Students enrolled"
           value={studentCount.toLocaleString("en-IN")}
-          comparison="All active"
+          comparison={
+            studentCount > 0
+              ? `${activeStudents.toLocaleString("en-IN")} active${
+                  studentCount > activeStudents
+                    ? ` · ${studentCount - activeStudents} inactive`
+                    : ""
+                }`
+              : "No students on record"
+          }
           icon={GraduationCap}
           trend={false}
           loading={studentsLoading}
@@ -2023,8 +2029,14 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
         <MetricBlock
           className="overview-metric"
           label="Attendance rate"
-          value={`${termAttendanceStats.overallPct}%`}
-          comparison="Term average"
+          value={termAttendanceStats.overallPct > 0 ? `${termAttendanceStats.overallPct}%` : "—"}
+          comparison={
+            termAttendanceStats.totalRecords > 0
+              ? "Term average"
+              : allStudents.length > 0
+                ? "Student average"
+                : "No attendance recorded"
+          }
           icon={ClipboardCheck}
           trend={false}
           loading={attendanceChartLoading}
@@ -2033,7 +2045,11 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           className="overview-metric"
           label="Academic standing"
           value={cohortAverage > 0 ? `${cohortAverage}%` : "—"}
-          comparison="Cohort average"
+          comparison={
+            cohortAverage > 0
+              ? `${gradedStudents.length} pupils evaluated`
+              : "No exam marks recorded"
+          }
           icon={BookOpen}
           trend={false}
           loading={studentsListLoading}
@@ -2053,7 +2069,11 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
             className="overview-metric"
             label="Faculty & staff"
             value={staffCount.toLocaleString("en-IN")}
-            comparison={`${studentTeacherRatio}:1 ratio`}
+            comparison={
+              studentTeacherRatio > 0
+                ? `${studentTeacherRatio}:1 ratio`
+                : `${staffCount} on roster`
+            }
             icon={Users}
             trend={false}
             loading={staffLoading}
@@ -2108,6 +2128,11 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           <div className="chart-wrap">
             {attendanceChartLoading ? (
               <SkeletonChart height={250} variant="area" />
+            ) : attendanceData.length === 0 ? (
+              <div className="empty-state px-5 py-14">
+                <ClipboardCheck size={22} />
+                No daily attendance logs recorded yet.
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
                 <AreaChart
@@ -2453,25 +2478,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
       }
     }
 
-    if (!list.length) {
-      return [
-        { id: "ca-1", label: "Grade 6 — A", grade: "Grade 6", section: "A", teacher: "Neha Kulkarni" },
-        { id: "ca-2", label: "Grade 6 — B", grade: "Grade 6", section: "B", teacher: "Ravi Menon" },
-        { id: "ca-3", label: "Grade 7 — A", grade: "Grade 7", section: "A", teacher: "Sonia Joseph" },
-        { id: "ca-4", label: "Grade 7 — B", grade: "Grade 7", section: "B", teacher: "Arvind Iyer" },
-        { id: "ca-5", label: "Grade 8 — A", grade: "Grade 8", section: "A", teacher: "Meera Shah" },
-        { id: "ca-6", label: "Grade 8 — B", grade: "Grade 8", section: "B", teacher: "Daniel Thomas" },
-        { id: "ca-7", label: "Grade 9 — A", grade: "Grade 9", section: "A", teacher: "Karthik Rao" },
-        { id: "ca-8", label: "Grade 9 — B", grade: "Grade 9", section: "B", teacher: "Priya Nair" },
-        { id: "ca-9", label: "Grade 10 — A", grade: "Grade 10", section: "A", teacher: "Rohan Mehta" },
-        { id: "ca-10", label: "Grade 10 — B", grade: "Grade 10", section: "B", teacher: "Ananya Sen" },
-      ];
-    }
     return list;
   }, [classAttendance, enrolledStudents]);
 
   const [selectedClassId, setSelectedClassId] = useState<string>(() => {
-    return availableClasses[0]?.id || "ca-1";
+    return availableClasses[0]?.id || "";
   });
 
   const currentClass = useMemo(() => {
@@ -2515,27 +2526,29 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   // Timetable integration
   const classPeriods = useMemo(() => {
     if (!currentClass) return [];
-    const entries = mockTimetable.filter(t => t.day === dayOfWeek);
-    const gradeNum = currentClass.grade.replace(/[^0-9]/g, "");
-    const gradeKey = `grade_${gradeNum}` as keyof (typeof entries)[0];
-
-    return entries.map(entry => {
-      const subject = (entry as Record<string, string>)[gradeKey] || "General Roll Call";
-      return {
-        id: entry.id,
-        period: entry.period,
-        time: entry.time,
-        subject,
-      };
-    });
-  }, [dayOfWeek, currentClass]);
+    const periods = [
+      { period: "Period 1", time: "08:45 – 09:30", subject: "Roll Call & Assembly" },
+      { period: "Period 2", time: "09:30 – 10:15", subject: "Core Subject" },
+      { period: "Period 3", time: "10:30 – 11:15", subject: "Core Subject" },
+      { period: "Period 4", time: "11:15 – 12:00", subject: "Core Subject" },
+      { period: "Period 5", time: "12:45 – 01:30", subject: "Lab / Practical" },
+      { period: "Period 6", time: "01:30 – 02:15", subject: "Language" },
+      { period: "Period 7", time: "02:30 – 03:15", subject: "Activities & Sports" },
+    ];
+    return periods.map(p => ({
+      id: `${currentClass.id}-${p.period}`,
+      period: p.period,
+      time: p.time,
+      subject: p.subject,
+    }));
+  }, [currentClass]);
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>("Period 1");
 
-  // Roster of students for selected class
+  // Roster of students for selected class — strictly 100% real enrolled pupils
   const classStudents = useMemo(() => {
     if (!currentClass) return [];
-    const matched = enrolledStudents.filter(s => {
+    return enrolledStudents.filter(s => {
       if (!s.grade || !s.section) return false;
       const sGrade = s.grade.toLowerCase().replace(/\s+/g, "");
       const cGrade = currentClass.grade.toLowerCase().replace(/\s+/g, "");
@@ -2543,49 +2556,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
       const cSec = currentClass.section.toLowerCase().trim();
       return sGrade === cGrade && sSec === cSec;
     });
-
-    if (matched.length >= 10) {
-      return matched;
-    }
-
-    const fallbackPupils = [
-      "Aarav Mehta", "Vihaan Kapoor", "Ishita Nair", "Ananya Rao", "Kabir Malhotra",
-      "Mira Thomas", "Arjun Menon", "Sara Fernandes", "Dev Sharma", "Priya Patel",
-      "Rohan Varma", "Riya Sen", "Aryan Joshi", "Tanvi Bhat", "Yash Singhal",
-      "Pooja Hegde", "Aditya Kulkarni", "Sneha Reddy", "Siddharth Nair", "Megha Roy",
-      "Karan Johar", "Avani Deshmukh", "Nikhil Pillai", "Diya Mukherjee", "Manish Pandey",
-      "Kavya Iyer", "Gautam Gambhir", "Shreya Ghoshal"
-    ];
-
-    const existingIds = new Set(matched.map(m => m.id));
-    const fullList = [...matched];
-    const prefix = currentClass.grade.replace(/[^0-9]/g, "") || "6";
-    const sec = currentClass.section || "A";
-
-    fallbackPupils.forEach((name, idx) => {
-      if (fullList.length >= 28) return;
-      const id = `GKS-${prefix}${sec}-${String(idx + 1).padStart(3, "0")}`;
-      if (!existingIds.has(id)) {
-        const initials = name.split(" ").map(p => p[0]).join("").toUpperCase();
-        fullList.push({
-          id,
-          name,
-          initials,
-          grade: currentClass.grade,
-          section: currentClass.section,
-          attendance: 91 + (idx % 8),
-          attendance_records: 48,
-          average: 82 + (idx % 16),
-          scored_papers: 5,
-          fees: idx % 5 === 0 ? "Due" : "Paid",
-          status: "Active",
-          tone: ["teal", "violet", "amber", "blue", "rose", "indigo"][idx % 6],
-          usn: id,
-        } as Student);
-      }
-    });
-
-    return fullList;
   }, [currentClass, enrolledStudents]);
 
   // Attendance state map: student_id -> { status, notes }
@@ -4093,14 +4063,12 @@ function StaffView({
               value={`${onCampus}`}
               comparison={`of ${staff.length} total staff`}
               icon={Users}
-              spark={[18, 20, 18, 25, 24, 28, 30]}
             />
             <MetricBlock
               label="On leave"
               value={`${staff.length - onCampus}`}
               comparison="Approved leave requests"
               icon={CalendarDays}
-              spark={[27, 25, 24, 23, 21, 20, 18]}
               positive={false}
             />
             <MetricBlock
@@ -4108,7 +4076,6 @@ function StaffView({
               value={`${staff.length}`}
               comparison="Full teaching & administrative roster"
               icon={GraduationCap}
-              spark={[11, 13, 12, 15, 14, 17, 19]}
             />
           </>
         )}
@@ -4346,6 +4313,16 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
   const pageWeek = weekPager.pageRows;
   const { rows: subjects } = useSubjects();
   const { rows: staffMembers } = useStaff();
+  const { rows: exams } = useExams();
+  const teachersCount = useMemo(() => {
+    return staffMembers.filter(
+      s =>
+        /teacher|faculty|instructor/i.test(s.role) ||
+        /languages|science|mathematics|english|social|sports|computer/i.test(
+          s.department
+        )
+    ).length;
+  }, [staffMembers]);
   return (
     <div className="page-stack">
       <div className="page-intro">
@@ -4376,31 +4353,27 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
       <div className="metric-grid">
         <MetricBlock
           label="Subjects offered"
-          value={String(subjects.length || 14)}
-          comparison="All active"
+          value={String(subjects.length)}
+          comparison={`${subjects.length} active curriculum areas`}
           icon={BookOpen}
-          spark={[10, 11, 11, 12, 13, 13, 14]}
         />
         <MetricBlock
           label="Periods scheduled"
-          value={String(week.length || 32)}
-          comparison={`For ${days[dayIndex]}`}
+          value={String(week.length)}
+          comparison={week.length > 0 ? `For ${days[dayIndex]}` : "No periods scheduled"}
           icon={Clock3}
-          spark={[26, 28, 27, 30, 29, 31, 32]}
         />
         <MetricBlock
           label="Teaching staff"
-          value={String(staffMembers.length || 10)}
-          comparison="Active educators"
+          value={String(teachersCount || staffMembers.length)}
+          comparison={`${staffMembers.length} total staff`}
           icon={Users}
-          spark={[42, 43, 44, 43, 45, 46, 46]}
         />
         <MetricBlock
-          label="Syllabus covered"
-          value="64%"
-          comparison="On schedule"
+          label="Examinations"
+          value={String(exams.length)}
+          comparison={exams.length > 0 ? `${exams.filter(e => e.status === "Published").length} published` : "No exams scheduled"}
           icon={GraduationCap}
-          spark={[41, 45, 49, 54, 57, 61, 64]}
         />
       </div>
       <section className="panel">
@@ -7538,6 +7511,8 @@ export default function Home() {
           isExecutive={isAdminUser}
           initials={userInitials}
           photoUrl={currentUser?.avatarUrl ?? null}
+          email={currentUser?.email}
+          username={currentUser?.username}
           activeView={activeView}
           primaryItems={staffMobileTabs}
           navGroups={staffMobileGroups}

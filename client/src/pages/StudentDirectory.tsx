@@ -1536,15 +1536,13 @@ function StudentDialog({
       }}
     >
       <div
-        className="modal"
+        className="modal modal-responsive"
         style={{
           width: "min(720px, 94vw)",
-          height: "min(680px, 90vh)",
-          minHeight: "min(680px, 90vh)",
-          maxHeight: "min(680px, 90vh)",
+          maxHeight: "min(720px, 92vh)",
+          height: "min(700px, 92vh)",
           display: "flex",
           flexDirection: "column",
-          borderRadius: 18,
           overflow: "hidden",
           background: "rgba(20, 21, 26, 0.94)",
           backdropFilter: "blur(36px) saturate(190%)",
