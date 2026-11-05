@@ -28,6 +28,7 @@ import {
   type Invoice,
   type StaffMember,
 } from "../lib/erp-views";
+import { getAnnualFeeForGrade } from "../lib/school-data";
 
 export interface ReportsViewProps {
   onBack: () => void;
@@ -145,9 +146,10 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       });
     } else {
       students.forEach((s) => {
-        const pending = s.fees?.toLowerCase() !== "paid" ? 18500 : 0;
-        totalAssessed += 45000;
-        totalCollected += 45000 - pending;
+        const annualFee = getAnnualFeeForGrade(s.grade || "10");
+        const pending = s.fees?.toLowerCase() !== "paid" ? 15000 : 0;
+        totalAssessed += annualFee;
+        totalCollected += annualFee - pending;
         if (pending > 0) {
           totalPending += pending;
           defaulterCount++;
@@ -158,8 +160,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
     return {
       totalAssessed,
       totalCollected,
-      totalPending: totalPending || 248500,
-      defaulterCount: defaulterCount || 14,
+      totalPending,
+      defaulterCount,
     };
   }, [invoices, students]);
 
@@ -197,7 +199,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
     students.forEach((s) => {
       if (s.grade) set.add(s.grade);
     });
-    return Array.from(set).sort();
+    const arr = Array.from(set).sort();
+    return arr.length > 0 ? arr : ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
   }, [students]);
 
   // Export Handlers
@@ -214,8 +217,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
     ];
     const rows = students.map((s) => {
       const isPaid = s.fees?.toLowerCase() === "paid";
-      const total = 45000;
-      const due = isPaid ? 0 : 18500;
+      const total = getAnnualFeeForGrade(s.grade || "10");
+      const due = isPaid ? 0 : 15000;
       const paid = total - due;
       return [
         s.usn || `STU-${s.id}`,
@@ -745,14 +748,16 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                       })
                       .map((s) => {
                         const isPaid = s.fees?.toLowerCase() === "paid";
-                        const due = isPaid ? 0 : 18500;
+                        const total = getAnnualFeeForGrade(s.grade || "10");
+                        const due = isPaid ? 0 : 15000;
+                        const paid = total - due;
                         return (
                           <tr key={s.id}>
                             <td className="font-mono text-xs text-[var(--brand)]">{s.usn || `STU-${s.id}`}</td>
                             <td className="font-semibold text-[var(--text-primary)]">{s.name}</td>
                             <td>{s.grade || "10"} - {s.section || "A"}</td>
-                            <td>₹45,000</td>
-                            <td className="text-emerald-400">₹{isPaid ? "45,000" : "26,500"}</td>
+                            <td>₹{total.toLocaleString("en-IN")}</td>
+                            <td className="text-emerald-400">₹{paid.toLocaleString("en-IN")}</td>
                             <td className={due > 0 ? "text-amber-400 font-semibold" : "text-[var(--text-muted)]"}>
                               {due > 0 ? `₹${due.toLocaleString("en-IN")}` : "₹0"}
                             </td>
@@ -1052,7 +1057,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                   className="w-full text-xs py-2 px-3 rounded-lg bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-[var(--brand)]"
                   defaultValue="all"
                 >
-                  <option value="all">All Enrolled Classes (Grade 1–10)</option>
+                  <option value="all">All Enrolled Classes (Grade 6–10)</option>
                   {availableGrades.map((g) => (
                     <option key={g} value={g}>
                       {g}

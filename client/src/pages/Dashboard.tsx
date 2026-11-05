@@ -2455,12 +2455,16 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
 
     if (!list.length) {
       return [
-        { id: "ca-1", label: "Grade 5 — A", grade: "Grade 5", section: "A", teacher: "Neha Kulkarni" },
-        { id: "ca-2", label: "Grade 6 — C", grade: "Grade 6", section: "C", teacher: "Ravi Menon" },
-        { id: "ca-3", label: "Grade 7 — B", grade: "Grade 7", section: "B", teacher: "Sonia Joseph" },
-        { id: "ca-4", label: "Grade 8 — B", grade: "Grade 8", section: "B", teacher: "Arvind Iyer" },
-        { id: "ca-5", label: "Grade 10 — A", grade: "Grade 10", section: "A", teacher: "Meera Shah" },
-        { id: "ca-6", label: "Grade 12 — A", grade: "Grade 12", section: "A", teacher: "Daniel Thomas" },
+        { id: "ca-1", label: "Grade 6 — A", grade: "Grade 6", section: "A", teacher: "Neha Kulkarni" },
+        { id: "ca-2", label: "Grade 6 — B", grade: "Grade 6", section: "B", teacher: "Ravi Menon" },
+        { id: "ca-3", label: "Grade 7 — A", grade: "Grade 7", section: "A", teacher: "Sonia Joseph" },
+        { id: "ca-4", label: "Grade 7 — B", grade: "Grade 7", section: "B", teacher: "Arvind Iyer" },
+        { id: "ca-5", label: "Grade 8 — A", grade: "Grade 8", section: "A", teacher: "Meera Shah" },
+        { id: "ca-6", label: "Grade 8 — B", grade: "Grade 8", section: "B", teacher: "Daniel Thomas" },
+        { id: "ca-7", label: "Grade 9 — A", grade: "Grade 9", section: "A", teacher: "Karthik Rao" },
+        { id: "ca-8", label: "Grade 9 — B", grade: "Grade 9", section: "B", teacher: "Priya Nair" },
+        { id: "ca-9", label: "Grade 10 — A", grade: "Grade 10", section: "A", teacher: "Rohan Mehta" },
+        { id: "ca-10", label: "Grade 10 — B", grade: "Grade 10", section: "B", teacher: "Ananya Sen" },
       ];
     }
     return list;
@@ -3802,6 +3806,9 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 placeholder="₹ 15,000"
               />
+              <span className="text-[11px] text-[var(--text-muted)] mt-1 block">
+                Minimum installment amount is ₹15,000.
+              </span>
             </label>
 
             <label>
@@ -3849,13 +3856,20 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   toast.error("Student required", { description: "Please search and select a student to record fee payment." });
                   return;
                 }
+                const numAmount = Number(String(paymentAmount || "").replace(/[^0-9.]/g, ""));
+                if (!numAmount || numAmount < 15000) {
+                  toast.error("Minimum amount is ₹15,000", {
+                    description: "School fee payment policy requires a minimum of ₹15,000 per installment.",
+                  });
+                  return;
+                }
                 const targetName = recordStudent?.name || studentSearchQuery;
                 setShowDialog(false);
                 setRecordStudent(null);
                 setStudentSearchQuery("");
                 setPaymentAmount("");
                 toast.success("Payment recorded", {
-                  description: `₹${paymentAmount || "15,000"} successfully recorded for ${targetName} via ${paymentMethod}.`,
+                  description: `₹${numAmount.toLocaleString("en-IN")} successfully recorded for ${targetName} via ${paymentMethod}.`,
                 });
               }}
             >
@@ -4392,7 +4406,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">{days[dayIndex]} · Grades 6 to 9</h2>
+            <h2 className="panel-title">{days[dayIndex]} · Grades 6 to 10</h2>
           </div>
           <SegmentedControl
             ariaLabel="Select timetable day"
@@ -4415,11 +4429,12 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
                 <th>Grade 7</th>
                 <th>Grade 8</th>
                 <th>Grade 9</th>
+                <th>Grade 10</th>
               </tr>
             </thead>
             <tbody>
               {weekLoading ? (
-                <SkeletonTableRows rows={6} columns={6} />
+                <SkeletonTableRows rows={6} columns={7} />
               ) : (
                 pageWeek.map(row => (
                   <tr key={`${row.day}-${row.period}`}>
@@ -4427,7 +4442,7 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
                       {row.period}
                     </td>
                     <td className="muted-cell">{row.time}</td>
-                    {[row.grade_6, row.grade_7, row.grade_8, row.grade_9].map(
+                    {[row.grade_6, row.grade_7, row.grade_8, row.grade_9, row.grade_10 || "Study Hall"].map(
                       (subject, gradeIndex) => (
                         <td key={gradeIndex}>
                           <span className="grade-chip">{subject}</span>

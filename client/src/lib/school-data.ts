@@ -36,20 +36,22 @@ export const mockAttendanceData = [
 export const mockStudents = [
   { id: "GKS-24081", name: "Aarav Mehta", initials: "AM", grade: "Grade 8", section: "B", attendance: 97, average: 91, fees: "Paid", status: "Active", tone: "teal" },
   { id: "GKS-23819", name: "Ishita Nair", initials: "IN", grade: "Grade 10", section: "A", attendance: 94, average: 88, fees: "Paid", status: "Active", tone: "violet" },
-  { id: "GKS-24211", name: "Vihaan Kapoor", initials: "VK", grade: "Grade 6", section: "C", attendance: 89, average: 82, fees: "Due", status: "Review", tone: "amber" },
-  { id: "GKS-23104", name: "Ananya Rao", initials: "AR", grade: "Grade 12", section: "A", attendance: 98, average: 95, fees: "Paid", status: "Active", tone: "rose" },
-  { id: "GKS-23998", name: "Kabir Malhotra", initials: "KM", grade: "Grade 9", section: "D", attendance: 92, average: 86, fees: "Paid", status: "Active", tone: "blue" },
-  { id: "GKS-24306", name: "Mira Thomas", initials: "MT", grade: "Grade 5", section: "A", attendance: 86, average: 79, fees: "Due", status: "Review", tone: "orange" },
-  { id: "GKS-23277", name: "Arjun Menon", initials: "AM", grade: "Grade 11", section: "C", attendance: 96, average: 90, fees: "Paid", status: "Active", tone: "indigo" },
+  { id: "GKS-24211", name: "Vihaan Kapoor", initials: "VK", grade: "Grade 6", section: "B", attendance: 89, average: 82, fees: "Due", status: "Review", tone: "amber" },
+  { id: "GKS-23104", name: "Ananya Rao", initials: "AR", grade: "Grade 6", section: "A", attendance: 98, average: 95, fees: "Paid", status: "Active", tone: "rose" },
+  { id: "GKS-23998", name: "Kabir Malhotra", initials: "KM", grade: "Grade 9", section: "B", attendance: 92, average: 86, fees: "Paid", status: "Active", tone: "blue" },
+  { id: "GKS-24306", name: "Mira Thomas", initials: "MT", grade: "Grade 7", section: "A", attendance: 86, average: 79, fees: "Due", status: "Review", tone: "orange" },
+  { id: "GKS-23277", name: "Arjun Menon", initials: "AM", grade: "Grade 9", section: "A", attendance: 96, average: 90, fees: "Paid", status: "Active", tone: "indigo" },
   { id: "GKS-24170", name: "Sara Fernandes", initials: "SF", grade: "Grade 7", section: "B", attendance: 93, average: 87, fees: "Paid", status: "Active", tone: "pink" },
+  { id: "GKS-24401", name: "Rohan Verma", initials: "RV", grade: "Grade 8", section: "A", attendance: 95, average: 89, fees: "Due", status: "Active", tone: "emerald" },
+  { id: "GKS-24512", name: "Tanvi Deshmukh", initials: "TD", grade: "Grade 10", section: "B", attendance: 99, average: 94, fees: "Paid", status: "Active", tone: "cyan" },
 ];
 
 export const mockSchedule = [
   { id: "s1", time: "09:00", subject: "Mathematics", detail: "Grade 8 · Room 204", color: "#2f6f68" },
-  { id: "s2", time: "10:00", subject: "Physics", detail: "Grade 11 · Lab 1", color: "#7c63c8" },
+  { id: "s2", time: "10:00", subject: "Physics", detail: "Grade 10 · Lab 1", color: "#7c63c8" },
   { id: "s3", time: "11:00", subject: "English Literature", detail: "Grade 9 · Room 118", color: "#cf845a" },
   { id: "s4", time: "12:00", subject: "Lunch break", detail: "Campus-wide", color: "#9aa09f" },
-  { id: "s5", time: "13:00", subject: "Chemistry", detail: "Grade 12 · Lab 2", color: "#3b82b4" },
+  { id: "s5", time: "13:00", subject: "Chemistry", detail: "Grade 10 · Lab 2", color: "#3b82b4" },
 ];
 
 export type ActivityCategory = "general" | "operation" | "library";
@@ -89,12 +91,16 @@ export const mockRevenueData = [
 ];
 
 export const mockClassAttendance = [
-  { id: "ca-1", label: "Grade 5 — A", value: 97, present: 31, total: 32, teacher: "Neha Kulkarni" },
-  { id: "ca-2", label: "Grade 6 — C", value: 89, present: 28, total: 32, teacher: "Ravi Menon" },
-  { id: "ca-3", label: "Grade 7 — B", value: 95, present: 30, total: 32, teacher: "Sonia Joseph" },
-  { id: "ca-4", label: "Grade 8 — B", value: 94, present: 29, total: 31, teacher: "Arvind Iyer" },
-  { id: "ca-5", label: "Grade 10 — A", value: 98, present: 30, total: 31, teacher: "Meera Shah" },
-  { id: "ca-6", label: "Grade 12 — A", value: 96, present: 29, total: 30, teacher: "Daniel Thomas" },
+  { id: "ca-1", label: "Grade 6 — A", value: 97, present: 31, total: 32, teacher: "Neha Kulkarni" },
+  { id: "ca-2", label: "Grade 6 — B", value: 89, present: 28, total: 32, teacher: "Ravi Menon" },
+  { id: "ca-3", label: "Grade 7 — A", value: 95, present: 30, total: 32, teacher: "Sonia Joseph" },
+  { id: "ca-4", label: "Grade 7 — B", value: 94, present: 29, total: 31, teacher: "Arvind Iyer" },
+  { id: "ca-5", label: "Grade 8 — A", value: 98, present: 30, total: 31, teacher: "Meera Shah" },
+  { id: "ca-6", label: "Grade 8 — B", value: 96, present: 29, total: 30, teacher: "Daniel Thomas" },
+  { id: "ca-7", label: "Grade 9 — A", value: 94, present: 28, total: 30, teacher: "Karthik Rao" },
+  { id: "ca-8", label: "Grade 9 — B", value: 95, present: 29, total: 30, teacher: "Priya Nair" },
+  { id: "ca-9", label: "Grade 10 — A", value: 97, present: 30, total: 31, teacher: "Rohan Mehta" },
+  { id: "ca-10", label: "Grade 10 — B", value: 96, present: 29, total: 30, teacher: "Ananya Sen" },
 ];
 
 export const avatarTones: Record<string, string> = {
@@ -121,71 +127,71 @@ export const mockStaff = [
 
 export const mockTimetable = [
   // Monday
-  { id: "tt-mon-1", day: "Monday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Mathematics", grade_7: "English", grade_8: "Physics", grade_9: "Chemistry" },
-  { id: "tt-mon-2", day: "Monday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Science", grade_7: "Mathematics", grade_8: "English", grade_9: "History" },
-  { id: "tt-mon-3", day: "Monday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Hindi", grade_7: "Physics", grade_8: "Mathematics", grade_9: "English" },
-  { id: "tt-mon-4", day: "Monday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Computer Science", grade_7: "Chemistry", grade_8: "Biology", grade_9: "Mathematics" },
-  { id: "tt-mon-5", day: "Monday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Art", grade_7: "Sports", grade_8: "Music", grade_9: "Library" },
-  { id: "tt-mon-6", day: "Monday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Social Studies", grade_7: "Biology", grade_8: "Chemistry", grade_9: "Physics" },
+  { id: "tt-mon-1", day: "Monday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Mathematics", grade_7: "English", grade_8: "Physics", grade_9: "Chemistry", grade_10: "Mathematics" },
+  { id: "tt-mon-2", day: "Monday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Science", grade_7: "Mathematics", grade_8: "English", grade_9: "History", grade_10: "Physics" },
+  { id: "tt-mon-3", day: "Monday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Hindi", grade_7: "Physics", grade_8: "Mathematics", grade_9: "English", grade_10: "Chemistry" },
+  { id: "tt-mon-4", day: "Monday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Computer Science", grade_7: "Chemistry", grade_8: "Biology", grade_9: "Mathematics", grade_10: "Biology" },
+  { id: "tt-mon-5", day: "Monday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Art", grade_7: "Sports", grade_8: "Music", grade_9: "Library", grade_10: "Computer Science" },
+  { id: "tt-mon-6", day: "Monday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Social Studies", grade_7: "Biology", grade_8: "Chemistry", grade_9: "Physics", grade_10: "English" },
   // Tuesday
-  { id: "tt-tue-1", day: "Tuesday", period: "Period 1", time: "08:00 – 08:45", grade_6: "English", grade_7: "Physics", grade_8: "Chemistry", grade_9: "Mathematics" },
-  { id: "tt-tue-2", day: "Tuesday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Mathematics", grade_7: "English", grade_8: "History", grade_9: "Science" },
-  { id: "tt-tue-3", day: "Tuesday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Physics", grade_7: "Mathematics", grade_8: "English", grade_9: "Hindi" },
-  { id: "tt-tue-4", day: "Tuesday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Chemistry", grade_7: "Biology", grade_8: "Mathematics", grade_9: "Computer Science" },
-  { id: "tt-tue-5", day: "Tuesday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Sports", grade_7: "Music", grade_8: "Library", grade_9: "Art" },
-  { id: "tt-tue-6", day: "Tuesday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Biology", grade_7: "Chemistry", grade_8: "Physics", grade_9: "Social Studies" },
+  { id: "tt-tue-1", day: "Tuesday", period: "Period 1", time: "08:00 – 08:45", grade_6: "English", grade_7: "Physics", grade_8: "Chemistry", grade_9: "Mathematics", grade_10: "Physics" },
+  { id: "tt-tue-2", day: "Tuesday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Mathematics", grade_7: "English", grade_8: "History", grade_9: "Science", grade_10: "Mathematics" },
+  { id: "tt-tue-3", day: "Tuesday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Physics", grade_7: "Mathematics", grade_8: "English", grade_9: "Hindi", grade_10: "Chemistry" },
+  { id: "tt-tue-4", day: "Tuesday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Chemistry", grade_7: "Biology", grade_8: "Mathematics", grade_9: "Computer Science", grade_10: "Biology" },
+  { id: "tt-tue-5", day: "Tuesday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Sports", grade_7: "Music", grade_8: "Library", grade_9: "Art", grade_10: "English" },
+  { id: "tt-tue-6", day: "Tuesday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Biology", grade_7: "Chemistry", grade_8: "Physics", grade_9: "Social Studies", grade_10: "History" },
   // Wednesday
-  { id: "tt-wed-1", day: "Wednesday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Physics", grade_7: "Chemistry", grade_8: "Mathematics", grade_9: "English" },
-  { id: "tt-wed-2", day: "Wednesday", period: "Period 2", time: "08:45 – 09:30", grade_6: "English", grade_7: "History", grade_8: "Science", grade_9: "Mathematics" },
-  { id: "tt-wed-3", day: "Wednesday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Mathematics", grade_7: "English", grade_8: "Hindi", grade_9: "Physics" },
-  { id: "tt-wed-4", day: "Wednesday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Biology", grade_7: "Mathematics", grade_8: "Computer Science", grade_9: "Chemistry" },
-  { id: "tt-wed-5", day: "Wednesday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Music", grade_7: "Library", grade_8: "Art", grade_9: "Sports" },
-  { id: "tt-wed-6", day: "Wednesday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Chemistry", grade_7: "Physics", grade_8: "Social Studies", grade_9: "Biology" },
+  { id: "tt-wed-1", day: "Wednesday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Physics", grade_7: "Chemistry", grade_8: "Mathematics", grade_9: "English", grade_10: "Chemistry" },
+  { id: "tt-wed-2", day: "Wednesday", period: "Period 2", time: "08:45 – 09:30", grade_6: "English", grade_7: "History", grade_8: "Science", grade_9: "Mathematics", grade_10: "Physics" },
+  { id: "tt-wed-3", day: "Wednesday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Mathematics", grade_7: "English", grade_8: "Hindi", grade_9: "Physics", grade_10: "Mathematics" },
+  { id: "tt-wed-4", day: "Wednesday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Biology", grade_7: "Mathematics", grade_8: "Computer Science", grade_9: "Chemistry", grade_10: "Biology" },
+  { id: "tt-wed-5", day: "Wednesday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Music", grade_7: "Library", grade_8: "Art", grade_9: "Sports", grade_10: "Library" },
+  { id: "tt-wed-6", day: "Wednesday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Chemistry", grade_7: "Physics", grade_8: "Social Studies", grade_9: "Biology", grade_10: "Computer Science" },
   // Thursday
-  { id: "tt-thu-1", day: "Thursday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Chemistry", grade_7: "Mathematics", grade_8: "English", grade_9: "Physics" },
-  { id: "tt-thu-2", day: "Thursday", period: "Period 2", time: "08:45 – 09:30", grade_6: "History", grade_7: "Science", grade_8: "Mathematics", grade_9: "English" },
-  { id: "tt-thu-3", day: "Thursday", period: "Period 3", time: "09:30 – 10:15", grade_6: "English", grade_7: "Hindi", grade_8: "Physics", grade_9: "Mathematics" },
-  { id: "tt-thu-4", day: "Thursday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Mathematics", grade_7: "Computer Science", grade_8: "Chemistry", grade_9: "Biology" },
-  { id: "tt-thu-5", day: "Thursday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Library", grade_7: "Art", grade_8: "Sports", grade_9: "Music" },
-  { id: "tt-thu-6", day: "Thursday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Physics", grade_7: "Social Studies", grade_8: "Biology", grade_9: "Chemistry" },
+  { id: "tt-thu-1", day: "Thursday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Chemistry", grade_7: "Mathematics", grade_8: "English", grade_9: "Physics", grade_10: "Mathematics" },
+  { id: "tt-thu-2", day: "Thursday", period: "Period 2", time: "08:45 – 09:30", grade_6: "History", grade_7: "Science", grade_8: "Mathematics", grade_9: "English", grade_10: "Physics" },
+  { id: "tt-thu-3", day: "Thursday", period: "Period 3", time: "09:30 – 10:15", grade_6: "English", grade_7: "Hindi", grade_8: "Physics", grade_9: "Mathematics", grade_10: "Chemistry" },
+  { id: "tt-thu-4", day: "Thursday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Mathematics", grade_7: "Computer Science", grade_8: "Chemistry", grade_9: "Biology", grade_10: "Biology" },
+  { id: "tt-thu-5", day: "Thursday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Library", grade_7: "Art", grade_8: "Sports", grade_9: "Music", grade_10: "Sports" },
+  { id: "tt-thu-6", day: "Thursday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Physics", grade_7: "Social Studies", grade_8: "Biology", grade_9: "Chemistry", grade_10: "Social Studies" },
   // Friday (rotation repeats every 4 days)
-  { id: "tt-fri-1", day: "Friday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Mathematics", grade_7: "English", grade_8: "Physics", grade_9: "Chemistry" },
-  { id: "tt-fri-2", day: "Friday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Science", grade_7: "Mathematics", grade_8: "English", grade_9: "History" },
-  { id: "tt-fri-3", day: "Friday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Hindi", grade_7: "Physics", grade_8: "Mathematics", grade_9: "English" },
-  { id: "tt-fri-4", day: "Friday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Computer Science", grade_7: "Chemistry", grade_8: "Biology", grade_9: "Mathematics" },
-  { id: "tt-fri-5", day: "Friday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Art", grade_7: "Sports", grade_8: "Music", grade_9: "Library" },
-  { id: "tt-fri-6", day: "Friday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Social Studies", grade_7: "Biology", grade_8: "Chemistry", grade_9: "Physics" },
+  { id: "tt-fri-1", day: "Friday", period: "Period 1", time: "08:00 – 08:45", grade_6: "Mathematics", grade_7: "English", grade_8: "Physics", grade_9: "Chemistry", grade_10: "Mathematics" },
+  { id: "tt-fri-2", day: "Friday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Science", grade_7: "Mathematics", grade_8: "English", grade_9: "History", grade_10: "Physics" },
+  { id: "tt-fri-3", day: "Friday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Hindi", grade_7: "Physics", grade_8: "Mathematics", grade_9: "English", grade_10: "Chemistry" },
+  { id: "tt-fri-4", day: "Friday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Computer Science", grade_7: "Chemistry", grade_8: "Biology", grade_9: "Mathematics", grade_10: "Biology" },
+  { id: "tt-fri-5", day: "Friday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Art", grade_7: "Sports", grade_8: "Music", grade_9: "Library", grade_10: "Art" },
+  { id: "tt-fri-6", day: "Friday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Social Studies", grade_7: "Biology", grade_8: "Chemistry", grade_9: "Physics", grade_10: "Computer Science" },
   // Saturday
-  { id: "tt-sat-1", day: "Saturday", period: "Period 1", time: "08:00 – 08:45", grade_6: "English", grade_7: "Physics", grade_8: "Chemistry", grade_9: "Mathematics" },
-  { id: "tt-sat-2", day: "Saturday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Mathematics", grade_7: "English", grade_8: "History", grade_9: "Science" },
-  { id: "tt-sat-3", day: "Saturday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Physics", grade_7: "Mathematics", grade_8: "English", grade_9: "Hindi" },
-  { id: "tt-sat-4", day: "Saturday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Chemistry", grade_7: "Biology", grade_8: "Mathematics", grade_9: "Computer Science" },
-  { id: "tt-sat-5", day: "Saturday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Sports", grade_7: "Music", grade_8: "Library", grade_9: "Art" },
-  { id: "tt-sat-6", day: "Saturday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Biology", grade_7: "Chemistry", grade_8: "Physics", grade_9: "Social Studies" },
+  { id: "tt-sat-1", day: "Saturday", period: "Period 1", time: "08:00 – 08:45", grade_6: "English", grade_7: "Physics", grade_8: "Chemistry", grade_9: "Mathematics", grade_10: "Physics" },
+  { id: "tt-sat-2", day: "Saturday", period: "Period 2", time: "08:45 – 09:30", grade_6: "Mathematics", grade_7: "English", grade_8: "History", grade_9: "Science", grade_10: "Mathematics" },
+  { id: "tt-sat-3", day: "Saturday", period: "Period 3", time: "09:30 – 10:15", grade_6: "Physics", grade_7: "Mathematics", grade_8: "English", grade_9: "Hindi", grade_10: "Chemistry" },
+  { id: "tt-sat-4", day: "Saturday", period: "Period 4", time: "10:15 – 11:00", grade_6: "Chemistry", grade_7: "Biology", grade_8: "Mathematics", grade_9: "Computer Science", grade_10: "Biology" },
+  { id: "tt-sat-5", day: "Saturday", period: "Period 5", time: "11:15 – 11:45", grade_6: "Sports", grade_7: "Music", grade_8: "Library", grade_9: "Art", grade_10: "Sports" },
+  { id: "tt-sat-6", day: "Saturday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Biology", grade_7: "Chemistry", grade_8: "Physics", grade_9: "Social Studies", grade_10: "English" },
 ];
 
 export const mockSubjects = [
   { id: "sub-1", name: "Mathematics", teacher: "Meera Shah", classes: "Grades 6–10", periods: 9, progress: 64 },
-  { id: "sub-2", name: "Science", teacher: "Ravi Menon", classes: "Grades 8–12", periods: 8, progress: 71 },
-  { id: "sub-3", name: "English", teacher: "Sonia Joseph", classes: "Grades 5–12", periods: 7, progress: 58 },
-  { id: "sub-4", name: "Computer Science", teacher: "Karthik Rao", classes: "Grades 6–11", periods: 4, progress: 82 },
-  { id: "sub-5", name: "Social Studies", teacher: "Arvind Iyer", classes: "Grades 5–9", periods: 5, progress: 49 },
-  { id: "sub-6", name: "Languages", teacher: "Priya Nair", classes: "Grades 5–12", periods: 6, progress: 67 },
+  { id: "sub-2", name: "Science", teacher: "Ravi Menon", classes: "Grades 6–10", periods: 8, progress: 71 },
+  { id: "sub-3", name: "English", teacher: "Sonia Joseph", classes: "Grades 6–10", periods: 7, progress: 58 },
+  { id: "sub-4", name: "Computer Science", teacher: "Karthik Rao", classes: "Grades 6–10", periods: 4, progress: 82 },
+  { id: "sub-5", name: "Social Studies", teacher: "Arvind Iyer", classes: "Grades 6–10", periods: 5, progress: 49 },
+  { id: "sub-6", name: "Languages", teacher: "Priya Nair", classes: "Grades 6–10", periods: 6, progress: 67 },
 ];
 
 export const mockExams = [
   { id: "EXM-001", name: "Mid-term Mathematics", subject: "Mathematics", grade: "Grade 8", date: "02 Oct 2026", time: "09:00 – 10:30", venue: "Room 204", status: "Scheduled" },
-  { id: "EXM-002", name: "Mid-term Physics", subject: "Physics", grade: "Grade 11", date: "03 Oct 2026", time: "09:00 – 10:30", venue: "Lab 1", status: "Scheduled" },
+  { id: "EXM-002", name: "Mid-term Physics", subject: "Physics", grade: "Grade 10", date: "03 Oct 2026", time: "09:00 – 10:30", venue: "Lab 1", status: "Scheduled" },
   { id: "EXM-003", name: "Unit English", subject: "English", grade: "Grade 7", date: "04 Oct 2026", time: "10:45 – 11:45", venue: "Room 118", status: "Scheduled" },
-  { id: "EXM-004", name: "Chemistry practical", subject: "Chemistry", grade: "Grade 12", date: "07 Oct 2026", time: "13:00 – 15:00", venue: "Lab 2", status: "Draft" },
-  { id: "EXM-005", name: "Mid-term Hindi", subject: "Hindi", grade: "Grade 9", date: "08 Oct 2026", time: "09:00 – 10:30", venue: "Room 102", status: "Scheduled" },
+  { id: "EXM-004", name: "Chemistry practical", subject: "Chemistry", grade: "Grade 9", date: "07 Oct 2026", time: "13:00 – 15:00", venue: "Lab 2", status: "Draft" },
+  { id: "EXM-005", name: "Mid-term Hindi", subject: "Hindi", grade: "Grade 6", date: "08 Oct 2026", time: "09:00 – 10:30", venue: "Room 102", status: "Scheduled" },
 ];
 
 export const mockExamResults = [
   { id: "res-1", subject: "Mathematics", grade: "Grade 8 — B", graded: 29, total: 31, published: false },
-  { id: "res-2", subject: "Physics", grade: "Grade 11 — A", graded: 30, total: 31, published: false },
+  { id: "res-2", subject: "Physics", grade: "Grade 10 — A", graded: 30, total: 31, published: false },
   { id: "res-3", subject: "English", grade: "Grade 7 — B", graded: 24, total: 32, published: false },
-  { id: "res-4", subject: "History", grade: "Grade 9 — D", graded: 28, total: 28, published: true },
+  { id: "res-4", subject: "History", grade: "Grade 9 — B", graded: 28, total: 28, published: true },
 ];
 
 export const mockLibraryBooks = [
@@ -193,14 +199,14 @@ export const mockLibraryBooks = [
   { id: "BK-002", title: "A Brief History of Time", author: "Stephen Hawking", category: "Science", copies: 6, issued: 6, status: "All out" },
   { id: "BK-003", title: "Wings of Fire", author: "A. P. J. Abdul Kalam", category: "Biography", copies: 10, issued: 4, status: "Available" },
   { id: "BK-004", title: "The Giver", author: "Lois Lowry", category: "Fiction", copies: 7, issued: 7, status: "All out" },
-  { id: "BK-005", title: "Economics: Class 11", author: "NCERT", category: "Textbook", copies: 12, issued: 9, status: "Available" },
+  { id: "BK-005", title: "Economics: Class 10", author: "NCERT", category: "Textbook", copies: 12, issued: 9, status: "Available" },
   { id: "BK-006", title: "The Hate U Give", author: "Angie Thomas", category: "Fiction", copies: 5, issued: 2, status: "Available" },
 ];
 
 export const mockAnnouncements = [
   { id: "ANN-001", title: "Mid-term assessment week", audience: "All families", date: "Today · 09:12", status: "Published", color: "teal", image_url: null, body: null },
   { id: "ANN-002", title: "Campus maintenance · 3 Oct", audience: "Staff & families", date: "Yesterday", status: "Scheduled", color: "violet", image_url: null, body: null },
-  { id: "ANN-003", title: "Inter-school debate registrations", audience: "Grades 8–12", date: "26 Sep", status: "Published", color: "orange", image_url: null, body: null },
+  { id: "ANN-003", title: "Inter-school debate registrations", audience: "Grades 8–10", date: "26 Sep", status: "Published", color: "orange", image_url: null, body: null },
   { id: "ANN-004", title: "Parent-teacher meeting schedule", audience: "All families", date: "24 Sep", status: "Published", color: "teal", image_url: null, body: null },
   { id: "ANN-005", title: "Winter uniform distribution", audience: "All families", date: "22 Sep", status: "Published", color: "violet", image_url: null, body: null },
   { id: "ANN-006", title: "Staff development workshop", audience: "All staff", date: "20 Sep", status: "Published", color: "orange", image_url: null, body: null },
@@ -213,23 +219,24 @@ export const mockMessages = [
 ];
 
 export const mockNotifications = [
-  { id: 1, title: "Attendance alert", detail: "Grade 6 — C dropped below 90% for today", time: "12 min ago", unread: true, tone: "coral", kind: "Attendance", icon: "alert" },
-  { id: 2, title: "Fee payment received", detail: "Kapoor family paid ₹38,000 · INV-2026-1099", time: "48 min ago", unread: true, tone: "teal", kind: "Finance", icon: "rupee" },
+  { id: 1, title: "Attendance alert", detail: "Grade 6 — B dropped below 90% for today", time: "12 min ago", unread: true, tone: "coral", kind: "Attendance", icon: "alert" },
+  { id: 2, title: "Fee payment received", detail: "Kapoor family paid ₹15,000 installment · INV-2026-1099", time: "48 min ago", unread: true, tone: "teal", kind: "Finance", icon: "rupee" },
   { id: 3, title: "Exam schedule published", detail: "Mid-term timetable is now visible to families", time: "2 hrs ago", unread: true, tone: "violet", kind: "Academic", icon: "file" },
   { id: 4, title: "Leave request pending", detail: "Arvind Iyer requested 2 days · 06–07 Oct", time: "3 hrs ago", unread: true, tone: "amber", kind: "Attendance", icon: "calendar" },
   { id: 6, title: "New parent message", detail: "Mrs. Nair · Ishita's exam schedule", time: "Yesterday", unread: false, tone: "teal", kind: "Message", icon: "message" },
 ];
 
 export const mockInvoices = [
-  { id: "INV-2026-1048", family: "Nair family", student: "Ishita Nair", due_date: "24 Sep 2026", amount: 42500, status: "Reminder sent" },
-  { id: "INV-2026-1099", family: "Kapoor family", student: "Vihaan Kapoor", due_date: "20 Sep 2026", amount: 38000, status: "Overdue" },
-  { id: "INV-2026-1126", family: "Thomas family", student: "Mira Thomas", due_date: "18 Sep 2026", amount: 31500, status: "Overdue" },
+  { id: "INV-2026-1048", family: "Nair family", student: "Ishita Nair", due_date: "24 Sep 2026", amount: 60000, status: "Reminder sent" },
+  { id: "INV-2026-1099", family: "Kapoor family", student: "Vihaan Kapoor", due_date: "20 Sep 2026", amount: 50000, status: "Overdue" },
+  { id: "INV-2026-1126", family: "Thomas family", student: "Mira Thomas", due_date: "18 Sep 2026", amount: 50000, status: "Overdue" },
 ];
 
 export const mockPayments: Payment[] = [
-  { id: "PAY-001", invoice_id: "INV-2026-1048", student: "Aarav Mehta", amount: 42500, method: "Bank transfer", paid_at: "2026-09-28T08:52:00Z" },
-  { id: "PAY-002", invoice_id: null, student: "Sara Fernandes", amount: 18750, method: "UPI", paid_at: "2026-09-28T08:15:00Z" },
-  { id: "PAY-003", invoice_id: null, student: "Arjun Menon", amount: 24000, method: "Card", paid_at: "2026-09-27T16:40:00Z" },
+  { id: "PAY-001", invoice_id: "INV-2026-1048", student: "Ishita Nair", amount: 30000, method: "Bank transfer", paid_at: "2026-09-28T08:52:00Z" },
+  { id: "PAY-002", invoice_id: null, student: "Sara Fernandes", amount: 25000, method: "UPI", paid_at: "2026-09-28T08:15:00Z" },
+  { id: "PAY-003", invoice_id: null, student: "Arjun Menon", amount: 30000, method: "Card", paid_at: "2026-09-27T16:40:00Z" },
+  { id: "PAY-004", invoice_id: "INV-2026-1099", student: "Vihaan Kapoor", amount: 15000, method: "Cash", paid_at: "2026-09-26T11:20:00Z" },
 ];
 
 export const mockReportExports = [
@@ -256,12 +263,11 @@ export const mockSubjectAverages = [
 ];
 
 export const mockGradeOutcomes = [
-  { id: "go-1", grade: "Grade 5", average: 88, attendance: 96, change: "+2.1%" },
-  { id: "go-2", grade: "Grade 6", average: 84, attendance: 94, change: "+1.4%" },
-  { id: "go-3", grade: "Grade 7", average: 86, attendance: 95, change: "+3.0%" },
-  { id: "go-4", grade: "Grade 8", average: 83, attendance: 93, change: "+0.8%" },
+  { id: "go-1", grade: "Grade 6", average: 84, attendance: 94, change: "+1.4%" },
+  { id: "go-2", grade: "Grade 7", average: 86, attendance: 95, change: "+3.0%" },
+  { id: "go-3", grade: "Grade 8", average: 83, attendance: 93, change: "+0.8%" },
+  { id: "go-4", grade: "Grade 9", average: 88, attendance: 96, change: "+2.1%" },
   { id: "go-5", grade: "Grade 10", average: 85, attendance: 97, change: "+2.6%" },
-  { id: "go-6", grade: "Grade 12", average: 87, attendance: 96, change: "+4.2%" },
 ];
 
 export const mockFeeCategories = [
@@ -308,7 +314,15 @@ export interface NotificationItem extends BaseRow { title: string; detail: strin
 export interface Exam extends BaseRow { name: string; subject: string; grade: string; date: string; time: string; venue: string; status: string; }
 export interface ExamResult extends BaseRow { subject: string; grade: string; graded: number; total: number; published: boolean; }
 export interface LibraryBook extends BaseRow { title: string; author: string; category: string; copies: number; issued: number; status: string; }
-export interface TimetableEntry extends BaseRow { day: string; period: string; time: string; grade_6: string; grade_7: string; grade_8: string; grade_9: string; }
+export interface TimetableEntry extends BaseRow { day: string; period: string; time: string; grade_6: string; grade_7: string; grade_8: string; grade_9: string; grade_10?: string; }
+export const MIN_INSTALLMENT_AMOUNT = 15000;
+
+export function getAnnualFeeForGrade(grade?: string | number | null): number {
+  if (!grade) return 50000;
+  const num = parseInt(String(grade).replace(/\D/g, ""), 10);
+  if (num >= 9) return 60000;
+  return 50000;
+}
 export interface SubjectRow extends BaseRow { name: string; teacher: string; classes: string; periods: number; progress: number; }
 export interface PerformanceTrend extends BaseRow { month: string; mathematics: number; science: number; english: number; }
 export interface SubjectAverage extends BaseRow { subject: string; average: number; }

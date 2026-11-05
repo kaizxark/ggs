@@ -167,7 +167,7 @@ const DEFAULT_EXAMS: DetailedExam[] = [
     id: "EXM-002",
     name: "Mid-term Physics",
     subject: "Physics",
-    grade: "Grade 11",
+    grade: "Grade 9",
     date: "03 Oct 2026",
     time: "09:00 – 10:30",
     venue: "Lab 1",
@@ -195,7 +195,7 @@ const DEFAULT_EXAMS: DetailedExam[] = [
     id: "EXM-004",
     name: "Chemistry Practical",
     subject: "Chemistry",
-    grade: "Grade 12",
+    grade: "Grade 6",
     date: "07 Oct 2026",
     time: "13:00 – 15:00",
     venue: "Lab 2",
@@ -316,9 +316,9 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
   const publishingList: ExamResult[] = useMemo(() => {
     const base = fetchedResults.length > 0 ? fetchedResults : [
       { id: "res-1", subject: "Mathematics", grade: "Grade 8 — B", graded: 31, total: 31, published: false },
-      { id: "res-2", subject: "Physics", grade: "Grade 11 — A", graded: 30, total: 31, published: false },
+      { id: "res-2", subject: "Physics", grade: "Grade 9 — A", graded: 30, total: 31, published: false },
       { id: "res-3", subject: "English", grade: "Grade 7 — B", graded: 24, total: 32, published: false },
-      { id: "res-4", subject: "History", grade: "Grade 9 — D", graded: 28, total: 28, published: true },
+      { id: "res-4", subject: "History", grade: "Grade 6 — B", graded: 28, total: 28, published: true },
       { id: "res-5", subject: "Computer Science", grade: "Grade 10 — A", graded: 29, total: 29, published: true },
     ];
     return base.map((row) => ({
@@ -359,8 +359,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
     { value: "Grade 8", label: "Grade 8" },
     { value: "Grade 9", label: "Grade 9" },
     { value: "Grade 10", label: "Grade 10" },
-    { value: "Grade 11", label: "Grade 11" },
-    { value: "Grade 12", label: "Grade 12" },
   ];
 
   const statusOptions: FormSelectOption[] = [
@@ -1925,7 +1923,7 @@ function ScheduleExamModal({
                 className="search-input"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
               >
-                {["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"].map((g) => (
+                {["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"].map((g) => (
                   <option key={g} value={g}>{g}</option>
                 ))}
               </select>

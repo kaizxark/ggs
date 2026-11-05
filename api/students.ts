@@ -815,11 +815,16 @@ async function filterOptions(orgId: string): Promise<Json> {
     new Set(classrooms.map(c => String(c.section ?? "")).filter(Boolean))
   );
 
+  const defaultGrades = ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
+  const defaultSections = ["A", "B"];
+  const effectiveGrades = grades.length ? grades : defaultGrades;
+  const effectiveSections = sections.length ? sections : defaultSections;
+
   return {
-    grades: grades.sort((a, b) =>
+    grades: effectiveGrades.sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true })
     ),
-    sections: sections.sort((a, b) =>
+    sections: effectiveSections.sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true })
     ),
     years,

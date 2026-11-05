@@ -80,8 +80,8 @@ async function readError(res: Response): Promise<FeePaymentError> {
   );
 }
 
-/** Ask the server to create a Razorpay order for the full outstanding balance. */
-export async function startFeePayment(invoiceId: string): Promise<FeePaymentSession> {
+/** Ask the server to create a Razorpay order for the full outstanding balance or an installment. */
+export async function startFeePayment(invoiceId: string, amount?: number): Promise<FeePaymentSession> {
   const token = await authToken();
   const res = await fetch("/api/student-profile?__fee=payment", {
     method: "POST",
@@ -89,7 +89,7 @@ export async function startFeePayment(invoiceId: string): Promise<FeePaymentSess
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ invoiceId }),
+    body: JSON.stringify({ invoiceId, amount }),
   });
   if (!res.ok) throw await readError(res);
   const body = (await res.json()) as { payment?: FeePaymentSession };

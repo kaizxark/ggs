@@ -432,17 +432,7 @@ async function loadStudents(): Promise<Student[]> {
 }
 
 export function useStudentsView(enabled = true) {
-  // the offline mock rows predate the usn, attendance_records and
-  // scored_papers fields; give them one each so the table column is never
-  // empty and the assistant does not read the mock percentages as unmarked
-  const fallback = mockStudents.map((s) => ({
-    ...s,
-    usn: String(s.id),
-    admission_no: String(s.id),
-    attendance_records: 60,
-    scored_papers: 5,
-  })) as Student[];
-  return useErpView<Student>("students", loadStudents, fallback, [], enabled);
+  return useErpView<Student>("students", loadStudents, [], [], enabled);
 }
 
 /* ------------------------------------------------------------------ */
@@ -483,7 +473,7 @@ async function loadStaff(): Promise<StaffMember[]> {
 }
 
 export function useStaffView() {
-  return useErpView<StaffMember>("staff", loadStaff, mockStaff);
+  return useErpView<StaffMember>("staff", loadStaff, []);
 }
 
 /* ------------------------------------------------------------------ */
@@ -568,11 +558,11 @@ async function loadAttendanceDaily(): Promise<AttendanceDaily[]> {
   } catch {
     // offline or RPC unavailable fallback
   }
-  return mockAttendanceData;
+  return [];
 }
 
 export function useAttendanceDailyView() {
-  return useErpView<AttendanceDaily>("attendance_daily", loadAttendanceDaily, mockAttendanceData);
+  return useErpView<AttendanceDaily>("attendance_daily", loadAttendanceDaily, []);
 }
 
 async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
@@ -584,11 +574,11 @@ async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
   } catch {
     // offline or RPC unavailable fallback
   }
-  return mockClassAttendance;
+  return [];
 }
 
 export function useClassAttendanceView() {
-  return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, mockClassAttendance);
+  return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, []);
 }
 
 /**
@@ -686,7 +676,7 @@ async function loadInvoices(): Promise<Invoice[]> {
 }
 
 export function useInvoicesView(enabled = true) {
-  return useErpView<Invoice>("invoices", loadInvoices, mockInvoices, [], enabled);
+  return useErpView<Invoice>("invoices", loadInvoices, [], [], enabled);
 }
 
 async function loadPayments(): Promise<Payment[]> {
@@ -714,7 +704,7 @@ async function loadPayments(): Promise<Payment[]> {
 }
 
 export function usePaymentsView() {
-  return useErpView<Payment>("payments", loadPayments, mockPayments);
+  return useErpView<Payment>("payments", loadPayments, []);
 }
 
 async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
@@ -741,7 +731,7 @@ async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
 }
 
 export function useFinanceMonthlyView() {
-  return useErpView<FinanceMonth>("finance_monthly", loadFinanceMonthly, mockRevenueData);
+  return useErpView<FinanceMonth>("finance_monthly", loadFinanceMonthly, []);
 }
 
 async function loadFeeCategories(): Promise<FeeCategory[]> {
@@ -770,7 +760,7 @@ async function loadFeeCategories(): Promise<FeeCategory[]> {
 }
 
 export function useFeeCategoriesView() {
-  return useErpView<FeeCategory>("fee_categories", loadFeeCategories, mockFeeCategories);
+  return useErpView<FeeCategory>("fee_categories", loadFeeCategories, []);
 }
 
 /* ------------------------------------------------------------------ */
@@ -967,12 +957,11 @@ async function loadGradeOutcomes(): Promise<{ id: string; grade: string; average
 
 export function useGradeOutcomesView() {
   return useErpView("grade_outcomes", loadGradeOutcomes, [
-    { id: "go-1", grade: "Grade 5", average: 88, attendance: 96, change: "+2.1%" },
-    { id: "go-2", grade: "Grade 6", average: 84, attendance: 94, change: "+1.4%" },
-    { id: "go-3", grade: "Grade 7", average: 86, attendance: 95, change: "+3.0%" },
-    { id: "go-4", grade: "Grade 8", average: 83, attendance: 93, change: "+0.8%" },
+    { id: "go-1", grade: "Grade 6", average: 84, attendance: 94, change: "+1.4%" },
+    { id: "go-2", grade: "Grade 7", average: 86, attendance: 95, change: "+3.0%" },
+    { id: "go-3", grade: "Grade 8", average: 83, attendance: 93, change: "+0.8%" },
+    { id: "go-4", grade: "Grade 9", average: 88, attendance: 96, change: "+2.1%" },
     { id: "go-5", grade: "Grade 10", average: 85, attendance: 97, change: "+2.6%" },
-    { id: "go-6", grade: "Grade 12", average: 87, attendance: 96, change: "+4.2%" },
   ]);
 }
 

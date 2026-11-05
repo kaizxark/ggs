@@ -551,7 +551,10 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
               ariaLabel="Filter by class"
               options={[
                 { value: "", label: "All classes" },
-                ...(options?.grades ?? []).map((g) => ({
+                ...(options?.grades && options.grades.length > 0
+                  ? options.grades
+                  : ["6", "7", "8", "9", "10"]
+                ).map((g) => ({
                   value: g,
                   label: formatGradeLabel(g),
                 })),
@@ -567,7 +570,10 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
               ariaLabel="Filter by section"
               options={[
                 { value: "", label: "All sections" },
-                ...(options?.sections ?? []).map((s) => ({
+                ...(options?.sections && options.sections.length > 0
+                  ? options.sections
+                  : ["A", "B"]
+                ).map((s) => ({
                   value: s,
                   label: `Section ${s}`,
                 })),
@@ -1386,12 +1392,11 @@ function StudentDialog({
   };
 
   const availableGrades = useMemo(() => {
-    if (options?.grades && options.grades.length > 0) return options.grades;
-    return ["Nursery", "LKG", "UKG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
-  }, [options]);
+    return ["6", "7", "8", "9", "10"];
+  }, []);
 
   const availableSections = useMemo(() => {
-    return ["A", "B", "C", "D", "E"];
+    return ["A", "B"];
   }, []);
 
   const validateTab = (tab: "academic" | "personal" | "guardian" | "address"): Record<string, string> => {
@@ -1711,6 +1716,35 @@ function StudentDialog({
                     ]}
                   />
                 </label>
+
+                {/* Annual Fee & Installment Policy Box */}
+                <div
+                  style={{
+                    gridColumn: "span 2",
+                    padding: "12px 14px",
+                    borderRadius: "10px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid var(--border)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)" }}>
+                      Annual Tuition Fee {form.grade ? `· ${formatGradeLabel(form.grade)}` : ""}
+                    </span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--brand)" }}>
+                      {parseInt(String(form.grade || "").replace(/\D/g, ""), 10) >= 9 ? "₹60,000" : "₹50,000"}
+                      <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}> / year</span>
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: "11.5px", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                    • Class 6 to 8: ₹50,000 per year | Class 9 and 10: ₹60,000 per year.
+                    <br />
+                    • Installments are permitted; <strong>minimum installment is ₹15,000</strong>.
+                  </p>
+                </div>
               </div>
             </div>
           )}

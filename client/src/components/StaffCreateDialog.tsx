@@ -24,7 +24,6 @@ const ROLE_OPTIONS = [
 ];
 
 const FACULTY_CLASSES = [
-  "Grade 5",
   "Grade 6",
   "Grade 7",
   "Grade 8",

@@ -396,6 +396,10 @@ export async function recordVerifiedUpiPayment(
   const requested =
     body.amount === undefined ? outstanding : round2(num(body.amount));
 
+  if (body.amount !== undefined && requested < 15000 && outstanding >= 15000) {
+    return { ok: false, response: fail("Minimum installment payment is ₹15,000.", 400, "below_minimum_installment") };
+  }
+
   return recordSettlement(resolved.invoice, {
     amount: requested,
     method: "UPI",

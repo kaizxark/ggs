@@ -193,7 +193,17 @@ export async function handleFeeOrderRequest(req: Request): Promise<Response> {
   if (!resolved.ok) return resolved.response;
 
   const { payer } = resolved;
-  const amount = Math.round(payer.outstanding * 100) / 100;
+  const customAmount = body.amount !== undefined ? Number(body.amount) : undefined;
+  let amount = Math.round(payer.outstanding * 100) / 100;
+  if (customAmount !== undefined && Number.isFinite(customAmount) && customAmount > 0) {
+    if (customAmount > payer.outstanding + 0.01) {
+      return fail(`Amount cannot exceed the invoice balance of ₹${payer.outstanding}.`, 400, "amount_too_large");
+    }
+    if (customAmount < 15000 && payer.outstanding >= 15000) {
+      return fail("Minimum installment payment is ₹15,000.", 400, "below_minimum_installment");
+    }
+    amount = Math.round(customAmount * 100) / 100;
+  }
   if (amount <= 0) {
     return fail("This invoice has no balance to pay.", 409, "invoice_paid");
   }

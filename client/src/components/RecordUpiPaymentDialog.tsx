@@ -59,6 +59,10 @@ export function RecordUpiPaymentDialog({
       setError("Enter the amount that was credited.");
       return;
     }
+    if (value < 15000 && outstanding >= 15000) {
+      setError("Minimum installment payment amount is ₹15,000.");
+      return;
+    }
     if (value > outstanding + 0.01) {
       setError(`That is more than the ${rupees(outstanding)} still due on this invoice.`);
       return;
@@ -115,7 +119,7 @@ export function RecordUpiPaymentDialog({
               placeholder="5.00"
             />
             <span className="mt-1 block text-xs text-[var(--text-muted)]">
-              Up to {rupees(outstanding)} outstanding.
+              Up to {rupees(outstanding)} outstanding. Minimum installment: ₹15,000.
             </span>
           </label>
 
