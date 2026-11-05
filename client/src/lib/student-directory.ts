@@ -285,6 +285,7 @@ export interface StudentDraft {
   emergency_contact_phone?: string;
   joined_on?: string;
   status?: string;
+  admission_payment_mode?: string;
   address?: {
     line1?: string;
     line2?: string;

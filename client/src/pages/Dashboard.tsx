@@ -143,10 +143,16 @@ import {
   useSubjects,
   useTimetable,
   useCurrentUser,
+  mockTimetable,
   type RowId,
   type Settings,
   type Student,
 } from "../lib/school-data";
+import {
+  recordClassAttendance,
+  getSavedClassAttendance,
+  type AttendanceStatus,
+} from "../lib/attendance";
 import {
   SkeletonChart,
   SkeletonCircle,
@@ -2535,12 +2541,310 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
 }
 
 function AttendanceView({ onBack }: { onBack: () => void }) {
-  const [marked, setMarked] = useState<string[]>([]);
+  const currentUser = useCurrentUser();
+  const isFacultyOrTeacher =
+    currentUser?.role === "teacher" || currentUser?.role === "faculty";
+
+  const [activeTab, setActiveTab] = useState<"register" | "overview">("register");
+
   const { rows: classAttendance, loading: classAttendanceLoading } =
     useClassAttendance();
   const { rows: dailyAttendance, loading: dailyAttendanceLoading } =
     useAttendanceDaily();
   const { rows: enrolledStudents } = useStudents();
+
+  // Cohort classes list
+  const availableClasses = useMemo(() => {
+    const list: Array<{ id: string; label: string; grade: string; section: string; teacher: string }> = [];
+    const seen = new Set<string>();
+
+    for (const c of classAttendance) {
+      if (!seen.has(c.label)) {
+        seen.add(c.label);
+        const parts = c.label.split("—").map(p => p.trim());
+        const grade = parts[0] || "Grade 6";
+        const section = parts[1]?.replace(/^Section\s*/i, "").trim() || "A";
+        list.push({
+          id: String(c.id),
+          label: c.label,
+          grade,
+          section,
+          teacher: c.teacher || "Faculty",
+        });
+      }
+    }
+
+    // Also extract from enrolled students
+    for (const s of enrolledStudents) {
+      if (s.grade && s.section) {
+        const lbl = `${s.grade} — ${s.section}`;
+        if (!seen.has(lbl)) {
+          seen.add(lbl);
+          list.push({
+            id: `class-${s.grade.replace(/\s+/g, "").toLowerCase()}-${s.section.toLowerCase()}`,
+            label: lbl,
+            grade: s.grade,
+            section: s.section,
+            teacher: "Faculty",
+          });
+        }
+      }
+    }
+
+    if (!list.length) {
+      return [
+        { id: "ca-1", label: "Grade 5 — A", grade: "Grade 5", section: "A", teacher: "Neha Kulkarni" },
+        { id: "ca-2", label: "Grade 6 — C", grade: "Grade 6", section: "C", teacher: "Ravi Menon" },
+        { id: "ca-3", label: "Grade 7 — B", grade: "Grade 7", section: "B", teacher: "Sonia Joseph" },
+        { id: "ca-4", label: "Grade 8 — B", grade: "Grade 8", section: "B", teacher: "Arvind Iyer" },
+        { id: "ca-5", label: "Grade 10 — A", grade: "Grade 10", section: "A", teacher: "Meera Shah" },
+        { id: "ca-6", label: "Grade 12 — A", grade: "Grade 12", section: "A", teacher: "Daniel Thomas" },
+      ];
+    }
+    return list;
+  }, [classAttendance, enrolledStudents]);
+
+  const [selectedClassId, setSelectedClassId] = useState<string>(() => {
+    return availableClasses[0]?.id || "ca-1";
+  });
+
+  const currentClass = useMemo(() => {
+    return availableClasses.find(c => c.id === selectedClassId) || availableClasses[0];
+  }, [availableClasses, selectedClassId]);
+
+  // Indian standard date helpers
+  const getTodayIso = () => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayIso);
+
+  const formattedIndianDate = useMemo(() => {
+    try {
+      const [y, m, d] = selectedDate.split("-").map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      const dayStr = String(dateObj.getDate()).padStart(2, "0");
+      const monthStr = dateObj.toLocaleDateString("en-IN", { month: "short" });
+      const yearStr = dateObj.getFullYear();
+      const weekday = dateObj.toLocaleDateString("en-IN", { weekday: "long" });
+      return `${dayStr} ${monthStr} ${yearStr} (${weekday})`;
+    } catch {
+      return selectedDate;
+    }
+  }, [selectedDate]);
+
+  const dayOfWeek = useMemo(() => {
+    try {
+      const [y, m, d] = selectedDate.split("-").map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long" });
+    } catch {
+      return "Monday";
+    }
+  }, [selectedDate]);
+
+  // Timetable integration
+  const classPeriods = useMemo(() => {
+    if (!currentClass) return [];
+    const entries = mockTimetable.filter(t => t.day === dayOfWeek);
+    const gradeNum = currentClass.grade.replace(/[^0-9]/g, "");
+    const gradeKey = `grade_${gradeNum}` as keyof (typeof entries)[0];
+
+    return entries.map(entry => {
+      const subject = (entry as Record<string, string>)[gradeKey] || "General Roll Call";
+      return {
+        id: entry.id,
+        period: entry.period,
+        time: entry.time,
+        subject,
+      };
+    });
+  }, [dayOfWeek, currentClass]);
+
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("Period 1");
+
+  // Roster of students for selected class
+  const classStudents = useMemo(() => {
+    if (!currentClass) return [];
+    const matched = enrolledStudents.filter(s => {
+      if (!s.grade || !s.section) return false;
+      const sGrade = s.grade.toLowerCase().replace(/\s+/g, "");
+      const cGrade = currentClass.grade.toLowerCase().replace(/\s+/g, "");
+      const sSec = s.section.toLowerCase().trim();
+      const cSec = currentClass.section.toLowerCase().trim();
+      return sGrade === cGrade && sSec === cSec;
+    });
+
+    if (matched.length >= 10) {
+      return matched;
+    }
+
+    const fallbackPupils = [
+      "Aarav Mehta", "Vihaan Kapoor", "Ishita Nair", "Ananya Rao", "Kabir Malhotra",
+      "Mira Thomas", "Arjun Menon", "Sara Fernandes", "Dev Sharma", "Priya Patel",
+      "Rohan Varma", "Riya Sen", "Aryan Joshi", "Tanvi Bhat", "Yash Singhal",
+      "Pooja Hegde", "Aditya Kulkarni", "Sneha Reddy", "Siddharth Nair", "Megha Roy",
+      "Karan Johar", "Avani Deshmukh", "Nikhil Pillai", "Diya Mukherjee", "Manish Pandey",
+      "Kavya Iyer", "Gautam Gambhir", "Shreya Ghoshal"
+    ];
+
+    const existingIds = new Set(matched.map(m => m.id));
+    const fullList = [...matched];
+    const prefix = currentClass.grade.replace(/[^0-9]/g, "") || "6";
+    const sec = currentClass.section || "A";
+
+    fallbackPupils.forEach((name, idx) => {
+      if (fullList.length >= 28) return;
+      const id = `GKS-${prefix}${sec}-${String(idx + 1).padStart(3, "0")}`;
+      if (!existingIds.has(id)) {
+        const initials = name.split(" ").map(p => p[0]).join("").toUpperCase();
+        fullList.push({
+          id,
+          name,
+          initials,
+          grade: currentClass.grade,
+          section: currentClass.section,
+          attendance: 91 + (idx % 8),
+          attendance_records: 48,
+          average: 82 + (idx % 16),
+          scored_papers: 5,
+          fees: idx % 5 === 0 ? "Due" : "Paid",
+          status: "Active",
+          tone: ["teal", "violet", "amber", "blue", "rose", "indigo"][idx % 6],
+          usn: id,
+        } as Student);
+      }
+    });
+
+    return fullList;
+  }, [currentClass, enrolledStudents]);
+
+  // Attendance state map: student_id -> { status, notes }
+  const [attendanceMap, setAttendanceMap] = useState<
+    Record<string, { status: AttendanceStatus; notes?: string }>
+  >({});
+
+  // Sync attendance whenever date or class changes
+  useEffect(() => {
+    if (!currentClass) return;
+    const saved = getSavedClassAttendance(selectedDate, currentClass.label);
+    if (saved && Object.keys(saved).length > 0) {
+      setAttendanceMap(saved);
+    } else {
+      const defaults: Record<string, { status: AttendanceStatus; notes?: string }> = {};
+      for (const s of classStudents) {
+        defaults[s.id] = { status: "present", notes: "" };
+      }
+      setAttendanceMap(defaults);
+    }
+  }, [selectedDate, currentClass?.label, classStudents]);
+
+  const setStudentStatus = (studentId: string, status: AttendanceStatus) => {
+    setAttendanceMap(prev => ({
+      ...prev,
+      [studentId]: {
+        status,
+        notes: prev[studentId]?.notes,
+      },
+    }));
+  };
+
+  const setStudentNotes = (studentId: string, notes: string) => {
+    setAttendanceMap(prev => ({
+      ...prev,
+      [studentId]: {
+        status: prev[studentId]?.status || "present",
+        notes,
+      },
+    }));
+  };
+
+  const markAll = (status: AttendanceStatus) => {
+    setAttendanceMap(prev => {
+      const updated: Record<string, { status: AttendanceStatus; notes?: string }> = {};
+      for (const s of classStudents) {
+        updated[s.id] = {
+          ...prev[s.id],
+          status,
+        };
+      }
+      return updated;
+    });
+    toast.info(`Marked all ${classStudents.length} students as ${status.toUpperCase()}`);
+  };
+
+  // Live tallies
+  const counts = useMemo(() => {
+    let present = 0;
+    let absent = 0;
+    let late = 0;
+    let leave = 0;
+
+    for (const s of classStudents) {
+      const st = attendanceMap[s.id]?.status || "present";
+      if (st === "present") present++;
+      else if (st === "absent") absent++;
+      else if (st === "late") late++;
+      else if (st === "leave") leave++;
+    }
+
+    const total = classStudents.length;
+    const attending = present + late;
+    const pct = total > 0 ? Math.round((attending / total) * 1000) / 10 : 0;
+
+    return { present, absent, late, leave, total, pct };
+  }, [classStudents, attendanceMap]);
+
+  // Search filter inside register
+  const [registerSearch, setRegisterSearch] = useState("");
+  const filteredStudents = useMemo(() => {
+    if (!registerSearch.trim()) return classStudents;
+    const q = registerSearch.toLowerCase();
+    return classStudents.filter(
+      s => s.name.toLowerCase().includes(q) || (s.usn && s.usn.toLowerCase().includes(q))
+    );
+  }, [classStudents, registerSearch]);
+
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveAttendance = async () => {
+    if (!currentClass) return;
+    setSaving(true);
+    try {
+      const items = classStudents.map(s => ({
+        student_id: String(s.id),
+        student_name: s.name,
+        status: attendanceMap[s.id]?.status || "present",
+        notes: attendanceMap[s.id]?.notes,
+      }));
+
+      const res = await recordClassAttendance({
+        classLabel: currentClass.label,
+        grade: currentClass.grade,
+        section: currentClass.section,
+        date: selectedDate,
+        items,
+        teacherName: currentUser?.username || currentClass.teacher,
+      });
+
+      if (res.ok) {
+        toast.success("Attendance register saved", {
+          description: `${currentClass.label} · ${counts.present} Present, ${counts.absent} Absent on ${formattedIndianDate}`,
+        });
+      } else {
+        toast.error("Could not save attendance", { description: res.message });
+      }
+    } catch {
+      toast.error("Failed to save register");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Overview metrics
   const latest = dailyAttendance[dailyAttendance.length - 1];
   const latestPresent = latest?.present ?? 0;
   const latestAbsent = latest?.absent ?? 0;
@@ -2557,8 +2861,10 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   ).length;
   const classPager = usePagination(classAttendance);
   const pageClasses = classPager.pageRows;
+
   return (
     <div className="page-stack">
+      {/* Page Header */}
       <div className="page-intro">
         <div>
           <Breadcrumb
@@ -2568,124 +2874,640 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
           />
           <h1 className="page-title">Attendance</h1>
           <p className="page-subtitle">
-            {latest
-              ? `${latest.day} · ${latestPct}% school-wide attendance.`
-              : "No attendance recorded yet."}
+            {activeTab === "register"
+              ? `Daily roll call register · ${formattedIndianDate}`
+              : latest
+                ? `${latest.day} · ${latestPct}% school-wide attendance.`
+                : "No attendance recorded yet."}
           </p>
         </div>
+
+        {/* View Switcher Tabs */}
+        <div className="segmented-control" style={{ marginLeft: "auto", display: "inline-flex" }}>
+          <button
+            className={activeTab === "register" ? "active" : ""}
+            onClick={() => setActiveTab("register")}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <ClipboardCheck size={14} />
+            Daily Register
+          </button>
+          <button
+            className={activeTab === "overview" ? "active" : ""}
+            onClick={() => setActiveTab("overview")}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <BarChart3 size={14} />
+            Cohort Overview
+          </button>
+        </div>
       </div>
-      <div className="metric-grid three">
-        {classAttendanceLoading || dailyAttendanceLoading ? (
-          <>
-            <SkeletonMetric />
-            <SkeletonMetric />
-            <SkeletonMetric />
-          </>
-        ) : (
-          <>
-            <MetricBlock
-              label="Present today"
-              value={latestPresent.toLocaleString("en-IN")}
-              comparison={`${latestPct}% marked`}
-              icon={Check}
-              spark={[19, 18, 23, 24, 25, 27, 30]}
-            />
-            <MetricBlock
-              label="Absent today"
-              value={`${latestAbsent}`}
-              comparison={`${absentFollowUp} need follow-up`}
-              icon={AlertCircle}
-              spark={[27, 25, 24, 23, 21, 20, 18]}
-              positive={false}
-            />
-            <MetricBlock
-              label="Late arrivals"
-              value={`${latestLate}`}
-              comparison={`${latestLate} recorded today`}
-              icon={Clock3}
-              spark={[24, 27, 25, 23, 22, 20, 19]}
-            />
-          </>
-        )}
-      </div>
-      <div className="panel table-panel">
-        <div className="panel-header" style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)" }}>
-          <div>
-            <h2 className="panel-title">Class attendance</h2>
-            <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
-              Daily presence and roll call metrics across active grade cohorts.
-            </p>
-          </div>
-          <div style={{ marginLeft: "auto" }}>
-            <button
-              className="secondary-button"
-              style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 16px", fontSize: "13px" }}
-              onClick={() => toast.success("Attendance CSV exported")}
+
+      {/* VIEW 1: DAILY REGISTER (TAKE ATTENDANCE) */}
+      {activeTab === "register" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Controls Panel */}
+          <div className="panel" style={{ padding: "18px 22px" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: "18px",
+                alignItems: "end",
+              }}
             >
-              <Download size={14} />
-              Export
-            </button>
+              {/* Class Selector */}
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
+                  Class & Cohort
+                </label>
+                <FormSelect
+                  value={selectedClassId}
+                  onChange={setSelectedClassId}
+                  options={availableClasses.map(c => ({
+                    value: c.id,
+                    label: `${c.label} · ${c.teacher}`,
+                  }))}
+                  ariaLabel="Select Class"
+                />
+              </div>
+
+              {/* Indian Standard Date Selector (DD-MM-YYYY) */}
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                    Date (DD-MM-YYYY)
+                  </label>
+                  {selectedDate !== getTodayIso() && (
+                    <button
+                      className="secondary-button compact"
+                      style={{ padding: "2px 8px", fontSize: "11px" }}
+                      onClick={() => setSelectedDate(getTodayIso())}
+                    >
+                      Reset to Today
+                    </button>
+                  )}
+                </div>
+                <DateDropdowns
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  defaultToToday
+                  minYear={2020}
+                  maxYear={2030}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "flex-end" }}>
+                <button
+                  className="secondary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 14px", fontSize: "12.5px" }}
+                  onClick={() => markAll("present")}
+                  title="Mark all enrolled students as present"
+                >
+                  <Check size={14} className="text-emerald-400" />
+                  All Present
+                </button>
+                <button
+                  className="secondary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 14px", fontSize: "12.5px" }}
+                  onClick={() => markAll("absent")}
+                  title="Mark all enrolled students as absent"
+                >
+                  <X size={14} className="text-rose-400" />
+                  All Absent
+                </button>
+                <button
+                  className="primary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 18px", fontSize: "13px" }}
+                  onClick={handleSaveAttendance}
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                  {saving ? "Saving..." : "Save Register"}
+                </button>
+              </div>
+            </div>
+
+            {/* Timetable Slot Context Banner */}
+            <div
+              style={{
+                marginTop: "16px",
+                padding: "12px 16px",
+                borderRadius: "10px",
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid var(--border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "8px",
+                    background: "rgba(99,102,241,0.14)",
+                    color: "var(--brand-strong)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <CalendarDays size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    {dayOfWeek} Timetable · {currentClass.label}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                    {classPeriods.length > 0 ? (
+                      <>
+                        Active Period: <span style={{ color: "var(--brand-strong)", fontWeight: 500 }}>
+                          {classPeriods.find(p => p.period === selectedPeriod)?.subject || "Daily Roll Call"} ({classPeriods.find(p => p.period === selectedPeriod)?.time || "08:00 – 08:45"})
+                        </span> · Faculty in charge: {currentClass.teacher}
+                      </>
+                    ) : (
+                      `Cohort handled by ${currentClass.teacher}`
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {classPeriods.length > 0 && (
+                <div className="segmented-control" style={{ overflowX: "auto" }}>
+                  {classPeriods.map(p => (
+                    <button
+                      key={p.period}
+                      className={selectedPeriod === p.period ? "active" : ""}
+                      onClick={() => setSelectedPeriod(p.period)}
+                      title={`${p.subject} (${p.time})`}
+                    >
+                      {p.period}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Live Metrics Grid */}
+          <div className="metric-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+            <div className="metric-card" style={{ padding: "16px 20px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500 }}>Enrolled Pupils</div>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0" }}>
+                {counts.total}
+              </div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>{currentClass.label} cohort</div>
+            </div>
+
+            <div className="metric-card" style={{ padding: "16px 20px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#30d158" }} />
+                Present Today
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "#30d158", margin: "4px 0" }}>
+                {counts.present} <span style={{ fontSize: "14px", fontWeight: 500, opacity: 0.85 }}>({counts.pct}%)</span>
+              </div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Attending roll call</div>
+            </div>
+
+            <div className="metric-card" style={{ padding: "16px 20px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ff453a" }} />
+                Absent
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "#ff453a", margin: "4px 0" }}>
+                {counts.absent}
+              </div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Marked absent</div>
+            </div>
+
+            <div className="metric-card" style={{ padding: "16px 20px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ff9f0a" }} />
+                Late Arrival
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "#ff9f0a", margin: "4px 0" }}>
+                {counts.late}
+              </div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Arrived with delay</div>
+            </div>
+
+            <div className="metric-card" style={{ padding: "16px 20px" }}>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#bf5af2" }} />
+                On Leave
+              </div>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "#bf5af2", margin: "4px 0" }}>
+                {counts.leave}
+              </div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Approved leave</div>
+            </div>
+          </div>
+
+          {/* Student Register Table */}
+          <div className="panel table-panel">
+            <div className="panel-header" style={{ padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px", flexWrap: "wrap", borderBottom: "1px solid var(--border)" }}>
+              <div>
+                <h2 className="panel-title">Roll Call Register · {currentClass.label}</h2>
+                <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
+                  Select attendance status for each pupil. Changes are saved to the school database.
+                </p>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div className="search-field" style={{ minWidth: "220px" }}>
+                  <Search size={14} className="search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search pupil or USN..."
+                    value={registerSearch}
+                    onChange={(e) => setRegisterSearch(e.target.value)}
+                    className="search-input"
+                  />
+                  {registerSearch && (
+                    <button className="search-clear" onClick={() => setRegisterSearch("")}>
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "45px" }}>#</th>
+                    <th>Pupil</th>
+                    <th style={{ width: "130px" }}>USN / Roll</th>
+                    <th style={{ width: "130px" }}>Term Attendance</th>
+                    <th style={{ width: "340px" }}>Attendance Status</th>
+                    <th>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: "center", padding: "40px" }}>
+                        <p className="text-[var(--text-muted)] text-sm">No pupils found in this cohort.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredStudents.map((student, idx) => {
+                      const curStatus = attendanceMap[student.id]?.status || "present";
+                      const curNotes = attendanceMap[student.id]?.notes || "";
+
+                      return (
+                        <tr key={student.id}>
+                          <td className="muted-cell" style={{ fontSize: "12px" }}>
+                            {idx + 1}
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <span className={`avatar ${avatarTones[student.tone] || ""}`}>
+                                {student.initials}
+                              </span>
+                              <div>
+                                <span className="font-medium text-[var(--text-primary)] block">
+                                  {student.name}
+                                </span>
+                                <span className="text-[11.5px] text-[var(--text-muted)]">
+                                  {student.grade} — Section {student.section}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="muted-cell" style={{ fontSize: "12px", fontFamily: "monospace" }}>
+                            {student.usn || student.id}
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <span className="progress-bar" style={{ width: "50px" }}>
+                                <span
+                                  style={{
+                                    width: `${student.attendance || 90}%`,
+                                    background:
+                                      (student.attendance || 90) < 90
+                                        ? "var(--warning)"
+                                        : "var(--brand)",
+                                  }}
+                                />
+                              </span>
+                              <span className="font-medium text-[12px] text-[var(--text-hover)]">
+                                {student.attendance || 90}%
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            {/* 4 Interactive Tactile Attendance Status Pills */}
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                              {/* Present */}
+                              <button
+                                type="button"
+                                onClick={() => setStudentStatus(String(student.id), "present")}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "5px 10px",
+                                  borderRadius: "8px",
+                                  fontSize: "12px",
+                                  fontWeight: curStatus === "present" ? 700 : 500,
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  background: curStatus === "present" ? "rgba(48,209,88,0.2)" : "rgba(255,255,255,0.03)",
+                                  borderColor: curStatus === "present" ? "rgba(48,209,88,0.6)" : "var(--border)",
+                                  borderWidth: "1px",
+                                  borderStyle: "solid",
+                                  color: curStatus === "present" ? "#30d158" : "var(--text-muted)",
+                                  boxShadow: curStatus === "present" ? "0 0 10px rgba(48,209,88,0.25)" : "none",
+                                }}
+                              >
+                                <Check size={12} />
+                                Present
+                              </button>
+
+                              {/* Absent */}
+                              <button
+                                type="button"
+                                onClick={() => setStudentStatus(String(student.id), "absent")}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "5px 10px",
+                                  borderRadius: "8px",
+                                  fontSize: "12px",
+                                  fontWeight: curStatus === "absent" ? 700 : 500,
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  background: curStatus === "absent" ? "rgba(255,69,58,0.2)" : "rgba(255,255,255,0.03)",
+                                  borderColor: curStatus === "absent" ? "rgba(255,69,58,0.6)" : "var(--border)",
+                                  borderWidth: "1px",
+                                  borderStyle: "solid",
+                                  color: curStatus === "absent" ? "#ff453a" : "var(--text-muted)",
+                                  boxShadow: curStatus === "absent" ? "0 0 10px rgba(255,69,58,0.25)" : "none",
+                                }}
+                              >
+                                <X size={12} />
+                                Absent
+                              </button>
+
+                              {/* Late */}
+                              <button
+                                type="button"
+                                onClick={() => setStudentStatus(String(student.id), "late")}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "5px 10px",
+                                  borderRadius: "8px",
+                                  fontSize: "12px",
+                                  fontWeight: curStatus === "late" ? 700 : 500,
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  background: curStatus === "late" ? "rgba(255,159,10,0.2)" : "rgba(255,255,255,0.03)",
+                                  borderColor: curStatus === "late" ? "rgba(255,159,10,0.6)" : "var(--border)",
+                                  borderWidth: "1px",
+                                  borderStyle: "solid",
+                                  color: curStatus === "late" ? "#ff9f0a" : "var(--text-muted)",
+                                  boxShadow: curStatus === "late" ? "0 0 10px rgba(255,159,10,0.25)" : "none",
+                                }}
+                              >
+                                <Clock3 size={12} />
+                                Late
+                              </button>
+
+                              {/* Leave */}
+                              <button
+                                type="button"
+                                onClick={() => setStudentStatus(String(student.id), "leave")}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "5px 10px",
+                                  borderRadius: "8px",
+                                  fontSize: "12px",
+                                  fontWeight: curStatus === "leave" ? 700 : 500,
+                                  cursor: "pointer",
+                                  transition: "all 0.15s ease",
+                                  background: curStatus === "leave" ? "rgba(175,82,222,0.2)" : "rgba(255,255,255,0.03)",
+                                  borderColor: curStatus === "leave" ? "rgba(175,82,222,0.6)" : "var(--border)",
+                                  borderWidth: "1px",
+                                  borderStyle: "solid",
+                                  color: curStatus === "leave" ? "#bf5af2" : "var(--text-muted)",
+                                  boxShadow: curStatus === "leave" ? "0 0 10px rgba(175,82,222,0.25)" : "none",
+                                }}
+                              >
+                                <CalendarDays size={12} />
+                                Leave
+                              </button>
+                            </div>
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              placeholder="Add remark..."
+                              value={curNotes}
+                              onChange={(e) => setStudentNotes(String(student.id), e.target.value)}
+                              style={{
+                                width: "100%",
+                                minWidth: "140px",
+                                maxWidth: "220px",
+                                padding: "4px 8px",
+                                fontSize: "12px",
+                                background: "rgba(255,255,255,0.03)",
+                                border: "1px solid var(--border)",
+                                borderRadius: "6px",
+                                color: "var(--text-primary)",
+                              }}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Bottom Register Action Bar */}
+            <div
+              style={{
+                padding: "16px 22px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                borderTop: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.01)",
+              }}
+            >
+              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                Summary: <strong style={{ color: "#30d158" }}>{counts.present} Present</strong> · <strong style={{ color: "#ff453a" }}>{counts.absent} Absent</strong> · <strong style={{ color: "#ff9f0a" }}>{counts.late} Late</strong> · <strong style={{ color: "#bf5af2" }}>{counts.leave} Leave</strong> ({counts.pct}% attendance)
+              </div>
+
+              <button
+                className="primary-button"
+                style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 22px", fontSize: "13px" }}
+                onClick={handleSaveAttendance}
+                disabled={saving}
+              >
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                {saving ? "Synchronizing..." : "Save Attendance Register"}
+              </button>
+            </div>
           </div>
         </div>
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Class</th>
-                <th>Present</th>
-                <th>Attendance</th>
-                <th>Signal</th>
-                <th>Teacher</th>
-              </tr>
-            </thead>
-            <tbody>
-              {classAttendanceLoading ? (
-                <SkeletonTableRows rows={5} columns={5} />
-              ) : (
-                pageClasses.map(row => (
-                  <tr key={row.label}>
-                    <td>
-                      <span className="font-medium text-[var(--text-primary)]">
-                        {row.label}
-                      </span>
-                    </td>
-                    <td className="muted-cell">
-                      {row.present} / {row.total}
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <span className="progress-bar">
-                          <span
-                            style={{
-                              width: `${row.value}%`,
-                              background:
-                                row.value < 92
-                                  ? "var(--warning)"
-                                  : "var(--brand)",
-                            }}
-                          />
-                        </span>
-                        <span className="font-medium text-[var(--text-hover)]">
-                          {row.value}%
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className={`status-pill ${row.value < 92 ? "warning" : "success"}`}
-                      >
-                        {row.value < 92 ? "Follow-up" : "On track"}
-                      </span>
-                    </td>
-                    <td className="muted-cell">{row.teacher}</td>
+      )}
+
+      {/* VIEW 2: COHORT OVERVIEW */}
+      {activeTab === "overview" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div className="metric-grid three">
+            {classAttendanceLoading || dailyAttendanceLoading ? (
+              <>
+                <SkeletonMetric />
+                <SkeletonMetric />
+                <SkeletonMetric />
+              </>
+            ) : (
+              <>
+                <MetricBlock
+                  label="Present today"
+                  value={latestPresent.toLocaleString("en-IN")}
+                  comparison={`${latestPct}% marked`}
+                  icon={Check}
+                  spark={[19, 18, 23, 24, 25, 27, 30]}
+                />
+                <MetricBlock
+                  label="Absent today"
+                  value={`${latestAbsent}`}
+                  comparison={`${absentFollowUp} need follow-up`}
+                  icon={AlertCircle}
+                  spark={[27, 25, 24, 23, 21, 20, 18]}
+                  positive={false}
+                />
+                <MetricBlock
+                  label="Late arrivals"
+                  value={`${latestLate}`}
+                  comparison={`${latestLate} recorded today`}
+                  icon={Clock3}
+                  spark={[24, 27, 25, 23, 22, 20, 19]}
+                />
+              </>
+            )}
+          </div>
+
+          <div className="panel table-panel">
+            <div className="panel-header" style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)" }}>
+              <div>
+                <h2 className="panel-title">Class attendance</h2>
+                <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
+                  Daily presence and roll call metrics across active grade cohorts.
+                </p>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  className="secondary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 16px", fontSize: "13px" }}
+                  onClick={() => toast.success("Attendance CSV exported")}
+                >
+                  <Download size={14} />
+                  Export
+                </button>
+                <button
+                  className="primary-button"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", fontSize: "13px" }}
+                  onClick={() => setActiveTab("register")}
+                >
+                  <Plus size={14} />
+                  Take Register
+                </button>
+              </div>
+            </div>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Class</th>
+                    <th>Present</th>
+                    <th>Attendance</th>
+                    <th>Signal</th>
+                    <th>Teacher</th>
+                    <th style={{ width: "130px", textAlign: "right" }}>Action</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {classAttendanceLoading ? (
+                    <SkeletonTableRows rows={5} columns={6} />
+                  ) : (
+                    pageClasses.map(row => (
+                      <tr key={row.label}>
+                        <td>
+                          <span className="font-medium text-[var(--text-primary)]">
+                            {row.label}
+                          </span>
+                        </td>
+                        <td className="muted-cell">
+                          {row.present} / {row.total}
+                        </td>
+                        <td>
+                          <div className="flex items-center gap-3">
+                            <span className="progress-bar">
+                              <span
+                                style={{
+                                  width: `${row.value}%`,
+                                  background:
+                                    row.value < 92
+                                      ? "var(--warning)"
+                                      : "var(--brand)",
+                                }}
+                              />
+                            </span>
+                            <span className="font-medium text-[var(--text-hover)]">
+                              {row.value}%
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${row.value < 92 ? "warning" : "success"}`}
+                          >
+                            {row.value < 92 ? "Follow-up" : "On track"}
+                          </span>
+                        </td>
+                        <td className="muted-cell">{row.teacher}</td>
+                        <td style={{ textAlign: "right" }}>
+                          <button
+                            className="secondary-button compact"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "11.5px", padding: "4px 10px" }}
+                            onClick={() => {
+                              const found = availableClasses.find(c => c.label === row.label);
+                              if (found) setSelectedClassId(found.id);
+                              setActiveTab("register");
+                            }}
+                          >
+                            <ClipboardCheck size={12} />
+                            Take Register
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Pager pagination={classPager} noun="classes" />
+          </div>
         </div>
-        <Pager pagination={classPager} noun="classes" />
-      </div>
+      )}
     </div>
   );
 }

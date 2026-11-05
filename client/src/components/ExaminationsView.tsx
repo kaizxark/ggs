@@ -45,8 +45,10 @@ import {
   useStudentsView,
   useStaffView,
   useSubjectsView,
+  useCurrentUser,
   type Student,
 } from "@/lib/erp-views";
+import { isSuperAdminId } from "@shared/super-admin";
 import { type Exam, type ExamResult } from "@/lib/school-data";
 
 export interface ExaminationsViewProps {
@@ -243,6 +245,9 @@ function getGradeLetter(score: number, max: number): { letter: string; color: st
 }
 
 export function ExaminationsView({ onBack }: ExaminationsViewProps) {
+  const currentUser = useCurrentUser();
+  const isSuper = currentUser ? isSuperAdminId(currentUser.id) : false;
+  const isFacultyUser = currentUser?.role === "teacher" || currentUser?.role === "faculty";
   const { rows: fetchedExams, loading: examsLoading } = useExamsView();
   const { rows: fetchedResults, loading: resultsLoading, update: updateExamResult } = useExamResultsView();
   const { rows: students, loading: studentsLoading } = useStudentsView();
@@ -844,6 +849,15 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           <Calendar size={14} />
           Schedule
         </button>
+        {(isFacultyUser || !isSuper) && (
+          <button
+            className={activeTab === "marks" ? "active" : ""}
+            onClick={() => setActiveTab("marks")}
+          >
+            <SlidersHorizontal size={14} />
+            Marks entry
+          </button>
+        )}
         <button
           className={activeTab === "publishing" ? "active" : ""}
           onClick={() => setActiveTab("publishing")}

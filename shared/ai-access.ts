@@ -208,6 +208,14 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
     "examinations",
     "settings",
   ],
+  faculty: [
+    "overview",
+    "students",
+    "attendance",
+    "academics",
+    "examinations",
+    "settings",
+  ],
 
   // Non-teaching staff. Enough to help a visitor, nothing that is a ledger.
   staff: ["overview", "students", "attendance", "settings"],

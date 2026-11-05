@@ -1348,6 +1348,7 @@ function StudentDialog({
     roll_no: student?.roll_no ? String(student.roll_no) : "",
     status: student?.status ?? "active",
     joined_on: student?.joined_on ?? new Date().toISOString().slice(0, 10),
+    admission_payment_mode: "Cash",
     photo_url: student?.photo_url ?? "",
     date_of_birth: student?.date_of_birth ?? "",
     gender: student?.gender ?? "",
@@ -1486,6 +1487,7 @@ function StudentDialog({
         gender: form.gender || undefined,
         status: form.status,
         joined_on: form.joined_on || undefined,
+        admission_payment_mode: form.admission_payment_mode || undefined,
         blood_group: form.blood_group || undefined,
         nationality: form.nationality.trim() || undefined,
         mother_tongue: form.mother_tongue.trim() || undefined,
@@ -1707,6 +1709,22 @@ function StudentDialog({
                       { value: "inactive", label: "Inactive" },
                       { value: "graduated", label: "Graduated" },
                       { value: "withdrawn", label: "Withdrawn" },
+                    ]}
+                  />
+                </label>
+
+                <label style={{ gridColumn: "span 2" }}>
+                  Admission Fee Payment Mode
+                  <FormSelect
+                    value={form.admission_payment_mode}
+                    onChange={set("admission_payment_mode")}
+                    options={[
+                      { value: "Cash", label: "Cash Payment" },
+                      { value: "Online / UPI", label: "Online / UPI (Google Pay, PhonePe, Paytm)" },
+                      { value: "Bank Transfer", label: "Net Banking / Bank Transfer (NEFT / RTGS)" },
+                      { value: "Cheque / DD", label: "Cheque / Demand Draft (DD)" },
+                      { value: "Card", label: "Debit / Credit Card" },
+                      { value: "Exempt / Concession", label: "Fee Concession / Scholarship (Exempt)" },
                     ]}
                   />
                 </label>

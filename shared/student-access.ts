@@ -85,7 +85,7 @@ const FINANCE_ROLES = new Set(["super_admin", "admin", "principal", "accountant"
 const DOCUMENT_ROLES = new Set(["super_admin", "admin"]);
 
 /** Teaching staff. */
-const TEACHERS = new Set(["teacher"]);
+const TEACHERS = new Set(["teacher", "faculty"]);
 
 /**
  * May this role open the student directory at all?
@@ -115,7 +115,7 @@ export function canViewStudent(
   if (SCHOOL_MANAGERS.has(r)) return true;
   if (r === "staff" || r === "accountant") return true;
   // A teacher is also a member of staff, so their own record stays reachable.
-  if (r === "teacher") return relatesTo === "teacher" || relatesTo === "self";
+  if (TEACHERS.has(r)) return relatesTo === "teacher" || relatesTo === "self";
   // A parent reaches their own children, a pupil reaches themselves. These are
   // matched separately rather than with one combined check: a parent account
   // must not pass by claiming a "self" relationship, and a pupil must not pass
@@ -206,7 +206,7 @@ export function canWriteObservations(role: string): boolean {
 export function canViewObservations(role: string, relatesTo: "guardian" | "self" | "teacher" | null): boolean {
   const r = norm(role);
   if (SCHOOL_MANAGERS.has(r)) return true;
-  if (r === "teacher") return relatesTo === "teacher" || relatesTo === "self";
+  if (TEACHERS.has(r)) return relatesTo === "teacher" || relatesTo === "self";
   return false;
 }
 
