@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import {
   Calendar,
   Plus,
@@ -840,37 +841,77 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         />
       </div>
 
-      {/* Sub-navigation Tabs */}
-      <div className="profile-tabs" style={{ marginBottom: "8px" }}>
+      {/* Sub-navigation Tabs with horizontal sliding motion */}
+      <div className="profile-tabs" style={{ marginBottom: "8px", position: "relative" }}>
         <button
           className={activeTab === "schedule" ? "active" : ""}
           onClick={() => setActiveTab("schedule")}
+          style={{ position: "relative" }}
         >
-          <Calendar size={14} />
-          Schedule
+          {activeTab === "schedule" && (
+            <motion.div
+              layoutId="examinationsSubTab"
+              className="profile-tab-indicator"
+              transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+            />
+          )}
+          <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Calendar size={14} />
+            Schedule
+          </span>
         </button>
         {(isFacultyUser || !isSuper) && (
           <button
             className={activeTab === "marks" ? "active" : ""}
             onClick={() => setActiveTab("marks")}
+            style={{ position: "relative" }}
           >
-            <SlidersHorizontal size={14} />
-            Marks entry
+            {activeTab === "marks" && (
+              <motion.div
+                layoutId="examinationsSubTab"
+                className="profile-tab-indicator"
+                transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+              />
+            )}
+            <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <SlidersHorizontal size={14} />
+              Marks entry
+            </span>
           </button>
         )}
         <button
           className={activeTab === "publishing" ? "active" : ""}
           onClick={() => setActiveTab("publishing")}
+          style={{ position: "relative" }}
         >
-          <Send size={14} />
-          Publishing ({publishingList.filter((p) => !p.published).length})
+          {activeTab === "publishing" && (
+            <motion.div
+              layoutId="examinationsSubTab"
+              className="profile-tab-indicator"
+              transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+            />
+          )}
+          <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Send size={14} />
+            Publishing ({publishingList.filter((p) => !p.published).length})
+          </span>
         </button>
         <button
           className={activeTab === "report-cards" ? "active" : ""}
           onClick={() => setActiveTab("report-cards")}
+          style={{ position: "relative" }}
         >
-          <Award size={14} />
-          Report cards
+          {activeTab === "report-cards" && (
+            <motion.div
+              layoutId="examinationsSubTab"
+              className="profile-tab-indicator"
+              transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+            />
+          )}
+          <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Award size={14} />
+            Report cards
+          </span>
         </button>
       </div>
 

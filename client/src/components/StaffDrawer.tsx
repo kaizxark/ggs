@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { avatarTones } from "@/lib/school-data";
 import {
   Activity,
@@ -317,18 +318,29 @@ export function StaffDrawer({
           {ALL_STAFF_SECTIONS.map((key) => {
             const Icon = STAFF_SECTION_ICONS[key];
             const locked = allowed !== null && !allowed.has(key);
+            const isActive = tab === key;
             return (
               <button
                 key={key}
-                className={`${tab === key ? "active" : ""}${locked ? " locked" : ""}`.trim()}
+                className={`${isActive ? "active" : ""}${locked ? " locked" : ""}`.trim()}
                 onClick={() => setTab(key)}
                 disabled={locked}
                 title={locked ? withheldReason.get(key) ?? "Your role cannot read this section." : undefined}
-                aria-current={tab === key ? "page" : undefined}
+                aria-current={isActive ? "page" : undefined}
+                style={{ position: "relative" }}
               >
-                <Icon size={14} aria-hidden="true" />
-                {labels[key] ?? key}
-                {locked && <Lock size={12} aria-hidden="true" />}
+                {isActive && (
+                  <motion.div
+                    layoutId="staffDrawerTab"
+                    className="tab-indicator"
+                    transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+                  />
+                )}
+                <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Icon size={14} aria-hidden="true" />
+                  {labels[key] ?? key}
+                  {locked && <Lock size={12} aria-hidden="true" />}
+                </span>
               </button>
             );
           })}

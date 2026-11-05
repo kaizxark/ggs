@@ -184,6 +184,7 @@ import { ExaminationsView } from "../components/ExaminationsView";
 import { FormSelect } from "../components/FormSelect";
 import { DateDropdowns } from "../components/DateDropdowns";
 import { SmoothFilterDropdown } from "../components/SmoothFilterDropdown";
+import { SegmentedControl } from "../components/SegmentedControl";
 import SmoothScroll, { smoothScrollTo, usePageScrollLock } from "../components/SmoothScroll";
 import {
   effectiveRole,
@@ -2743,25 +2744,26 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
           </p>
         </div>
 
-        {/* View Switcher Tabs */}
-        <div className="segmented-control" style={{ marginLeft: "auto", display: "inline-flex" }}>
-          <button
-            className={activeTab === "register" ? "active" : ""}
-            onClick={() => setActiveTab("register")}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            <ClipboardCheck size={14} />
-            Daily Register
-          </button>
-          <button
-            className={activeTab === "overview" ? "active" : ""}
-            onClick={() => setActiveTab("overview")}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            <BarChart3 size={14} />
-            Cohort Overview
-          </button>
-        </div>
+        {/* View Switcher Tabs with horizontal sliding motion */}
+        <SegmentedControl
+          ariaLabel="Attendance view tabs"
+          layoutId="attendanceMainViewTabs"
+          value={activeTab}
+          onChange={(val) => setActiveTab(val as "register" | "overview")}
+          style={{ marginLeft: "auto", display: "inline-flex" }}
+          options={[
+            {
+              value: "register",
+              label: "Daily Register",
+              icon: <ClipboardCheck size={14} />,
+            },
+            {
+              value: "overview",
+              label: "Cohort Overview",
+              icon: <BarChart3 size={14} />,
+            },
+          ]}
+        />
       </div>
 
       {/* VIEW 1: DAILY REGISTER (TAKE ATTENDANCE) */}
@@ -2899,18 +2901,17 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
               </div>
 
               {classPeriods.length > 0 && (
-                <div className="segmented-control" style={{ overflowX: "auto" }}>
-                  {classPeriods.map(p => (
-                    <button
-                      key={p.period}
-                      className={selectedPeriod === p.period ? "active" : ""}
-                      onClick={() => setSelectedPeriod(p.period)}
-                      title={`${p.subject} (${p.time})`}
-                    >
-                      {p.period}
-                    </button>
-                  ))}
-                </div>
+                <SegmentedControl
+                  ariaLabel="Select timetable period"
+                  layoutId="attendancePeriodTabs"
+                  style={{ overflowX: "auto" }}
+                  value={selectedPeriod}
+                  onChange={setSelectedPeriod}
+                  options={classPeriods.map(p => ({
+                    value: p.period,
+                    label: p.period,
+                  }))}
+                />
               )}
             </div>
           </div>
@@ -4120,30 +4121,18 @@ function StaffView({
           </div>
 
           <div className="toolbar-actions">
-            {/* Quick Status Segmented Control */}
-            <div className="segmented-control" role="group" aria-label="Filter by staff status">
-              <button
-                type="button"
-                className={status === "All staff" || status === "all" ? "active" : ""}
-                onClick={() => setStatus("All staff")}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className={status === "On campus" ? "active" : ""}
-                onClick={() => setStatus("On campus")}
-              >
-                On campus
-              </button>
-              <button
-                type="button"
-                className={status === "On leave" ? "active" : ""}
-                onClick={() => setStatus("On leave")}
-              >
-                On leave
-              </button>
-            </div>
+            {/* Quick Status Segmented Control with horizontal sliding motion */}
+            <SegmentedControl
+              ariaLabel="Filter by staff status"
+              layoutId="staffStatusTabs"
+              value={status === "all" ? "All staff" : status}
+              onChange={(val) => setStatus(val)}
+              options={[
+                { value: "All staff", label: "All" },
+                { value: "On campus", label: "On campus" },
+                { value: "On leave", label: "On leave" },
+              ]}
+            />
 
             {/* Department Filter */}
             <SmoothFilterDropdown
@@ -4405,17 +4394,16 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
           <div>
             <h2 className="panel-title">{days[dayIndex]} · Grades 6 to 9</h2>
           </div>
-          <div className="segmented-control">
-            {days.map((day, index) => (
-              <button
-                key={day}
-                className={dayIndex === index ? "active" : ""}
-                onClick={() => setDayIndex(index)}
-              >
-                {day.slice(0, 3)}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            ariaLabel="Select timetable day"
+            layoutId="academicsDayTabs"
+            value={String(dayIndex)}
+            onChange={(val) => setDayIndex(Number(val))}
+            options={days.map((day, index) => ({
+              value: String(index),
+              label: day.slice(0, 3),
+            }))}
+          />
         </div>
         <div className="table-scroll">
           <table className="data-table" style={{ minWidth: 720 }}>

@@ -31,6 +31,7 @@ import { SkeletonMetric } from "@/components/ErpSkeleton";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { DateDropdowns } from "@/components/DateDropdowns";
 import { ServerPager } from "@/components/ErpServerPager";
+import { SegmentedControl } from "@/components/SegmentedControl";
 import {
   ApiError,
   archiveStudent,
@@ -526,44 +527,20 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
           </div>
 
           <div className="toolbar-actions">
-            {/* Quick Status Segmented Pills */}
-            <div className="segmented-control" role="group" aria-label="Filter by enrollment status">
-              <button
-                type="button"
-                className={!filters.status || filters.status === "all" ? "active" : ""}
-                onClick={() => setFilter({ status: "" })}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className={filters.status === "active" ? "active" : ""}
-                onClick={() => setFilter({ status: "active" })}
-              >
-                Active
-              </button>
-              <button
-                type="button"
-                className={filters.status === "inactive" ? "active" : ""}
-                onClick={() => setFilter({ status: "inactive" })}
-              >
-                Inactive
-              </button>
-              <button
-                type="button"
-                className={filters.status === "withdrawn" ? "active" : ""}
-                onClick={() => setFilter({ status: "withdrawn" })}
-              >
-                Withdrawn
-              </button>
-              <button
-                type="button"
-                className={filters.status === "graduated" ? "active" : ""}
-                onClick={() => setFilter({ status: "graduated" })}
-              >
-                Graduated
-              </button>
-            </div>
+            {/* Quick Status Segmented Pills with horizontal sliding motion */}
+            <SegmentedControl
+              ariaLabel="Filter by enrollment status"
+              layoutId="studentDirectoryStatusTabs"
+              value={filters.status || ""}
+              onChange={(val) => setFilter({ status: val })}
+              options={[
+                { value: "", label: "All" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+                { value: "withdrawn", label: "Withdrawn" },
+                { value: "graduated", label: "Graduated" },
+              ]}
+            />
 
             {/* Smart Class Filter */}
             <SmoothFilterDropdown
@@ -1041,11 +1018,26 @@ function StudentDrawer({
       )}
 
       <div className="drawer-tabs scroll-x">
-        {visibleTabs.map((key) => (
-          <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
-            {DRAWER_TABS[key]}
-          </button>
-        ))}
+        {visibleTabs.map((key) => {
+          const isActive = tab === key;
+          return (
+            <button
+              key={key}
+              className={isActive ? "active" : ""}
+              onClick={() => setTab(key)}
+              style={{ position: "relative" }}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="pupilDrawerActiveTab"
+                  className="tab-indicator"
+                  transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+                />
+              )}
+              <span style={{ position: "relative", zIndex: 1 }}>{DRAWER_TABS[key]}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="pupil-drawer-body">
@@ -1580,51 +1572,42 @@ function StudentDialog({
           </button>
         </div>
 
-        {/* Apple Segmented Section Tabs */}
+        {/* Apple Segmented Section Tabs with horizontal sliding motion */}
         <div style={{ padding: "0 22px 14px", background: "rgba(24, 25, 32, 0.88)", flexShrink: 0 }}>
-          <div className="segmented-control" style={{ width: "100%", height: 34 }}>
-            <button
-              type="button"
-              className={activeTab === "academic" ? "active" : ""}
-              onClick={() => setActiveTab("academic")}
-              style={{ flex: 1, position: "relative" }}
-            >
-              Academic
-              {hasAcademicError && (
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 6, display: "inline-block" }} />
-              )}
-            </button>
-            <button
-              type="button"
-              className={activeTab === "personal" ? "active" : ""}
-              onClick={() => setActiveTab("personal")}
-              style={{ flex: 1, position: "relative" }}
-            >
-              Personal & Bio
-              {hasPersonalError && (
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 6, display: "inline-block" }} />
-              )}
-            </button>
-            <button
-              type="button"
-              className={activeTab === "guardian" ? "active" : ""}
-              onClick={() => setActiveTab("guardian")}
-              style={{ flex: 1, position: "relative" }}
-            >
-              Guardian
-              {hasGuardianError && (
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 6, display: "inline-block" }} />
-              )}
-            </button>
-            <button
-              type="button"
-              className={activeTab === "address" ? "active" : ""}
-              onClick={() => setActiveTab("address")}
-              style={{ flex: 1, position: "relative" }}
-            >
-              Address
-            </button>
-          </div>
+          <SegmentedControl
+            style={{ width: "100%", height: 34 }}
+            layoutId="addStudentModalTab"
+            value={activeTab}
+            buttonClassName="flex-1"
+            onChange={(val) => setActiveTab(val as typeof activeTab)}
+            options={[
+              {
+                value: "academic",
+                label: "Academic",
+                badge: hasAcademicError ? (
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 4, display: "inline-block" }} />
+                ) : undefined,
+              },
+              {
+                value: "personal",
+                label: "Personal & Bio",
+                badge: hasPersonalError ? (
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 4, display: "inline-block" }} />
+                ) : undefined,
+              },
+              {
+                value: "guardian",
+                label: "Guardian",
+                badge: hasGuardianError ? (
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 4, display: "inline-block" }} />
+                ) : undefined,
+              },
+              {
+                value: "address",
+                label: "Address",
+              },
+            ]}
+          />
         </div>
 
         <div className="modal-body" style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 22px" }}>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
   AlertCircle,
   BookOpen,
@@ -456,9 +457,35 @@ function PupilMobileView({
               <div className="pupil-m-card-head">
                 <div><p className="pupil-m-eyebrow">Schedule</p><h2>Timetable</h2></div>
                 {hasTimetable && (
-                  <div className="pupil-m-toggle">
-                    <button className={scheduleView === "day" ? "active" : ""} onClick={() => setScheduleView("day")}>Day</button>
-                    <button className={scheduleView === "week" ? "active" : ""} onClick={() => setScheduleView("week")}>Week</button>
+                  <div className="pupil-m-toggle" style={{ position: "relative" }}>
+                    <button
+                      className={scheduleView === "day" ? "active" : ""}
+                      onClick={() => setScheduleView("day")}
+                      style={{ position: "relative" }}
+                    >
+                      {scheduleView === "day" && (
+                        <motion.div
+                          layoutId="pupilTimetableScheduleView"
+                          className="segmented-indicator"
+                          transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+                        />
+                      )}
+                      <span style={{ position: "relative", zIndex: 1 }}>Day</span>
+                    </button>
+                    <button
+                      className={scheduleView === "week" ? "active" : ""}
+                      onClick={() => setScheduleView("week")}
+                      style={{ position: "relative" }}
+                    >
+                      {scheduleView === "week" && (
+                        <motion.div
+                          layoutId="pupilTimetableScheduleView"
+                          className="segmented-indicator"
+                          transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
+                        />
+                      )}
+                      <span style={{ position: "relative", zIndex: 1 }}>Week</span>
+                    </button>
                   </div>
                 )}
               </div>
