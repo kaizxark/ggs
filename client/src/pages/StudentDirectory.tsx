@@ -821,7 +821,8 @@ function StudentRow({
             <span className="avatar avatar-sm">{initialsFor(student.name)}</span>
           )}
           <div>
-            <div className="font-medium text-[var(--text-primary)]">{student.name}</div>
+            <div className="font-semibold text-[13.5px] text-[var(--text-primary)] tracking-[-0.01em]">{student.name}</div>
+            <div className="text-[11.5px] font-mono text-[var(--text-muted)] mt-0.5">{student.usn || "No USN"}</div>
           </div>
         </div>
       </td>

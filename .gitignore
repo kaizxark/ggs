@@ -123,3 +123,4 @@ supabase/.temp/
 # working directory is uploaded.
 webflow-site/*
 !webflow-site/index.html
+.env*.local

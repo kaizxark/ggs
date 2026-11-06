@@ -726,7 +726,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
   }, [isAdministrativeStaffUser, principalCount, staffRoleFilter]);
 
   return (
-    <div className="page-stack space-y-8 pb-12">
+    <div className="page-stack pb-12">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pb-6 border-b border-[var(--border)]">
         <div className="space-y-1.5">
@@ -1229,10 +1229,9 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               {/* Intuitive School Division Filters with Smooth Horizontal Sliding Indicator */}
               <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1 max-w-full overflow-x-auto no-scrollbar">
                 {[
-                  { key: "all", label: "All Students" },
-                  { key: "primary", label: "Primary (G1–5)" },
-                  { key: "middle", label: "Middle (G6–8)" },
-                  { key: "high", label: "High (G9–12)" },
+                  { key: "all", label: "All Students (G6–10)" },
+                  { key: "middle", label: "Middle School (G6–8)" },
+                  { key: "high", label: "High School (G9–10)" },
                 ].map(tab => {
                   const isActive = studentFilter === tab.key;
                   return (

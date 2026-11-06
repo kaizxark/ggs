@@ -813,7 +813,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           value={String(metrics.upcomingCount)}
           comparison={`${metrics.totalExams} total scheduled`}
           icon={FileText}
-          spark={[3, 4, 4, 5, 5, metrics.upcomingCount, metrics.upcomingCount]}
         />
         <MetricBlock
           label="Papers to grade"
@@ -821,21 +820,18 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           comparison={metrics.pendingGradingCount > 0 ? "Pending review" : "All graded"}
           icon={ClipboardCheck}
           positive={metrics.pendingGradingCount === 0}
-          spark={[12, 10, 8, 6, 5, 4, metrics.pendingGradingCount]}
         />
         <MetricBlock
           label="Average score"
           value={`${metrics.averageScore}%`}
           comparison="Cohort average"
           icon={GraduationCap}
-          spark={[76, 78, 80, 81, 82, 83, metrics.averageScore]}
         />
         <MetricBlock
           label="Grades published"
           value={`${metrics.publishRate}%`}
           comparison={`${metrics.publishedCount} of ${metrics.totalPapers} published`}
           icon={Check}
-          spark={[30, 45, 55, 60, 68, metrics.publishRate]}
         />
       </div>
 

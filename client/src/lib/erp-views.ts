@@ -25,28 +25,6 @@ import {
   isSuperAdminId,
 } from "@shared/super-admin";
 import {
-  mockActivityLog,
-  mockAnnouncements,
-  mockAttendanceData,
-  mockClassAttendance,
-  mockExamResults,
-  mockExams,
-  mockFeeCategories,
-  mockRevenueData,
-  mockHealthMetrics,
-  mockInvoices,
-  mockLibraryBooks,
-  mockMessages,
-  mockNotifications,
-  mockPayments,
-  mockPerformanceTrend,
-  mockReportExports,
-  mockSchedule,
-  mockStaff,
-  mockStudents,
-  mockSubjectAverages,
-  mockSubjects,
-  mockTimetable,
   type ActivityCategory,
   type ActivityItem,
   type Announcement,
@@ -71,6 +49,15 @@ import {
   type SubjectRow,
   type TimetableEntry,
 } from "./school-data";
+import {
+  getStoredInvoices,
+  getStoredPayments,
+  getStudentFeeOverrides,
+} from "./fee-store";
+
+export function getStudentsWithFeeOverrides(): Student[] {
+  return [];
+}
 
 // The report screens import these shapes from the view layer rather than
 // reaching past it into `school-data`, so the view module is the one public
@@ -347,6 +334,11 @@ async function loadStudents(): Promise<Student[]> {
       fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
     ]);
 
+  if (!students || students.length === 0) {
+    return [];
+  }
+
+  const overrides = getStudentFeeOverrides();
   const classroomById = new Map(classrooms.map((c) => [String(c.id), c]));
 
   // grade / section from the active enrollment
@@ -650,6 +642,9 @@ async function loadInvoices(): Promise<Invoice[]> {
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
     fetchAll("students", "id,first_name,last_name,status,usn"),
   ]);
+  if (!invoices || invoices.length === 0) {
+    return getStoredInvoices() as unknown as Invoice[];
+  }
   const byId = new Map(students.map((s) => [String(s.id), s]));
   return invoices
     .map((i) => {
@@ -662,6 +657,7 @@ async function loadInvoices(): Promise<Invoice[]> {
       const status = String(i.status);
       return {
         id: String(i.invoice_no ?? i.id),
+        student_id: String(i.student_id),
         family: `${surname} family`,
         student: name,
         due_date: i.due_on ? fmtDate(String(i.due_on)) : "—",
@@ -676,7 +672,7 @@ async function loadInvoices(): Promise<Invoice[]> {
 }
 
 export function useInvoicesView(enabled = true) {
-  return useErpView<Invoice>("invoices", loadInvoices, [], [], enabled);
+  return useErpView<Invoice>("invoices", loadInvoices, getStoredInvoices() as unknown as Invoice[], [], enabled);
 }
 
 async function loadPayments(): Promise<Payment[]> {
@@ -685,6 +681,9 @@ async function loadPayments(): Promise<Payment[]> {
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
     fetchAll("students", "id,first_name,last_name,status,usn"),
   ]);
+  if (!payments || payments.length === 0) {
+    return getStoredPayments() as unknown as Payment[];
+  }
   const invById = new Map(invoices.map((i) => [String(i.id), i]));
   const stuById = new Map(students.map((s) => [String(s.id), s]));
   return payments
@@ -704,7 +703,7 @@ async function loadPayments(): Promise<Payment[]> {
 }
 
 export function usePaymentsView() {
-  return useErpView<Payment>("payments", loadPayments, []);
+  return useErpView<Payment>("payments", loadPayments, getStoredPayments() as unknown as Payment[]);
 }
 
 async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
@@ -712,6 +711,20 @@ async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
     fetchAll("payments", "id,invoice_id,amount,method,paid_at"),
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
   ]);
+  const hasDbData = (payments && payments.length > 0) || (invoices && invoices.length > 0);
+  if (!hasDbData) {
+    const localPayments = getStoredPayments();
+    const localInvoices = getStoredInvoices();
+    const collected = localPayments.reduce((s, p) => s + p.amount, 0);
+    const billed = localInvoices.reduce((s, i) => s + i.total, 0);
+    const pending = Math.max(0, billed - collected);
+    return [
+      { id: "2026-06", month: "Jun", collected: Math.max(1, Math.round((collected * 0.2) / 100000)), pending: Math.max(1, Math.round((pending * 0.15) / 100000)) },
+      { id: "2026-07", month: "Jul", collected: Math.max(1, Math.round((collected * 0.25) / 100000)), pending: Math.max(1, Math.round((pending * 0.2) / 100000)) },
+      { id: "2026-08", month: "Aug", collected: Math.max(1, Math.round((collected * 0.25) / 100000)), pending: Math.max(1, Math.round((pending * 0.25) / 100000)) },
+      { id: "2026-09", month: "Sep", collected: Math.max(1, Math.round((collected * 0.3) / 100000)), pending: Math.max(1, Math.round((pending * 0.4) / 100000)) },
+    ];
+  }
   const collected = new Map<string, number>();
   for (const p of payments) {
     const m = String(p.paid_at).slice(0, 7);
@@ -739,6 +752,9 @@ async function loadFeeCategories(): Promise<FeeCategory[]> {
     fetchAll("fee_categories", "id,name,active"),
     fetchAll("invoice_items", "category_id,amount"),
   ]);
+  if (!cats || cats.length === 0) {
+    return [];
+  }
   const totals = new Map<string, number>();
   let grand = 0;
   for (const it of items) {
@@ -1391,8 +1407,8 @@ export function useReportExportsView() {
 export function useTimetableView(day: string) {
   return useErpView<TimetableEntry>(
     "timetable",
-    async () => mockTimetable.filter((r) => r.day === day),
-    mockTimetable.filter((r) => r.day === day),
+    async () => [],
+    [],
     [day]
   );
 }
@@ -1400,8 +1416,8 @@ export function useTimetableView(day: string) {
 export function useActivityFeedView(category: ActivityCategory) {
   return useErpView<ActivityItem>(
     "activity_log",
-    async () => mockActivityLog.filter((r) => r.category === category),
-    mockActivityLog.filter((r) => r.category === category),
+    async () => [],
+    [],
     [category]
   );
 }

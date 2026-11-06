@@ -178,6 +178,7 @@ import {
 import { StudentDirectory } from "./StudentDirectory";
 import { StaffDrawer } from "../components/StaffDrawer";
 import { StaffCreateDialog } from "../components/StaffCreateDialog";
+import { recordFeePayment } from "../lib/fee-store";
 import { ReportsView } from "../components/ReportsView";
 import { ExaminationsView } from "../components/ExaminationsView";
 import { FormSelect } from "../components/FormSelect";
@@ -2695,6 +2696,9 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   const absentFollowUp = enrolledStudents.filter(
     student => student.status === "Active" && student.attendance < 90
   ).length;
+  const presentSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.present) : undefined;
+  const absentSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.absent) : undefined;
+  const lateSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.late) : undefined;
   const classPager = usePagination(classAttendance);
   const pageClasses = classPager.pageRows;
 
@@ -2891,54 +2895,54 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* Live Metrics Grid */}
-          <div className="metric-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-            <div className="metric-card" style={{ padding: "16px 20px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+            <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500 }}>Enrolled Pupils</div>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0" }}>
+              <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0" }}>
                 {counts.total}
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>{currentClass.label} cohort</div>
             </div>
 
-            <div className="metric-card" style={{ padding: "16px 20px" }}>
+            <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#30d158" }} />
                 Present Today
               </div>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#30d158", margin: "4px 0" }}>
+              <div style={{ fontSize: "26px", fontWeight: 700, color: "#30d158", margin: "4px 0" }}>
                 {counts.present} <span style={{ fontSize: "14px", fontWeight: 500, opacity: 0.85 }}>({counts.pct}%)</span>
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Attending roll call</div>
             </div>
 
-            <div className="metric-card" style={{ padding: "16px 20px" }}>
+            <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ff453a" }} />
                 Absent
               </div>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#ff453a", margin: "4px 0" }}>
+              <div style={{ fontSize: "26px", fontWeight: 700, color: "#ff453a", margin: "4px 0" }}>
                 {counts.absent}
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Marked absent</div>
             </div>
 
-            <div className="metric-card" style={{ padding: "16px 20px" }}>
+            <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ff9f0a" }} />
                 Late Arrival
               </div>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#ff9f0a", margin: "4px 0" }}>
+              <div style={{ fontSize: "26px", fontWeight: 700, color: "#ff9f0a", margin: "4px 0" }}>
                 {counts.late}
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Arrived with delay</div>
             </div>
 
-            <div className="metric-card" style={{ padding: "16px 20px" }}>
+            <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#bf5af2" }} />
                 On Leave
               </div>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#bf5af2", margin: "4px 0" }}>
+              <div style={{ fontSize: "26px", fontWeight: 700, color: "#bf5af2", margin: "4px 0" }}>
                 {counts.leave}
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Approved leave</div>
@@ -2947,7 +2951,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
 
           {/* Student Register Table */}
           <div className="panel table-panel">
-            <div className="panel-header" style={{ padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px", flexWrap: "wrap", borderBottom: "1px solid var(--border)" }}>
+            <div className="panel-header">
               <div>
                 <h2 className="panel-title">Roll Call Register · {currentClass.label}</h2>
                 <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
@@ -2982,7 +2986,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                     <th>Pupil</th>
                     <th style={{ width: "130px" }}>USN / Roll</th>
                     <th style={{ width: "130px" }}>Term Attendance</th>
-                    <th style={{ width: "340px" }}>Attendance Status</th>
+                    <th style={{ minWidth: "360px" }}>Attendance Status</th>
                     <th>Remarks</th>
                   </tr>
                 </thead>
@@ -3041,7 +3045,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                           </td>
                           <td>
                             {/* 4 Interactive Tactile Attendance Status Pills */}
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
                               {/* Present */}
                               <button
                                 type="button"
@@ -3220,14 +3224,14 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                   value={latestPresent.toLocaleString("en-IN")}
                   comparison={`${latestPct}% marked`}
                   icon={Check}
-                  spark={[19, 18, 23, 24, 25, 27, 30]}
+                  spark={presentSpark}
                 />
                 <MetricBlock
                   label="Absent today"
                   value={`${latestAbsent}`}
                   comparison={`${absentFollowUp} need follow-up`}
                   icon={AlertCircle}
-                  spark={[27, 25, 24, 23, 21, 20, 18]}
+                  spark={absentSpark}
                   positive={false}
                 />
                 <MetricBlock
@@ -3235,7 +3239,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                   value={`${latestLate}`}
                   comparison={`${latestLate} recorded today`}
                   icon={Clock3}
-                  spark={[24, 27, 25, 23, 22, 20, 19]}
+                  spark={lateSpark}
                 />
               </>
             )}
@@ -3355,12 +3359,15 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const { rows: feeCategories, loading: feeCategoriesLoading } =
     useFeeCategories();
   const { rows: invoices, loading: invoicesViewLoading } = useInvoices();
+  const { rows: payments, loading: paymentsLoading } = usePayments();
   const { rows: enrolledStudents } = useStudents();
   const [recordStudent, setRecordStudent] = useState<Student | null>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
+  const [paymentReference, setPaymentReference] = useState("");
 
   const matchingStudents = useMemo(() => {
     if (!studentSearchQuery.trim()) return [];
@@ -3369,6 +3376,29 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       .filter(s => s.name.toLowerCase().includes(q) || s.usn?.toLowerCase().includes(q))
       .slice(0, 6);
   }, [enrolledStudents, studentSearchQuery]);
+
+  const selectedInvoice = useMemo(() => {
+    if (selectedInvoiceId) {
+      return invoices.find(i => i.id === selectedInvoiceId) || null;
+    }
+    if (recordStudent) {
+      return (
+        invoices.find(
+          i =>
+            (recordStudent.id && i.student_id === recordStudent.id) ||
+            i.student.toLowerCase() === recordStudent.name.toLowerCase()
+        ) || null
+      );
+    }
+    return null;
+  }, [invoices, selectedInvoiceId, recordStudent]);
+
+  useEffect(() => {
+    if (selectedInvoice) {
+      const balance = Number(selectedInvoice.outstanding ?? selectedInvoice.amount ?? 0);
+      setPaymentAmount(String(balance > 0 ? balance : 15000));
+    }
+  }, [selectedInvoice]);
 
   const invoicesPager = usePagination(invoices);
   const pageInvoices = invoicesPager.pageRows;
@@ -3392,6 +3422,8 @@ function FinanceView({ onBack }: { onBack: () => void }) {
     () => invoices.filter(i => i.status === "Overdue").length,
     [invoices]
   );
+  const collectedSpark = revenueData.length >= 2 ? revenueData.map(r => r.collected) : undefined;
+  const pendingSpark = revenueData.length >= 2 ? revenueData.map(r => r.pending) : undefined;
 
   return (
     <div className="page-stack">
@@ -3427,14 +3459,14 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               value={`₹${(collected / 100000).toFixed(1)}L`}
               comparison={`${rate}% collected`}
               icon={IndianRupee}
-              spark={[13, 15, 18, 20, 22, 25, 29]}
+              spark={collectedSpark}
             />
             <MetricBlock
               label="Outstanding"
               value={`₹${(outstanding / 100000).toFixed(1)}L`}
               comparison={`${overdueCount} overdue accounts`}
               icon={Receipt}
-              spark={[29, 27, 26, 25, 23, 21, 19]}
+              spark={pendingSpark}
               positive={false}
             />
             <MetricBlock
@@ -3442,7 +3474,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               value={`${rate}%`}
               comparison="AY 2026–27"
               icon={Activity}
-              spark={[18, 19, 20, 22, 23, 26, 29]}
             />
           </>
         )}
@@ -3649,16 +3680,51 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                       </span>
                     </td>
                     <td>
-                      <button
-                        className="tiny-action"
-                        onClick={() =>
-                          toast.success("Payment reminder sent", {
-                            description: `Reminder sent to ${row.family}.`,
-                          })
-                        }
-                      >
-                        Remind
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {row.amount > 0 && row.status !== "Paid" ? (
+                          <button
+                            className="tiny-action"
+                            style={{
+                              background: "rgba(16, 185, 129, 0.12)",
+                              color: "#10b981",
+                              borderColor: "rgba(16, 185, 129, 0.25)",
+                              fontWeight: 600,
+                            }}
+                            onClick={() => {
+                              const s = enrolledStudents.find(
+                                stu =>
+                                  stu.name.toLowerCase() === row.student.toLowerCase() ||
+                                  (row.student_id && stu.id === row.student_id)
+                              );
+                              setSelectedInvoiceId(String(row.id));
+                              if (s) {
+                                setRecordStudent(s);
+                              } else {
+                                setStudentSearchQuery(row.student);
+                              }
+                              setPaymentAmount(String(row.amount > 0 ? row.amount : (row.total ?? 0)));
+                              setShowDialog(true);
+                            }}
+                          >
+                            Collect
+                          </button>
+                        ) : (
+                          <span className="status-pill success text-[11px]">
+                            <Check size={11} className="mr-0.5 inline" />
+                            Settled
+                          </span>
+                        )}
+                        <button
+                          className="tiny-action"
+                          onClick={() =>
+                            toast.success("Payment reminder sent", {
+                              description: `Reminder sent to ${row.family}.`,
+                            })
+                          }
+                        >
+                          Remind
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -3667,6 +3733,76 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           </table>
         </div>
         <Pager pagination={invoicesPager} noun="invoices" />
+      </section>
+
+      {/* Recent Payments History Panel */}
+      <section className="panel table-panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Recent verified receipts</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              Verified collections and payment transactions logged across school accounts.
+            </p>
+          </div>
+          <span className="count-badge">
+            {payments.length} receipt{payments.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Receipt No</th>
+                <th>Student</th>
+                <th>Invoice</th>
+                <th>Payment Date</th>
+                <th>Method</th>
+                <th>Amount</th>
+                <th className="text-right">Verification</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paymentsLoading ? (
+                <SkeletonTableRows rows={4} columns={7} />
+              ) : payments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-xs text-[var(--text-muted)]">
+                    No payment receipts logged yet. Recorded payments will appear here with verified receipt numbers.
+                  </td>
+                </tr>
+              ) : (
+                payments.slice(0, 10).map((pay) => (
+                  <tr key={pay.id}>
+                    <td className="font-mono text-xs text-[var(--brand)] font-semibold">
+                      {String((pay as any).receipt_no || "Receipt")}
+                    </td>
+                    <td className="font-medium text-[var(--text-primary)]">
+                      {pay.student}
+                    </td>
+                    <td className="muted-cell">{pay.invoice_id || "—"}</td>
+                    <td className="muted-cell">
+                      {pay.paid_at ? new Date(pay.paid_at).toLocaleDateString("en-IN") : "—"}
+                    </td>
+                    <td>
+                      <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                        {pay.method || "Verified"}
+                      </span>
+                    </td>
+                    <td className="font-semibold text-emerald-400">
+                      ₹{pay.amount.toLocaleString("en-IN")}
+                    </td>
+                    <td className="text-right">
+                      <span className="status-pill success text-[11px]">
+                        <Check size={11} className="mr-0.5 inline" />
+                        Verified
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
       {showDialog && (
         <AppDialog
@@ -3769,6 +3905,32 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               )}
             </div>
 
+            {selectedInvoice && (
+              <div
+                style={{
+                  gridColumn: "span 2",
+                  padding: "10px 14px",
+                  background: "rgba(255,255,255,0.03)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                  fontSize: "12px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span className="text-[var(--text-muted)]">Annual Fee ({String((selectedInvoice as any).grade || "Enrolled")}):</span>
+                  <strong className="text-[var(--text-primary)]">₹{Number(selectedInvoice.total || 0).toLocaleString("en-IN")}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span className="text-[var(--text-muted)]">Paid so far:</span>
+                  <span className="text-emerald-400 font-semibold">₹{Number(selectedInvoice.paid || 0).toLocaleString("en-IN")}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span className="text-[var(--text-muted)]">Remaining balance due:</span>
+                  <span className="text-amber-400 font-bold">₹{Number(selectedInvoice.amount || 0).toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+            )}
+
             <label>
               Amount (₹) *
               <input
@@ -3779,6 +3941,26 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               <span className="text-[11px] text-[var(--text-muted)] mt-1 block">
                 Minimum installment amount is ₹15,000.
               </span>
+              {selectedInvoice && selectedInvoice.amount > 0 && (
+                <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                  <button
+                    type="button"
+                    className="tiny-action"
+                    onClick={() => setPaymentAmount(String(selectedInvoice.amount))}
+                  >
+                    Full: ₹{selectedInvoice.amount.toLocaleString("en-IN")}
+                  </button>
+                  {selectedInvoice.amount > 15000 && (
+                    <button
+                      type="button"
+                      className="tiny-action"
+                      onClick={() => setPaymentAmount("15000")}
+                    >
+                      Min: ₹15,000
+                    </button>
+                  )}
+                </div>
+              )}
             </label>
 
             <label>
@@ -3796,7 +3978,16 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               />
             </label>
 
-            <label style={{ gridColumn: "span 2" }}>
+            <label>
+              Payment Reference / UTR (Optional)
+              <input
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                placeholder="e.g. UTR / Transaction ID / Slip No"
+              />
+            </label>
+
+            <label>
               Payment Date *
               <DateDropdowns
                 value={paymentDate}
@@ -3813,34 +4004,67 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               onClick={() => {
                 setShowDialog(false);
                 setRecordStudent(null);
+                setSelectedInvoiceId(null);
                 setStudentSearchQuery("");
                 setPaymentAmount("");
+                setPaymentReference("");
               }}
             >
               Cancel
             </button>
             <button
               className="primary-button"
-              onClick={() => {
+              onClick={async () => {
                 if (!recordStudent && !studentSearchQuery) {
                   toast.error("Student required", { description: "Please search and select a student to record fee payment." });
                   return;
                 }
                 const numAmount = Number(String(paymentAmount || "").replace(/[^0-9.]/g, ""));
-                if (!numAmount || numAmount < 15000) {
+                const outstandingDue = selectedInvoice ? selectedInvoice.amount : 50000;
+                if (!numAmount || numAmount <= 0) {
+                  toast.error("Invalid amount", { description: "Please enter a valid payment amount." });
+                  return;
+                }
+                if (numAmount < 15000 && outstandingDue >= 15000) {
                   toast.error("Minimum amount is ₹15,000", {
                     description: "School fee payment policy requires a minimum of ₹15,000 per installment.",
                   });
                   return;
                 }
                 const targetName = recordStudent?.name || studentSearchQuery;
-                setShowDialog(false);
-                setRecordStudent(null);
-                setStudentSearchQuery("");
-                setPaymentAmount("");
-                toast.success("Payment recorded", {
-                  description: `₹${numAmount.toLocaleString("en-IN")} successfully recorded for ${targetName} via ${paymentMethod}.`,
-                });
+
+                try {
+                  const res = await recordFeePayment({
+                    studentId: recordStudent?.id != null ? String(recordStudent.id) : undefined,
+                    studentName: targetName,
+                    invoiceId: selectedInvoiceId ? String(selectedInvoiceId) : selectedInvoice?.id != null ? String(selectedInvoice.id) : undefined,
+                    amount: numAmount,
+                    method: paymentMethod,
+                    date: paymentDate,
+                    reference: paymentReference,
+                  });
+
+                  setShowDialog(false);
+                  setRecordStudent(null);
+                  setSelectedInvoiceId(null);
+                  setStudentSearchQuery("");
+                  setPaymentAmount("");
+                  setPaymentReference("");
+
+                  if (res.isPaidInFull) {
+                    toast.success("Fees Covered in Full! 🎉", {
+                      description: `₹${numAmount.toLocaleString("en-IN")} received for ${targetName}. Receipt: ${res.receiptNo}. Account is completely settled.`,
+                    });
+                  } else {
+                    toast.success("Payment Recorded Successfully!", {
+                      description: `₹${numAmount.toLocaleString("en-IN")} logged for ${targetName}. Receipt: ${res.receiptNo}. Remaining due: ₹${res.newBalance.toLocaleString("en-IN")}.`,
+                    });
+                  }
+                } catch (e) {
+                  toast.error("Payment recording failed", {
+                    description: e instanceof Error ? e.message : "Could not complete payment.",
+                  });
+                }
               }}
             >
               Record payment
@@ -4876,7 +5100,7 @@ function AnalyticsView({
     if (gradeBreakdowns.length >= 2) {
       return gradeBreakdowns.map(g => g.average);
     }
-    return [70, 75, 80, 85];
+    return [];
   }, [gradeBreakdowns]);
 
   const atRiskSpark = useMemo(() => {
@@ -5079,7 +5303,6 @@ function AnalyticsView({
               value={`${staffStats.total} Members`}
               comparison={`${staffStats.teachers} teachers · ${staffStats.administrative} admin`}
               icon={Users}
-              spark={[92, 94, 91, 95, 96, 94, staffStats.staffAttendanceAvg]}
               className="h-full flex flex-col justify-between"
             />
           </>

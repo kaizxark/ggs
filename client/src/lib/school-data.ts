@@ -306,7 +306,7 @@ export interface ActivityItem extends BaseRow { category: ActivityCategory; time
 export interface HealthMetric extends BaseRow { label: string; value: string; change: string; progress: number; color: string; }
 export interface FinanceMonth extends BaseRow { month: string; collected: number; pending: number; }
 export interface FeeCategory extends BaseRow { name: string; value: number; color: string; }
-export interface Invoice extends BaseRow { family: string; student: string; due_date: string; amount: number; total?: number; paid?: number; outstanding?: number; status: string; }
+export interface Invoice extends BaseRow { student_id?: string; family: string; student: string; due_date: string; amount: number; total?: number; paid?: number; outstanding?: number; status: string; }
 export interface Payment extends BaseRow { invoice_id: string | null; student: string; amount: number; method: string; paid_at: string; }
 export interface Announcement extends BaseRow { title: string; audience: string; date: string; status: string; color: string; image_url: string | null; body: string | null; }
 export interface ParentMessage extends BaseRow { initials: string; name: string; subject: string; time: string; unread: boolean; }

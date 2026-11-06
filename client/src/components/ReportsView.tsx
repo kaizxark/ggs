@@ -28,7 +28,6 @@ import {
   type Invoice,
   type StaffMember,
 } from "../lib/erp-views";
-import { getAnnualFeeForGrade } from "../lib/school-data";
 
 export interface ReportsViewProps {
   onBack: () => void;
@@ -84,33 +83,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
   const [filterDefaultersOnly, setFilterDefaultersOnly] = useState(false);
   const [filterBelowThresholdOnly, setFilterBelowThresholdOnly] = useState(false);
 
-  // Session export history initialized with default institutional records
-  const [history, setHistory] = useState<ExportHistoryItem[]>([
-    {
-      id: "hist-1",
-      name: "Fee_Collection_Term_1.csv",
-      type: "fees",
-      recordCount: 142,
-      timestamp: "Today at 09:30 AM",
-      size: "38 KB",
-    },
-    {
-      id: "hist-2",
-      name: "Attendance_Compliance_Audit.csv",
-      type: "attendance",
-      recordCount: 128,
-      timestamp: "Yesterday · Accounts",
-      size: "24 KB",
-    },
-    {
-      id: "hist-3",
-      name: "Student_Census_Directory.csv",
-      type: "students",
-      recordCount: 128,
-      timestamp: "28 Oct 2026 · Principal",
-      size: "42 KB",
-    },
-  ]);
+  // Session export history tracking user-initiated downloads
+  const [history, setHistory] = useState<ExportHistoryItem[]>([]);
 
   const recordExport = (name: string, type: ReportType, count: number) => {
     const item: ExportHistoryItem = {
@@ -131,27 +105,15 @@ export function ReportsView({ onBack }: ReportsViewProps) {
     let totalPending = 0;
     let defaulterCount = 0;
 
-    // Use invoices if available, fallback to students' fee_due
     if (invoices.length > 0) {
       invoices.forEach((inv) => {
-        const amt = Number(inv.amount || inv.total || 0);
-        const paid = Number(inv.paid || (inv.status?.toLowerCase() === "paid" ? amt : 0));
-        const out = Number(inv.outstanding ?? (amt - paid));
+        const amt = Number(inv.total ?? inv.amount ?? 0);
+        const paid = Number(inv.paid ?? (inv.status?.toLowerCase() === "paid" ? amt : 0));
+        const out = Number(inv.outstanding ?? Math.max(0, amt - paid));
         totalAssessed += amt;
         totalCollected += paid;
         if (out > 0) {
           totalPending += out;
-          defaulterCount++;
-        }
-      });
-    } else {
-      students.forEach((s) => {
-        const annualFee = getAnnualFeeForGrade(s.grade || "10");
-        const pending = s.fees?.toLowerCase() !== "paid" ? 15000 : 0;
-        totalAssessed += annualFee;
-        totalCollected += annualFee - pending;
-        if (pending > 0) {
-          totalPending += pending;
           defaulterCount++;
         }
       });
@@ -163,14 +125,14 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       totalPending,
       defaulterCount,
     };
-  }, [invoices, students]);
+  }, [invoices]);
 
   // --- Calculations for Attendance Report ---
   const attendanceStats = useMemo(() => {
-    if (!students.length) return { average: 94.2, belowThresholdCount: 6, total: 128 };
+    if (!students.length) return { average: 0, belowThresholdCount: 0, total: 0 };
     const valid = students.filter((s) => typeof s.attendance === "number" && s.attendance > 0);
     const sum = valid.reduce((acc, s) => acc + s.attendance, 0);
-    const average = valid.length ? Math.round((sum / valid.length) * 10) / 10 : 94.2;
+    const average = valid.length ? Math.round((sum / valid.length) * 10) / 10 : 0;
     const belowThresholdCount = students.filter((s) => (s.attendance ?? 100) < 75).length;
     return { average, belowThresholdCount, total: students.length };
   }, [students]);
@@ -179,8 +141,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
   const studentStats = useMemo(() => {
     const gradesSet = new Set(students.map((s) => s.grade).filter(Boolean));
     return {
-      total: students.length || 128,
-      gradeCount: gradesSet.size || 10,
+      total: students.length,
+      gradeCount: gradesSet.size,
     };
   }, [students]);
 
@@ -188,8 +150,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
   const staffStats = useMemo(() => {
     const depts = new Set(staff.map((s) => s.department).filter(Boolean));
     return {
-      total: staff.length || 24,
-      deptCount: depts.size || 6,
+      total: staff.length,
+      deptCount: depts.size,
     };
   }, [staff]);
 
@@ -199,8 +161,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
     students.forEach((s) => {
       if (s.grade) set.add(s.grade);
     });
-    const arr = Array.from(set).sort();
-    return arr.length > 0 ? arr : ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
+    return Array.from(set).sort();
   }, [students]);
 
   // Export Handlers
@@ -216,15 +177,16 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       "Status",
     ];
     const rows = students.map((s) => {
-      const isPaid = s.fees?.toLowerCase() === "paid";
-      const total = getAnnualFeeForGrade(s.grade || "10");
-      const due = isPaid ? 0 : 15000;
-      const paid = total - due;
+      const inv = invoices.find((i) => i.student_id === s.id || i.student === s.name);
+      const total = inv ? Number(inv.total ?? inv.amount ?? 0) : 0;
+      const paid = inv ? Number(inv.paid ?? (inv.status?.toLowerCase() === "paid" ? total : 0)) : 0;
+      const due = inv ? Number(inv.outstanding ?? Math.max(0, total - paid)) : 0;
+      const isPaid = s.fees?.toLowerCase() === "paid" || due === 0;
       return [
         s.usn || `STU-${s.id}`,
         s.name,
-        s.grade || "10",
-        s.section || "A",
+        s.grade || "Unassigned",
+        s.section || "—",
         total,
         paid,
         due,
@@ -250,16 +212,16 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       "Records Marked",
     ];
     const rows = students.map((s) => {
-      const rate = s.attendance ?? 92;
+      const rate = s.attendance ?? 0;
       const compliance = rate >= 75 ? "Compliant (>=75%)" : "At-Risk (<75% CBSE Threshold)";
       return [
         s.usn || `STU-${s.id}`,
         s.name,
-        s.grade || "10",
-        s.section || "A",
+        s.grade || "Unassigned",
+        s.section || "—",
         `${rate}%`,
         compliance,
-        s.attendance_records || 60,
+        s.attendance_records ?? 0,
       ];
     });
     const filename = `Attendance_Compliance_Audit_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -283,11 +245,11 @@ export function ReportsView({ onBack }: ReportsViewProps) {
     const rows = students.map((s) => [
       s.usn || `STU-${s.id}`,
       s.name,
-      s.grade || "—",
+      s.grade || "Unassigned",
       s.section || "—",
-      s.status || "active",
-      `${s.attendance ?? 90}%`,
-      s.fees || "Paid",
+      s.status || "Active",
+      `${s.attendance ?? 0}%`,
+      s.fees || "Unpaid",
     ]);
     const filename = `Student_Census_Directory_${new Date().toISOString().slice(0, 10)}.csv`;
     downloadCsv(filename, headers, rows);
@@ -525,29 +487,35 @@ export function ReportsView({ onBack }: ReportsViewProps) {
           </div>
         </div>
         <div className="history-list">
-          {history.map((item) => (
-            <div className="history-row" key={item.id}>
-              <span className="file-icon flex items-center justify-center rounded-lg bg-[var(--bg-input)] text-[var(--brand)]">
-                <FileSpreadsheet size={16} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                  {item.name}
-                </div>
-                <div className="mt-0.5 text-xs text-[var(--text-muted)]">
-                  {item.timestamp} · {item.recordCount} rows · {item.size}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="secondary-button compact flex items-center gap-1.5 text-xs"
-                onClick={() => triggerExportByType(item.type)}
-              >
-                <Download size={12} />
-                Download CSV
-              </button>
+          {history.length === 0 ? (
+            <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: "13px" }}>
+              No exports generated in this session. Generate a CSV export above to track download history.
             </div>
-          ))}
+          ) : (
+            history.map((item) => (
+              <div className="history-row" key={item.id}>
+                <span className="file-icon flex items-center justify-center rounded-lg bg-[var(--bg-input)] text-[var(--brand)]">
+                  <FileSpreadsheet size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                    {item.name}
+                  </div>
+                  <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    {item.timestamp} · {item.recordCount} rows · {item.size}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button compact flex items-center gap-1.5 text-xs"
+                  onClick={() => triggerExportByType(item.type)}
+                >
+                  <Download size={12} />
+                  Download CSV
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
@@ -747,15 +715,16 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                         return true;
                       })
                       .map((s) => {
-                        const isPaid = s.fees?.toLowerCase() === "paid";
-                        const total = getAnnualFeeForGrade(s.grade || "10");
-                        const due = isPaid ? 0 : 15000;
-                        const paid = total - due;
+                        const inv = invoices.find((i) => i.student_id === s.id || i.student === s.name);
+                        const total = inv ? Number(inv.total ?? inv.amount ?? 0) : 0;
+                        const paid = inv ? Number(inv.paid ?? (inv.status?.toLowerCase() === "paid" ? total : 0)) : 0;
+                        const due = inv ? Number(inv.outstanding ?? Math.max(0, total - paid)) : 0;
+                        const isPaid = s.fees?.toLowerCase() === "paid" || due === 0;
                         return (
                           <tr key={s.id}>
                             <td className="font-mono text-xs text-[var(--brand)]">{s.usn || `STU-${s.id}`}</td>
                             <td className="font-semibold text-[var(--text-primary)]">{s.name}</td>
-                            <td>{s.grade || "10"} - {s.section || "A"}</td>
+                            <td>{s.grade || "Unassigned"} - {s.section || "—"}</td>
                             <td>₹{total.toLocaleString("en-IN")}</td>
                             <td className="text-emerald-400">₹{paid.toLocaleString("en-IN")}</td>
                             <td className={due > 0 ? "text-amber-400 font-semibold" : "text-[var(--text-muted)]"}>
@@ -801,18 +770,18 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                           }
                         }
                         if (selectedGrade !== "all" && s.grade !== selectedGrade) return false;
-                        const rate = s.attendance ?? 90;
+                        const rate = s.attendance ?? 0;
                         if (filterBelowThresholdOnly && rate >= 75) return false;
                         return true;
                       })
                       .map((s) => {
-                        const rate = s.attendance ?? 92;
+                        const rate = s.attendance ?? 0;
                         const atRisk = rate < 75;
                         return (
                           <tr key={s.id}>
                             <td className="font-mono text-xs text-[var(--brand)]">{s.usn || `STU-${s.id}`}</td>
                             <td className="font-semibold text-[var(--text-primary)]">{s.name}</td>
-                            <td>{s.grade || "10"} - {s.section || "A"}</td>
+                            <td>{s.grade || "Unassigned"} - {s.section || "—"}</td>
                             <td>
                               <span
                                 className={`font-semibold ${
@@ -834,7 +803,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                                 {atRisk ? "At-Risk (<75% CBSE Threshold)" : "Compliant"}
                               </span>
                             </td>
-                            <td className="text-[var(--text-muted)]">{s.attendance_records || 60} recorded</td>
+                            <td className="text-[var(--text-muted)]">{s.attendance_records ?? 0} recorded</td>
                           </tr>
                         );
                       })}
@@ -871,14 +840,14 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                         <tr key={s.id}>
                           <td className="font-mono text-xs text-[var(--brand)]">{s.usn || `STU-${s.id}`}</td>
                           <td className="font-semibold text-[var(--text-primary)]">{s.name}</td>
-                          <td>{s.grade || "Grade 10"}</td>
-                          <td>Section {s.section || "A"}</td>
+                          <td>{s.grade || "Unassigned"}</td>
+                          <td>{s.section ? `Section ${s.section}` : "—"}</td>
                           <td>
                             <span className="capitalize px-2 py-0.5 rounded text-[11px] bg-blue-500/15 text-blue-400 border border-blue-500/20">
-                              {s.status || "active"}
+                              {s.status || "Active"}
                             </span>
                           </td>
-                          <td>{s.attendance ?? 92}%</td>
+                          <td>{s.attendance ?? 0}%</td>
                           <td>
                             <span
                               className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
@@ -887,7 +856,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                                   : "bg-amber-500/15 text-amber-400"
                               }`}
                             >
-                              {s.fees || "Paid"}
+                              {s.fees || "Unpaid"}
                             </span>
                           </td>
                         </tr>

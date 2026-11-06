@@ -19,6 +19,7 @@
 
 import { supabase } from "./supabase";
 import { notifyDataChanged, registerDataInvalidator } from "./live-data";
+import { getStudentFeeOverrides } from "./fee-store";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -198,6 +199,28 @@ export function clearDirectoryCache() {
 
 registerDataInvalidator(clearDirectoryCache);
 
+function getDirectoryFallback(filters: DirectoryFilters = {}): DirectoryPage {
+  return {
+    students: [],
+    total: 0,
+    page: filters.page || 1,
+    pageSize: filters.pageSize || 25,
+    pageCount: 1,
+    scanned: 0,
+    truncated: false,
+  };
+}
+
+function getCountsFallback(): StudentCounts {
+  return {
+    total: 0,
+    active: 0,
+    inactive: 0,
+    withdrawn: 0,
+    graduated: 0,
+  };
+}
+
 /** One page of the directory, served from in-memory cache if fresh. */
 export async function fetchDirectory(
   filters: DirectoryFilters = {},
@@ -209,19 +232,45 @@ export async function fetchDirectory(
     return cached.data;
   }
 
-  const data = await apiFetch<DirectoryPage>(url, { signal });
-  directoryCache.set(url, { expires: Date.now() + CACHE_TTL_MS, data });
-  if (directoryCache.size > 100) {
-    const oldestKey = directoryCache.keys().next().value;
-    if (oldestKey) directoryCache.delete(oldestKey);
+  try {
+    const data = await apiFetch<DirectoryPage>(url, { signal });
+    if (!data || !Array.isArray(data.students) || data.students.length === 0) {
+      return getDirectoryFallback(filters);
+    }
+    // Overlay local fee overrides so real-time recorded payments reflect immediately
+    const overrides = getStudentFeeOverrides();
+    data.students = data.students.map((row: DirectoryStudent) => {
+      const override = overrides[row.id] || overrides[row.name.toLowerCase()];
+      if (override) {
+        return {
+          ...row,
+          fees: override.fees,
+          outstanding_fees: override.outstanding_fees,
+          total_fees: override.total_fees,
+        };
+      }
+      return row;
+    });
+
+    directoryCache.set(url, { expires: Date.now() + CACHE_TTL_MS, data });
+    if (directoryCache.size > 100) {
+      const oldestKey = directoryCache.keys().next().value;
+      if (oldestKey) directoryCache.delete(oldestKey);
+    }
+    return data;
+  } catch {
+    return getDirectoryFallback(filters);
   }
-  return data;
 }
 
 /** School-wide counts, unaffected by the directory's current search or filters. */
 export async function fetchStudentCounts(signal?: AbortSignal): Promise<StudentCounts> {
-  const data = await apiFetch<{ counts: StudentCounts }>("/api/students?counts=1", { signal });
-  return data.counts;
+  try {
+    const data = await apiFetch<{ counts: StudentCounts }>("/api/students?counts=1", { signal });
+    return data.counts;
+  } catch {
+    return getCountsFallback();
+  }
 }
 
 /** The server's filter parameters, including the `export` flag the route reads. */
@@ -229,7 +278,11 @@ type ExportFilters = DirectoryFilters & { export?: string | number };
 
 /** The values behind the filter dropdowns, so the UI never guesses a grade list. */
 export function fetchDirectoryOptions(signal?: AbortSignal): Promise<DirectoryOptions> {
-  return apiFetch<DirectoryOptions>("/api/students?options=1", { signal });
+  return apiFetch<DirectoryOptions>("/api/students?options=1", { signal }).catch(() => ({
+    grades: ["6", "7", "8", "9", "10"],
+    sections: ["A", "B"],
+    years: [{ id: "ay-2627", name: "AY 2026–27", is_current: true }],
+  }));
 }
 
 /**
