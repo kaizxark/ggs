@@ -22,7 +22,6 @@ import {
 } from "./ErpSkeleton";
 import { useDataRevision } from "../lib/live-data";
 import { getPupilFeeSummary } from "../lib/fee-store";
-import { mockStudents } from "../lib/school-data";
 
 type TrendPoint = {
   month: string;
@@ -406,78 +405,6 @@ function subjectAverages(exams: ExamResult[]) {
     .sort((a, b) => (b.average ?? 0) - (a.average ?? 0));
 }
 
-function buildPupilProfileFallback(identifier: string): Profile {
-  const found =
-    mockStudents.find(
-      (s) =>
-        s.id.toLowerCase() === identifier.toLowerCase() ||
-        s.name.toLowerCase().includes(identifier.toLowerCase()) ||
-        (s as { usn?: string }).usn?.toLowerCase() === identifier.toLowerCase()
-    ) || mockStudents[2]; // Vihaan Kapoor as fallback
-
-  const feeSummary = getPupilFeeSummary(found.id || found.name);
-  const parts = found.name.split(" ");
-  const firstName = parts[0] || found.name;
-  const lastName = parts.slice(1).join(" ");
-  const gradeNum = parseInt(found.grade.replace(/\D/g, "")) || 6;
-
-  return {
-    student: {
-      id: found.id,
-      first_name: firstName,
-      last_name: lastName,
-      name: found.name,
-      usn: (found as { usn?: string }).usn || found.id,
-      status: found.status || "Active",
-      gender: "Male",
-      date_of_birth: "2013-05-12",
-      email: `${firstName.toLowerCase()}@globalkidsschool.in`,
-    },
-    class: {
-      grade: String(gradeNum),
-      section: found.section || "B",
-      room: `Room ${gradeNum * 10 + 2}`,
-      roll_no: "14",
-      enrolment_status: "active",
-      class_teacher: { id: "tch-1", name: "Ananya Sen" },
-      academic_year: { id: "ay-2627", name: "AY 2026–27" },
-    },
-    attendance: {
-      summary: {
-        percentage: found.attendance || 94,
-        marked_sessions: 120,
-        present: Math.round(120 * ((found.attendance || 94) / 100)),
-        absent: 4,
-        late: 2,
-        half_day: 1,
-        leave: 1,
-      },
-      trend: [
-        { month: "2026-06", percentage: 92, sessions: 22 },
-        { month: "2026-07", percentage: 95, sessions: 24 },
-        { month: "2026-08", percentage: 91, sessions: 23 },
-        { month: "2026-09", percentage: 94, sessions: 25 },
-      ],
-    },
-    academics: {
-      results: [
-        {
-          examination_id: "EXM-001",
-          name: "Mid-Term Assessment 2026",
-          published: true,
-          starts_on: "2026-09-15",
-          papers: [
-            { subject: "Mathematics", marks: 92, max_marks: 100, percentage: 92, grade: "A+" },
-            { subject: "Science", marks: 88, max_marks: 100, percentage: 88, grade: "A" },
-            { subject: "English", marks: 85, max_marks: 100, percentage: 85, grade: "A" },
-          ],
-        },
-      ],
-    },
-    fees: feeSummary,
-  };
-}
-
 /**
  * Load the signed-in pupil's own record.
  *
@@ -498,12 +425,17 @@ export function usePupilProfile() {
     (async () => {
       const account = await readPortalAccount();
       if (!live) return;
-      const targetId = account?.recordId || "GKS-24211";
+      const targetId = account?.recordId;
+      if (!targetId) {
+        setError("No pupil account linked to this session.");
+        setLoading(false);
+        return;
+      }
       try {
         const { data } = await supabase.auth.getSession();
         const token = data.session?.access_token;
         if (!token) {
-          setProfile(buildPupilProfileFallback(targetId));
+          setError("Session expired. Please sign in again.");
           setLoading(false);
           return;
         }
@@ -514,19 +446,21 @@ export function usePupilProfile() {
           }
         );
         if (!res.ok) {
-          setProfile(buildPupilProfileFallback(targetId));
+          const errBody = await res.json().catch(() => null);
+          setError(errBody?.error || "Your pupil record could not be loaded.");
           return;
         }
         const json = (await res.json()) as Profile;
         if (!json?.student) {
-          setProfile(buildPupilProfileFallback(targetId));
+          setError("Pupil record not found.");
           return;
         }
         // Always attach live fee summary to ensure real-time reflection of fee payments
         json.fees = getPupilFeeSummary(json.student.id || json.student.name);
         setProfile(json);
-      } catch {
-        setProfile(buildPupilProfileFallback(targetId));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Could not connect to the school network.";
+        setError(message);
       } finally {
         if (live) setLoading(false);
       }

@@ -1,5 +1,5 @@
 import { notifyDataChanged } from "./live-data";
-import { getAnnualFeeForGrade, MIN_INSTALLMENT_AMOUNT, mockStudents } from "./school-data";
+import { getAnnualFeeForGrade, MIN_INSTALLMENT_AMOUNT } from "./school-data";
 import { supabase } from "./supabase";
 
 export interface InvoiceRecord {
@@ -379,22 +379,16 @@ export async function recordFeePayment({
 
   // If no existing invoice found, create one
   if (!targetInvoice) {
-    // Find matching mock student to determine grade
-    const matchedStudent = mockStudents.find(
-      (s) =>
-        (studentId && s.id.toLowerCase() === studentId.toLowerCase()) ||
-        s.name.toLowerCase().includes(studentName.trim().toLowerCase())
-    );
-    const grade = matchedStudent?.grade || "Grade 10";
+    const grade = "Grade 10";
     const totalFee = getAnnualFeeForGrade(grade);
     const surname = studentName.split(" ").slice(-1)[0] || studentName;
     targetInvoice = {
       id: `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      studentId: studentId || matchedStudent?.id || `STU-${Date.now()}`,
+      studentId: studentId || `STU-${Date.now()}`,
       student: studentName.trim(),
       family: `${surname} family`,
       grade,
-      section: matchedStudent?.section || "A",
+      section: "A",
       due_date: "15 Oct 2026",
       total: totalFee,
       paid: 0,
@@ -454,16 +448,6 @@ export async function recordFeePayment({
     overrides[targetInvoice.student.toLowerCase()] = feeOverride;
   }
 
-  // Also update in-memory mockStudents
-  for (const stu of mockStudents) {
-    if (
-      (targetInvoice.studentId && stu.id.toLowerCase() === targetInvoice.studentId.toLowerCase()) ||
-      stu.name.toLowerCase() === targetInvoice.student.toLowerCase()
-    ) {
-      stu.fees = newStatus;
-    }
-  }
-
   // Persist locally
   saveStoredInvoices(invoices);
   saveStoredPayments(payments);
@@ -517,6 +501,16 @@ export function getPupilFeeSummary(identifier?: string | null): {
     overdue_count: number;
     overdue_amount: number;
   };
+  accounts: Array<{
+    id: string;
+    academic_year_id: string | null;
+    total_fee: number;
+    scholarship: number;
+    concession: number;
+    discount_reason: string | null;
+    paid_amount: number;
+    status: string;
+  }>;
   invoices: Array<{
     id: string;
     invoice_no: string;
@@ -565,6 +559,19 @@ export function getPupilFeeSummary(identifier?: string | null): {
   const overdueInvoices = matched.filter((i) => i.status === "Overdue" && i.amount > 0);
   const overdue_count = overdueInvoices.length;
   const overdue_amount = overdueInvoices.reduce((s, i) => s + i.amount, 0);
+
+  const accounts = [
+    {
+      id: `acc-${matched[0]?.id || "1"}`,
+      academic_year_id: "2026-27",
+      total_fee: billed,
+      scholarship: 0,
+      concession: 0,
+      discount_reason: null,
+      paid_amount: paid,
+      status: outstanding === 0 ? "paid" : paid > 0 ? "partial" : "pending",
+    },
+  ];
 
   const pupilInvoices = matched.map((inv) => {
     const invPayments = payments.filter((p) => p.invoice_id === inv.id);
@@ -624,6 +631,7 @@ export function getPupilFeeSummary(identifier?: string | null): {
       overdue_count,
       overdue_amount,
     },
+    accounts,
     invoices: pupilInvoices,
     installments,
     upcoming,
