@@ -423,11 +423,9 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
   return (
     <div className="space-y-6">
       <Breadcrumb
-        items={[
-          { label: "Dashboard", href: "#" },
-          { label: "Academic Operations", href: "#" },
-          { label: "Examinations & Grading" },
-        ]}
+        parent="Academic Operations"
+        current="Examinations & Grading"
+        onParentClick={onBack}
       />
 
       {/* Header Banner */}
@@ -460,27 +458,27 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
       <div className="metric-grid">
         <MetricBlock
           label="Conducted Exams"
-          value={globalMetrics.totalExams}
-          change="Recorded assessments"
-          trend="neutral"
+          value={String(globalMetrics.totalExams)}
+          comparison="Recorded assessments"
+          positive={true}
           icon={Calendar}
         />
         <MetricBlock
           label="Grading Completion"
           value={`${globalMetrics.readyRate}%`}
-          change={`${globalMetrics.completedExamsCount} of ${globalMetrics.totalExams} exams complete`}
-          trend={globalMetrics.readyRate === 100 ? "up" : "neutral"}
+          comparison={`${globalMetrics.completedExamsCount} of ${globalMetrics.totalExams} exams complete`}
+          positive={globalMetrics.readyRate === 100}
           icon={CheckCircle2}
         />
         <MetricBlock
           label="Pending Candidate Evaluations"
-          value={globalMetrics.totalPendingStudents}
-          change={
+          value={String(globalMetrics.totalPendingStudents)}
+          comparison={
             globalMetrics.totalPendingStudents === 0
               ? "All candidates evaluated"
               : "Requires teacher scoring"
           }
-          trend={globalMetrics.totalPendingStudents === 0 ? "up" : "down"}
+          positive={globalMetrics.totalPendingStudents === 0}
           icon={AlertTriangle}
         />
         <MetricBlock
@@ -488,8 +486,8 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           value={
             globalMetrics.totalPendingStudents === 0 ? "Verified" : "Distribution Locked"
           }
-          change="Requires 100% grading completion"
-          trend={globalMetrics.totalPendingStudents === 0 ? "up" : "down"}
+          comparison="Requires 100% grading completion"
+          positive={globalMetrics.totalPendingStudents === 0}
           icon={Award}
         />
       </div>
@@ -871,13 +869,8 @@ function ConductedExamsTab({
         })}
       </div>
 
-      {pager.totalPages > 1 && (
-        <Pager
-          current={pager.page}
-          total={pager.totalPages}
-          onPageChange={pager.setPage}
-          summary={`Showing ${pager.pageRows.length} of ${filtered.length} conducted examinations`}
-        />
+      {!pager.isSinglePage && (
+        <Pager pagination={pager} noun="conducted examinations" />
       )}
     </div>
   );
@@ -1586,14 +1579,9 @@ function GradeEntryTab({
           </table>
         </div>
 
-        {pager.totalPages > 1 && (
+        {!pager.isSinglePage && (
           <div className="p-3 border-t border-[var(--border)]">
-            <Pager
-              current={pager.page}
-              total={pager.totalPages}
-              onPageChange={pager.setPage}
-              summary={`Showing ${pager.pageRows.length} of ${filteredCandidates.length} students`}
-            />
+            <Pager pagination={pager} noun="candidates" />
           </div>
         )}
       </div>
@@ -2253,14 +2241,9 @@ function ReportCardsTab({
           </table>
         </div>
 
-        {pager.totalPages > 1 && (
+        {!pager.isSinglePage && (
           <div className="p-3 border-t border-[var(--border)]">
-            <Pager
-              current={pager.page}
-              total={pager.totalPages}
-              onPageChange={pager.setPage}
-              summary={`Showing ${pager.pageRows.length} of ${filtered.length} candidate report cards`}
-            />
+            <Pager pagination={pager} noun="report cards" />
           </div>
         )}
       </div>

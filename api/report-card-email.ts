@@ -214,7 +214,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
-  let transport: nodemailer.Transporter | null = null;
+  let transport: any = null;
 
   if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
     try {

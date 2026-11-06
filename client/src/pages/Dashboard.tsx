@@ -42,6 +42,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Plus,
+  Printer,
   Receipt,
   RefreshCw,
   RotateCcw,
@@ -5193,7 +5194,7 @@ function AnalyticsView({
   const attendanceSpark = useMemo(() => {
     if (analyticsAttendance.length >= 2) {
       return analyticsAttendance.slice(-7).map(d => {
-        const total = d.present + d.absent + d.late + d.leave;
+        const total = d.present + d.absent;
         return total > 0 ? Math.round((d.present / total) * 100) : 0;
       });
     }
@@ -5420,43 +5421,20 @@ function AnalyticsView({
         )}
       </div>
 
-      {/* Redesigned Sliding Segment Navigation Tabs */}
-      <div className="flex items-center p-1.5 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-xs gap-1.5 w-fit max-w-full overflow-x-auto scrollbar-none">
-        {[
-          { id: "overview", label: "Overview", icon: LayoutDashboard },
-          {
-            id: "staff",
-            label: `Staff (${staffStats.total})`,
-            icon: Users,
-          },
-          { id: "academics", label: "Academics", icon: BookOpen },
-          { id: "attendance", label: "Attendance", icon: ClipboardCheck },
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = analyticsTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setAnalyticsTab(tab.id as typeof analyticsTab)}
-              className={`relative flex items-center gap-2 px-4 py-2 text-xs md:text-sm font-semibold rounded-xl transition-all cursor-pointer whitespace-nowrap select-none ${
-                isActive
-                  ? "text-white shadow-xs"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]"
-              }`}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="activeAnalyticsMainTab"
-                  className="absolute inset-0 bg-[var(--brand)] rounded-xl shadow-md -z-10"
-                  transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                />
-              )}
-              <Icon size={16} className="relative z-10" />
-              <span className="relative z-10">{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Sliding Segment Navigation Tabs */}
+      <SegmentedControl
+        ariaLabel="Analytics section navigation"
+        layoutId="analyticsMainSectionTabs"
+        value={analyticsTab}
+        onChange={(val) => setAnalyticsTab(val as typeof analyticsTab)}
+        indicatorVariant="brand"
+        options={[
+          { value: "overview", label: "Overview", icon: <LayoutDashboard size={16} /> },
+          { value: "staff", label: `Staff (${staffStats.total})`, icon: <Users size={16} /> },
+          { value: "academics", label: "Academics", icon: <BookOpen size={16} /> },
+          { value: "attendance", label: "Attendance", icon: <ClipboardCheck size={16} /> },
+        ]}
+      />
 
       {/* TAB 1: EXECUTIVE OVERVIEW */}
       {analyticsTab === "overview" && (
@@ -5912,36 +5890,18 @@ function AnalyticsView({
                     />
                   </div>
 
-                  <div className="flex items-center p-1 bg-[var(--bg-base)] border border-[var(--border)]/70 rounded-xl gap-1">
-                    {[
-                      { id: "all", label: `All (${staffMembers.length})` },
-                      { id: "teacher", label: `Teachers (${staffStats.teachers})` },
-                      { id: "admin", label: `Admin (${staffStats.administrative})` },
-                      { id: "principal", label: "Principal (1)" },
-                    ].map(f => {
-                      const isActive = staffFilter === f.id;
-                      return (
-                        <button
-                          key={f.id}
-                          onClick={() => setStaffFilter(f.id as typeof staffFilter)}
-                          className={`relative px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer select-none ${
-                            isActive
-                              ? "text-[var(--text-primary)]"
-                              : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                          }`}
-                        >
-                          {isActive && (
-                            <motion.div
-                              layoutId="activeAnalyticsStaffFilterPill"
-                              className="absolute inset-0 bg-[var(--border-accent)] rounded-lg shadow-sm border border-[var(--border)]/60 -z-10"
-                              transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                            />
-                          )}
-                          <span className="relative z-10">{f.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <SegmentedControl
+                    ariaLabel="Filter staff by category"
+                    layoutId="analyticsStaffFilterTabs"
+                    value={staffFilter}
+                    onChange={(val) => setStaffFilter(val as typeof staffFilter)}
+                    options={[
+                      { value: "all", label: `All (${staffMembers.length})` },
+                      { value: "teacher", label: `Teachers (${staffStats.teachers})` },
+                      { value: "admin", label: `Admin (${staffStats.administrative})` },
+                      { value: "principal", label: "Principal (1)" },
+                    ]}
+                  />
                 </div>
               </div>
             </div>
@@ -6439,7 +6399,7 @@ function AnalyticsView({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-stretch">
               <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <span className="text-xs text-[var(--text-muted)] font-medium">
                   Present
@@ -6448,7 +6408,7 @@ function AnalyticsView({
                   {latestAttendance?.present ?? 0}
                 </p>
                 <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                  On campus in class
+                  On campus in class · {attendancePct}% of school cohort
                 </span>
               </div>
               <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
@@ -6459,29 +6419,7 @@ function AnalyticsView({
                   {latestAttendance?.absent ?? 0}
                 </p>
                 <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Unexcused absence
-                </span>
-              </div>
-              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
-                <span className="text-xs text-[var(--text-muted)] font-medium">
-                  Late Arrival
-                </span>
-                <p className="text-2xl font-bold text-amber-500 mt-1">
-                  {latestAttendance?.late ?? 0}
-                </p>
-                <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Marked tardy at gate
-                </span>
-              </div>
-              <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
-                <span className="text-xs text-[var(--text-muted)] font-medium">
-                  Approved Leave
-                </span>
-                <p className="text-2xl font-bold text-sky-500 mt-1">
-                  {latestAttendance?.leave ?? 0}
-                </p>
-                <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Medical / sanctioned
+                  Unexcused absence · {Math.max(0, Math.round((100 - attendancePct) * 10) / 10)}% of school cohort
                 </span>
               </div>
             </div>
@@ -6822,34 +6760,21 @@ function SettingsView({ onBack }: { onBack: () => void }) {
 
       {/* Segmented Control Navigation with Smooth Horizontal Sliding Indicator */}
       <div className="flex items-center gap-2 border-b border-[var(--border)] pb-4 overflow-x-auto no-scrollbar">
-        <div className="relative p-1 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border)] flex items-center gap-1">
-          {tabs.map(tab => {
-            const isActive = activeTab === tab.id;
+        <SegmentedControl
+          ariaLabel="Settings section navigation"
+          layoutId="settingsNavigationTabs"
+          value={activeTab}
+          onChange={(val) => setActiveTab(val as typeof activeTab)}
+          indicatorVariant="glass"
+          options={tabs.map(tab => {
             const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative flex items-center gap-2.5 px-4 py-2 text-xs font-semibold rounded-xl cursor-pointer whitespace-nowrap transition-colors duration-200 z-10 ${
-                  isActive
-                    ? "text-[var(--text-primary)] font-bold"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                }`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeSettingsTabPill"
-                    className="absolute inset-0 bg-[var(--border-accent)] rounded-xl shadow-sm border border-[var(--border)]/60 -z-10"
-                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                  />
-                )}
-                <Icon size={16} className={isActive ? "text-[var(--brand)]" : ""} />
-                <span className="relative z-10">{tab.label}</span>
-              </button>
-            );
+            return {
+              value: tab.id,
+              label: tab.label,
+              icon: <Icon size={16} />,
+            };
           })}
-        </div>
+        />
       </div>
 
       {/* ==================================================================== */}

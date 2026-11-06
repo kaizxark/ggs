@@ -432,7 +432,7 @@ export function buildAssistantBrief(input: BriefInput): Record<string, unknown> 
           on_leave: todayRow.leave,
           attendance_pct: pct(
             todayRow.present,
-            todayRow.present + todayRow.absent + todayRow.late + todayRow.leave
+            todayRow.present + todayRow.absent + (todayRow.late ?? 0) + (todayRow.leave ?? 0)
           ),
         }
       : null,

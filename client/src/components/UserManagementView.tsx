@@ -45,6 +45,7 @@ import {
   type Student,
 } from "../lib/school-data";
 import { Breadcrumb } from "./Breadcrumb";
+import { SegmentedControl } from "./SegmentedControl";
 import { Pager, usePagination } from "./ErpPagination";
 import { SkeletonTableRows } from "./ErpSkeleton";
 import { effectiveRole, isSuperAdminId } from "@shared/super-admin";
@@ -858,58 +859,29 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
-      {/* Tab Switcher - Spacious Pill Style with Smooth Horizontal Gliding Toggle */}
+      {/* Tab Switcher - Spacious Sliding Pill Toggle */}
       <div className="flex items-center gap-3 border-b border-[var(--border)] pb-4 overflow-x-auto no-scrollbar">
-        <div className="relative p-1 rounded-2xl bg-[var(--bg-panel)] border border-[var(--border)] flex items-center gap-1">
-          {[
+        <SegmentedControl
+          ariaLabel="User management category tabs"
+          layoutId="userMgmtMainTabs"
+          value={activeTab}
+          onChange={(val) => setActiveTab(val as "staff" | "students")}
+          indicatorVariant="brand"
+          options={[
             {
-              id: "staff",
+              value: "staff",
               label: "Staff & Faculty Accounts",
               count: nonSuperAdminStaff.length,
-              icon: Users,
+              icon: <Users size={16} />,
             },
             {
-              id: "students",
+              value: "students",
               label: "Student Portal Logins",
               count: studentAccounts.length || students.length,
-              icon: GraduationCap,
+              icon: <GraduationCap size={16} />,
             },
-          ].map(tab => {
-            const isActive = activeTab === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id as "staff" | "students")}
-                className={`relative flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-semibold text-xs cursor-pointer z-10 transition-colors duration-200 whitespace-nowrap ${
-                  isActive
-                    ? "text-white font-bold"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeUserManagementMainTab"
-                    className="absolute inset-0 bg-[var(--brand)] rounded-xl shadow-md -z-10"
-                    transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                  />
-                )}
-                <Icon size={16} className="relative z-10" />
-                <span className="relative z-10">{tab.label}</span>
-                <span
-                  className={`relative z-10 rounded-full px-2 py-0.5 text-[11px] font-mono font-semibold transition-colors ${
-                    isActive
-                      ? "bg-white/20 text-white"
-                      : "bg-[var(--bg-raised)] text-[var(--text-muted)]"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+          ]}
+        />
       </div>
 
       {/* ==================================================================== */}
@@ -947,34 +919,16 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               </div>
 
               {/* Roles: Dynamic tabs with Smooth Horizontal Sliding Indicator */}
-              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1 max-w-full overflow-x-auto no-scrollbar">
-                {availableStaffTabs.map(tab => {
-                  const isActive = staffRoleFilter === tab.key;
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() =>
-                        setStaffRoleFilter(tab.key)
-                      }
-                      className={`relative px-3.5 py-1.5 text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap transition-colors duration-200 z-10 ${
-                        isActive
-                          ? "text-[var(--text-primary)] font-bold"
-                          : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                      }`}
-                    >
-                      {isActive && (
-                        <motion.div
-                          layoutId="activeStaffFilterPill"
-                          className="absolute inset-0 bg-[var(--border-accent)] rounded-lg shadow-sm border border-[var(--border)]/60 -z-10"
-                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                        />
-                      )}
-                      <span className="relative z-10">{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <SegmentedControl
+                ariaLabel="Filter staff by role"
+                layoutId="userMgmtStaffRoles"
+                value={staffRoleFilter}
+                onChange={(val) => setStaffRoleFilter(val as typeof staffRoleFilter)}
+                options={availableStaffTabs.map(t => ({
+                  value: t.key,
+                  label: t.label,
+                }))}
+              />
             </div>
 
             {/* Show / Hide Passwords */}
@@ -1232,38 +1186,17 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               </div>
 
               {/* Intuitive School Division Filters with Smooth Horizontal Sliding Indicator */}
-              <div className="relative p-1 rounded-xl bg-[var(--bg-raised)] border border-[var(--border)] flex items-center gap-1 max-w-full overflow-x-auto no-scrollbar">
-                {[
-                  { key: "all", label: "All Students (G6–10)" },
-                  { key: "middle", label: "Middle School (G6–8)" },
-                  { key: "high", label: "High School (G9–10)" },
-                ].map(tab => {
-                  const isActive = studentFilter === tab.key;
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      onClick={() =>
-                        setStudentFilter(tab.key as "all" | "primary" | "middle" | "high")
-                      }
-                      className={`relative px-3.5 py-1.5 text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap transition-colors duration-200 z-10 ${
-                        isActive
-                          ? "text-[var(--text-primary)] font-bold"
-                          : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
-                      }`}
-                    >
-                      {isActive && (
-                        <motion.div
-                          layoutId="activeStudentFilterPill"
-                          className="absolute inset-0 bg-[var(--border-accent)] rounded-lg shadow-sm border border-[var(--border)]/60 -z-10"
-                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
-                        />
-                      )}
-                      <span className="relative z-10">{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <SegmentedControl
+                ariaLabel="Filter students by division"
+                layoutId="userMgmtStudentDivisions"
+                value={studentFilter}
+                onChange={(val) => setStudentFilter(val as "all" | "primary" | "middle" | "high")}
+                options={[
+                  { value: "all", label: "All Students (G6–10)" },
+                  { value: "middle", label: "Middle School (G6–8)" },
+                  { value: "high", label: "High School (G9–10)" },
+                ]}
+              />
             </div>
 
             {/* Toggle Password Masking */}

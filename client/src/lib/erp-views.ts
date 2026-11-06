@@ -634,35 +634,41 @@ export function useStudentCountsView(enabled = true) {
 async function loadInvoices(): Promise<Invoice[]> {
   const [invoices, students] = await Promise.all([
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
-    fetchAll("students", "id,first_name,last_name,status,usn"),
+    fetchAll("students", "id,first_name,last_name,status,usn,grade,section"),
   ]);
+  const local = getStoredInvoices();
   if (!invoices || invoices.length === 0) {
-    return getStoredInvoices() as unknown as Invoice[];
+    return local as unknown as Invoice[];
   }
   const byId = new Map(students.map((s) => [String(s.id), s]));
-  return invoices
-    .map((i) => {
-      const s = byId.get(String(i.student_id));
-      const name = s ? `${s.first_name} ${s.last_name}`.trim() : "Unknown student";
-      const surname = s ? String(s.last_name) : "—";
-      const total = num(i.total);
-      const paid = num(i.paid_amount);
-      const outstanding = Math.max(0, total - paid);
-      const status = String(i.status);
-      return {
-        id: String(i.invoice_no ?? i.id),
-        student_id: String(i.student_id),
-        family: `${surname} family`,
-        student: name,
-        due_date: i.due_on ? fmtDate(String(i.due_on)) : "—",
-        amount: outstanding > 0 ? outstanding : total,
-        total,
-        paid,
-        outstanding,
-        status: status === "overdue" ? "Overdue" : outstanding > 0 ? "Partial" : "Paid",
-      };
-    })
-    .sort((a, b) => b.amount - a.amount);
+  const dbMapped: Invoice[] = invoices.map((i) => {
+    const s = byId.get(String(i.student_id));
+    const name = s ? `${s.first_name} ${s.last_name}`.trim() : "Unknown student";
+    const surname = s ? String(s.last_name) : "—";
+    const total = num(i.total);
+    const paid = num(i.paid_amount);
+    const outstanding = Math.max(0, total - paid);
+    const status = String(i.status);
+    return {
+      id: String(i.invoice_no ?? i.id),
+      student_id: String(i.student_id),
+      family: `${surname} family`,
+      student: name,
+      due_date: i.due_on ? fmtDate(String(i.due_on)) : "—",
+      amount: outstanding > 0 ? outstanding : total,
+      total,
+      paid,
+      outstanding,
+      status: status === "overdue" ? "Overdue" : outstanding > 0 ? "Partial" : "Paid",
+    };
+  });
+  const seenIds = new Set(dbMapped.map((i) => String(i.id).toLowerCase()));
+  for (const li of local) {
+    if (!seenIds.has(String(li.id).toLowerCase())) {
+      dbMapped.push(li as unknown as Invoice);
+    }
+  }
+  return dbMapped.sort((a, b) => b.amount - a.amount);
 }
 
 export function useInvoicesView(enabled = true) {
@@ -675,65 +681,113 @@ async function loadPayments(): Promise<Payment[]> {
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
     fetchAll("students", "id,first_name,last_name,status,usn"),
   ]);
+  const local = getStoredPayments();
   if (!payments || payments.length === 0) {
-    return getStoredPayments() as unknown as Payment[];
+    return local as unknown as Payment[];
   }
   const invById = new Map(invoices.map((i) => [String(i.id), i]));
   const stuById = new Map(students.map((s) => [String(s.id), s]));
-  return payments
-    .map((p) => {
-      const inv = invById.get(String(p.invoice_id));
-      const s = inv ? stuById.get(String(inv.student_id)) : undefined;
-      return {
-        id: String(p.id),
-        invoice_id: inv ? String(inv.invoice_no) : null,
-        student: s ? `${s.first_name} ${s.last_name}`.trim() : "Unknown student",
-        amount: num(p.amount),
-        method: String(p.method ?? ""),
-        paid_at: String(p.paid_at ?? ""),
-      };
-    })
-    .sort((a, b) => b.paid_at.localeCompare(a.paid_at));
+  const dbMapped: Payment[] = payments.map((p) => {
+    const inv = invById.get(String(p.invoice_id));
+    const s = inv ? stuById.get(String(inv.student_id)) : undefined;
+    return {
+      id: String(p.id),
+      invoice_id: inv ? String(inv.invoice_no) : null,
+      student: s ? `${s.first_name} ${s.last_name}`.trim() : "Unknown student",
+      amount: num(p.amount),
+      method: String(p.method ?? ""),
+      paid_at: String(p.paid_at ?? ""),
+    };
+  });
+  const seenIds = new Set(dbMapped.map((p) => p.id));
+  for (const lp of local) {
+    if (!seenIds.has(lp.id)) {
+      dbMapped.push(lp as unknown as Payment);
+    }
+  }
+  return dbMapped.sort((a, b) => b.paid_at.localeCompare(a.paid_at));
 }
 
 export function usePaymentsView() {
   return useErpView<Payment>("payments", loadPayments, getStoredPayments() as unknown as Payment[]);
 }
 
+const ACADEMIC_YEAR_MONTHS: Array<{ id: string; month: string }> = [
+  { id: "2026-04", month: "Apr" },
+  { id: "2026-05", month: "May" },
+  { id: "2026-06", month: "Jun" },
+  { id: "2026-07", month: "Jul" },
+  { id: "2026-08", month: "Aug" },
+  { id: "2026-09", month: "Sep" },
+  { id: "2026-10", month: "Oct" },
+  { id: "2026-11", month: "Nov" },
+  { id: "2026-12", month: "Dec" },
+  { id: "2027-01", month: "Jan" },
+  { id: "2027-02", month: "Feb" },
+  { id: "2027-03", month: "Mar" },
+];
+
 async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
-  const [payments, invoices] = await Promise.all([
+  const [dbPayments, dbInvoices, dbStudents] = await Promise.all([
     fetchAll("payments", "id,invoice_id,amount,method,paid_at"),
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
+    fetchAll("students", "id,grade,status"),
   ]);
-  const hasDbData = (payments && payments.length > 0) || (invoices && invoices.length > 0);
-  if (!hasDbData) {
-    const localPayments = getStoredPayments();
-    const localInvoices = getStoredInvoices();
-    const collected = localPayments.reduce((s, p) => s + p.amount, 0);
-    const billed = localInvoices.reduce((s, i) => s + i.total, 0);
-    const pending = Math.max(0, billed - collected);
-    return [
-      { id: "2026-06", month: "Jun", collected: Math.max(1, Math.round((collected * 0.2) / 100000)), pending: Math.max(1, Math.round((pending * 0.15) / 100000)) },
-      { id: "2026-07", month: "Jul", collected: Math.max(1, Math.round((collected * 0.25) / 100000)), pending: Math.max(1, Math.round((pending * 0.2) / 100000)) },
-      { id: "2026-08", month: "Aug", collected: Math.max(1, Math.round((collected * 0.25) / 100000)), pending: Math.max(1, Math.round((pending * 0.25) / 100000)) },
-      { id: "2026-09", month: "Sep", collected: Math.max(1, Math.round((collected * 0.3) / 100000)), pending: Math.max(1, Math.round((pending * 0.4) / 100000)) },
-    ];
+
+  const localPayments = getStoredPayments();
+  const localInvoices = getStoredInvoices();
+
+  // Aggregate all unique payments by id
+  const paymentMap = new Map<string, { amount: number; paid_at: string }>();
+  for (const lp of localPayments) {
+    paymentMap.set(String(lp.id), { amount: Number(lp.amount) || 0, paid_at: String(lp.paid_at || "") });
   }
-  const collected = new Map<string, number>();
-  for (const p of payments) {
-    const m = String(p.paid_at).slice(0, 7);
-    collected.set(m, (collected.get(m) ?? 0) + num(p.amount));
+  for (const dp of dbPayments) {
+    if (dp.id && dp.amount) {
+      paymentMap.set(String(dp.id), { amount: Number(dp.amount) || 0, paid_at: String(dp.paid_at || "") });
+    }
   }
-  const billed = new Map<string, number>();
-  for (const i of invoices) {
-    const m = String(i.created_at ?? "2026-04-01").slice(0, 7);
-    billed.set(m, (billed.get(m) ?? 0) + num(i.total));
+
+  // Calculate total school annual billing
+  // 100 students: Grades 6-8 is ₹50k/yr, Grades 9-10 is ₹60k/yr (~₹54.0L)
+  let totalBilled = 0;
+  if (dbStudents && dbStudents.length > 0) {
+    for (const s of dbStudents) {
+      if (s.status === "active" || s.status === "graduated" || !s.status) {
+        totalBilled += getAnnualFeeForGrade(s.grade as string | number | null | undefined);
+      }
+    }
   }
-  const months = Array.from(new Set([...Array.from(collected.keys()), ...Array.from(billed.keys())])).sort();
-  return months.map((m) => { 
-    const got = Math.round((collected.get(m) ?? 0) / 100000);
-    const due = Math.round(Math.max(0, (billed.get(m) ?? 0) - (collected.get(m) ?? 0)) / 100000);
-    return { id: m, month: `${MONTHS[Number(m.slice(5, 7)) - 1] ?? m}`, collected: got, pending: due };
+  if (totalBilled < 5000000) {
+    // Fallback: sum of all invoices or standard school roll
+    const invoiceBilled = Math.max(
+      localInvoices.reduce((s, i) => s + (i.total || 0), 0),
+      dbInvoices.reduce((s, i) => s + (num(i.total) || 0), 0)
+    );
+    totalBilled = Math.max(invoiceBilled, 5400000);
+  }
+
+  // Group payments by month (YYYY-MM)
+  const monthlyCollected = new Map<string, number>();
+  for (const p of Array.from(paymentMap.values())) {
+    const m = p.paid_at.slice(0, 7);
+    if (m) {
+      monthlyCollected.set(m, (monthlyCollected.get(m) ?? 0) + p.amount);
+    }
+  }
+
+  let cumulativeCollected = 0;
+  return ACADEMIC_YEAR_MONTHS.map((slot) => {
+    const got = monthlyCollected.get(slot.id) ?? 0;
+    cumulativeCollected += got;
+    const remaining = Math.max(0, totalBilled - cumulativeCollected);
+
+    return {
+      id: slot.id,
+      month: slot.month,
+      collected: Math.round((got / 100000) * 10) / 10,
+      pending: Math.round((remaining / 100000) * 10) / 10,
+    };
   });
 }
 
