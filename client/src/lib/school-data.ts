@@ -407,13 +407,16 @@ export function useSupabaseTable<T extends BaseRow>(
   rowsRef.current = rows;
   const mockRef = useRef(mockRows);
   mockRef.current = mockRows;
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-    setRows(mockRef.current);
-    setSource("mock");
+    if (!hasLoadedRef.current) {
+      setRows(mockRef.current);
+      setSource("mock");
+      setLoading(true);
+    }
     setError(null);
-    setLoading(true);
 
     void (async () => {
       try {
@@ -425,11 +428,14 @@ export function useSupabaseTable<T extends BaseRow>(
         if (error) throw error;
         setRows((data as T[]) ?? []);
         setSource("db");
+        hasLoadedRef.current = true;
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : "Supabase unreachable");
-        setRows(mockRef.current); // offline fallback
-        setSource("mock");
+        if (!hasLoadedRef.current) {
+          setRows(mockRef.current); // offline fallback
+          setSource("mock");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

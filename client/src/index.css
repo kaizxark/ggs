@@ -12,8 +12,12 @@
 
   /* ================================================================
    * UI scale
+   *
+   * Scaled to 110% (1.1) as requested. Everything on <html> is scaled by
+   * this factor, so px values, borders, radii and shadows all grow
+   * together and stay in proportion.
    * ================================================================ */
-  --ui-zoom: 1;
+  --ui-zoom: 1.1;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   /* Decelerating curves for anything that travels across the screen. */

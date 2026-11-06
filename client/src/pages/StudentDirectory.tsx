@@ -207,12 +207,18 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
     return () => clearTimeout(timer);
   }, [searchDraft]);
 
+  const hasLoadedRef = useRef(false);
+
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      setLoading(true);
+      if (!hasLoadedRef.current) {
+        setLoading(true);
+      }
       setError(null);
       try {
-        setPage(await fetchDirectory(filters, signal));
+        const res = await fetchDirectory(filters, signal);
+        setPage(res);
+        hasLoadedRef.current = true;
       } catch (err) {
         if (signal?.aborted) return;
         setError(

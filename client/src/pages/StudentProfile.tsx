@@ -124,13 +124,17 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
   const [deleting, setDeleting] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const dataRevision = useDataRevision();
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      setLoading(true);
+      if (!hasLoadedRef.current) {
+        setLoading(true);
+      }
       setError(null);
       try {
         setData(await fetchStudentProfile(studentId, signal));
+        hasLoadedRef.current = true;
       } catch (err) {
         if (signal?.aborted) return;
         setError(err instanceof ApiError ? err.message : "This profile could not be loaded.");

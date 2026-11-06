@@ -130,22 +130,27 @@ export function StaffDrawer({
    */
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const hasLoadedStaffIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let live = true;
     const controller = new AbortController();
-    setLoading(true);
-    setFailed(null);
-    setDetail(null);
-    setTab("personal");
+    if (hasLoadedStaffIdRef.current !== staff.id) {
+      setLoading(true);
+      setFailed(null);
+      setDetail(null);
+      setTab("personal");
+    }
     fetchStaffProfile(staff.id, controller.signal)
       .then((data) => {
         if (!live) return;
         setDetail(data);
+        hasLoadedStaffIdRef.current = staff.id;
+        setLoading(false);
         // The first section the server actually sent, which is not necessarily
         // "personal": a caller refused that section must not land on an empty
         // tab.
-        setTab(data.sections[0] ?? "personal");
+        setTab((prev) => prev || data.sections[0] || "personal");
       })
       .catch((err) => {
         if (!live || controller.signal.aborted) return;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import { usePageScrollLock } from "@/components/SmoothScroll";
@@ -238,8 +238,12 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
     })();
   }, [dataRevision]);
 
+  const hasLoadedAccountsRef = useRef(false);
+
   const loadAccounts = useCallback(async () => {
-    setAccountsLoading(true);
+    if (!hasLoadedAccountsRef.current) {
+      setAccountsLoading(true);
+    }
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
@@ -255,6 +259,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       if (res.ok) {
         setAccounts(json.accounts ?? []);
         setSummary(json.summary ?? null);
+        hasLoadedAccountsRef.current = true;
       }
     } catch {
       // Quiet fail if not admin or server offline

@@ -97,36 +97,22 @@ function fetchAll(
       q: T,
     ): T => (orderBy ? q.order(orderBy, { ascending: true }) : q);
 
-    if (limit && limit <= PAGE) {
-      const { data, error } = await applyOrder(
-        supabase.from(table).select(columns).range(0, limit - 1),
-      );
-      if (error) throw new Error(`${table}: ${error.message}`);
-      return (data ?? []) as unknown as Record<string, unknown>[];
-    }
-
-    // Ask for the exact row count up front. Paging serially cost one round trip
-    // per 1000 rows (~13 for attendance alone, each ~0.6s, all sequential);
-    // knowing the total lets every page be requested in parallel instead, so
-    // the table costs roughly one network round trip rather than N.
-    const { count, error: countError } = await applyOrder(
-      supabase.from(table).select(columns, { count: "exact" }).limit(1),
+    const firstLimit = limit ? Math.min(limit, PAGE) : PAGE;
+    const { data: firstPage, error: firstError, count } = await applyOrder(
+      supabase.from(table).select(columns, { count: "exact" }).range(0, firstLimit - 1),
     );
-    if (countError) throw new Error(`${table}: ${countError.message}`);
+    if (firstError) throw new Error(`${table}: ${firstError.message}`);
 
     const effectiveTotal = limit ? Math.min(limit, count ?? 0) : (count ?? 0);
-    if (effectiveTotal <= PAGE) {
-      const { data, error } = await applyOrder(
-        supabase.from(table).select(columns).range(0, Math.max(0, effectiveTotal - 1)),
-      );
-      if (error) throw new Error(`${table}: ${error.message}`);
-      return (data ?? []) as unknown as Record<string, unknown>[];
+    if (effectiveTotal <= firstLimit || (firstPage?.length ?? 0) >= effectiveTotal) {
+      return (firstPage ?? []) as unknown as Record<string, unknown>[];
     }
 
     const pageCount = Math.ceil(effectiveTotal / PAGE);
-    const pages = await Promise.all(
-      Array.from({ length: pageCount }, (_, i) => {
-        const pageStart = i * PAGE;
+    const remainingPages = await Promise.all(
+      Array.from({ length: pageCount - 1 }, (_, i) => {
+        const pageIdx = i + 1;
+        const pageStart = pageIdx * PAGE;
         const pageEnd = Math.min(pageStart + PAGE - 1, effectiveTotal - 1);
         return applyOrder(
           supabase.from(table).select(columns).range(pageStart, pageEnd),
@@ -136,8 +122,8 @@ function fetchAll(
         });
       })
     );
-    const out: Record<string, unknown>[] = [];
-    for (const page of pages) out.push(...page);
+    const out = [...((firstPage ?? []) as unknown as Record<string, unknown>[])];
+    for (const page of remainingPages) out.push(...page);
     return out;
   })().catch((e) => {
     rowCache.delete(key); // never cache a failure
@@ -266,6 +252,7 @@ function useErpView<T extends { id: string | number }>(
   mockRef.current = mockRows;
   const loadRef = useRef(load);
   loadRef.current = load;
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) {
@@ -276,7 +263,10 @@ function useErpView<T extends { id: string | number }>(
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    // Only show loading skeleton on initial mount; keep rendered data steady during revalidations
+    if (!hasLoadedRef.current) {
+      setLoading(true);
+    }
     setError(null);
     void (async () => {
       try {
@@ -284,6 +274,7 @@ function useErpView<T extends { id: string | number }>(
         if (cancelled) return;
         setRows(data);
         setSource("db");
+        hasLoadedRef.current = true;
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : "Supabase unreachable");
@@ -300,6 +291,7 @@ function useErpView<T extends { id: string | number }>(
   }, [key, nonce, enabled, revision, ...deps]);
 
   const reload = useCallback(() => {
+    hasLoadedRef.current = false;
     cache.delete(`${key}:${nonce}`);
     setNonce((n) => n + 1);
   }, [key, nonce]);

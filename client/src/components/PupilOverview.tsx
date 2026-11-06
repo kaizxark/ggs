@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   BookOpen,
@@ -417,10 +417,13 @@ export function usePupilProfile() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const dataRevision = useDataRevision();
+  const hasLoadedProfileRef = useRef(false);
 
   useEffect(() => {
     let live = true;
-    setLoading(true);
+    if (!hasLoadedProfileRef.current) {
+      setLoading(true);
+    }
     setError("");
     (async () => {
       const account = await readPortalAccount();
@@ -458,6 +461,7 @@ export function usePupilProfile() {
         // Always attach live fee summary to ensure real-time reflection of fee payments
         json.fees = getPupilFeeSummary(json.student.id || json.student.name);
         setProfile(json);
+        hasLoadedProfileRef.current = true;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Could not connect to the school network.";
         setError(message);
