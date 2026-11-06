@@ -19,6 +19,7 @@
 
 import { supabase } from "./supabase";
 import { notifyDataChanged, registerDataInvalidator } from "./live-data";
+import { getStudentFeeOverrides, getPupilFeeSummary } from "./fee-store";
 import { ALL_STUDENT_SECTIONS, SECTION_LABELS } from "@shared/student-access";
 
 export class ApiError extends Error {
@@ -657,232 +658,42 @@ export interface ProfilePayload {
  * server never built it. Checking `if (payload.fees)` is therefore a statement
  * about the data, not a guess about permissions.
  */
-export function buildProfileFallback(studentId: string): ProfilePayload {
-  const found =
-    mockStudents.find(
-      (s) =>
-        s.id.toLowerCase() === studentId.toLowerCase() ||
-        s.name.toLowerCase().includes(studentId.toLowerCase()) ||
-        (s as { usn?: string }).usn?.toLowerCase() === studentId.toLowerCase()
-    ) || mockStudents[0];
-
-  const feeData = getPupilFeeSummary(found.id || found.name);
-  const parts = found.name.split(" ");
-  const firstName = parts[0] || found.name;
-  const lastName = parts.slice(1).join(" ") || "";
-  const gradeNum = parseInt(found.grade.replace(/\D/g, "")) || 6;
-
-  return {
-    student: {
-      id: found.id,
-      usn: found.id,
-      first_name: firstName,
-      last_name: lastName,
-      name: found.name,
-      date_of_birth: "2012-05-15",
-      age: 14,
-      gender: "Not specified",
-      blood_group: "O+",
-      nationality: "Indian",
-      mother_tongue: "English",
-      religion: "Not disclosed",
-      photo_url: null,
-      status: found.status,
-      joined_on: "2024-06-01",
-      emergency_contact_name: `${lastName || firstName} Guardian`,
-      emergency_contact_phone: "+91 98765 43210",
-      address: {
-        line1: "123 Orchard Avenue",
-        line2: null,
-        city: "Bengaluru",
-        district: "Bengaluru Urban",
-        state: "Karnataka",
-        pincode: "560001",
-        country: "India",
-      },
-      email: `${firstName.toLowerCase()}@example.com`,
-      phone: "+91 98765 43210",
-    },
-    class: {
-      academic_year: { id: "2026-27", name: "2026-27" },
-      grade: found.grade,
-      section: found.section,
-      room: `Room ${found.grade.replace(/\D/g, "")}01`,
-      roll_no: "01",
-      enrolled_on: "2024-06-01",
-      enrolment_status: found.status === "Withdrawn" ? "withdrawn" : "active",
-      class_teacher: { id: "tch-1", name: "Sunita Sharma" },
-    },
-    guardians: [
-      {
-        link_id: "lnk-1",
-        guardian_id: "grd-1",
-        full_name: `${lastName || firstName} Guardian`,
-        relationship: "Parent",
-        gender: "Female",
-        phone: "+91 98765 43210",
-        alternate_phone: null,
-        email: `parent.${firstName.toLowerCase()}@example.com`,
-        occupation: "Professional",
-        is_primary: true,
-        is_emergency_contact: true,
-        has_portal_account: true,
-        permissions: { view_grades: true, view_attendance: true, view_fees: true },
-      },
-    ],
-    academics: {
-      results: [
-        {
-          examination_id: "ex-1",
-          name: "Midterm Examinations 2026",
-          published: true,
-          starts_on: "2026-09-15",
-          total_marks: 442,
-          max_marks: 500,
-          percentage: found.average,
-          papers: [
-            { subject: "Mathematics", marks: 92, max_marks: 100, percentage: 92, grade: "A1" },
-            { subject: "Science", marks: 88, max_marks: 100, percentage: 88, grade: "A2" },
-            { subject: "English", marks: 90, max_marks: 100, percentage: 90, grade: "A1" },
-            { subject: "Social Science", marks: 85, max_marks: 100, percentage: 85, grade: "A2" },
-            { subject: "Second Language", marks: 87, max_marks: 100, percentage: 87, grade: "A2" },
-          ],
-        },
-      ],
-      subject_performance: [
-        { subject: "Mathematics", papers: 2, average: 92 },
-        { subject: "Science", papers: 2, average: 88 },
-        { subject: "English", papers: 2, average: 90 },
-        { subject: "Social Science", papers: 2, average: 85 },
-      ],
-      enrollment_history: [
-        {
-          id: "enr-1",
-          academic_year: "2026-27",
-          grade: found.grade,
-          section: found.section,
-          roll_no: "01",
-          active: true,
-          enrolled_on: "2026-06-01",
-        },
-      ],
-      subjects: [
-        { id: "sub-1", subject: "Mathematics", code: "MTH", teacher: "Sunita Sharma" },
-        { id: "sub-2", subject: "Science", code: "SCI", teacher: "Rajesh Kumar" },
-        { id: "sub-3", subject: "English", code: "ENG", teacher: "Anjali Mehta" },
-        { id: "sub-4", subject: "Social Science", code: "SOC", teacher: "Vikram Malhotra" },
-      ],
-    },
-    attendance: {
-      summary: {
-        percentage: found.attendance,
-        marked_sessions: 120,
-        present: Math.round((found.attendance / 100) * 120),
-        absent: Math.round(((100 - found.attendance) / 100) * 120),
-        late: 2,
-        half_day: 1,
-        leave: 1,
-      },
-      trend: [
-        { month: "2026-06", percentage: 98, sessions: 22 },
-        { month: "2026-07", percentage: 96, sessions: 24 },
-        { month: "2026-08", percentage: 94, sessions: 23 },
-        { month: "2026-09", percentage: found.attendance, sessions: 21 },
-      ],
-      absences: [],
-      corrections: [],
-      leaves: [],
-    },
-    fees: {
-      summary: feeData.summary,
-      accounts: feeData.accounts,
-      installments: feeData.installments,
-      upcoming: feeData.upcoming.map((u) => ({
-        ...u,
-        paid_amount: 0,
-        status: "due",
-      })),
-      invoices: feeData.invoices.map((inv) => ({
-        ...inv,
-        items: [{ description: `Tuition & Term Fee (${found.grade})`, amount: inv.total }],
-      })),
-    },
-    documents: [],
-    health: {
-      record: { blood_group: "O+", allergies: "None reported", conditions: "None" },
-      incidents: [],
-    },
-    activities: [],
-    observations: [],
-    communications: [],
-    admission: [
-      {
-        id: "adm-1",
-        application_date: "2024-04-10",
-        status: "Admitted",
-        applied_on: "2024-04-10",
-        admitted_on: "2024-06-01",
-        previous_school: "Greenwood Primary",
-        previous_class: `Grade ${Math.max(1, gradeNum - 1)}`,
-        previous_board: "CBSE",
-        admission_type: "Regular",
-        remarks: "Admission confirmed",
-        withdrawn_on: null,
-        withdrawal_reason: null,
-        graduated_on: null,
-      },
-    ],
-    library: {
-      loans: [],
-      current_count: 0,
-      overdue_count: 0,
-      total_fines: 0,
-    },
-    account: {
-      has_account: true,
-      login_identifier: found.id,
-      full_name: found.name,
-      email: `${firstName.toLowerCase()}@example.com`,
-      role: "student",
-      issued_at: "2024-06-01T00:00:00Z",
-      revoked_at: null,
-      status: "active",
-      linked_parents: 1,
-    },
-    sections: [...ALL_STUDENT_SECTIONS],
-    withheld: [],
-    sectionLabels: SECTION_LABELS,
-    viewer: { role: "super_admin", relationship: null },
-  };
-}
-
 export async function fetchStudentProfile(studentId: string, signal?: AbortSignal): Promise<ProfilePayload> {
-  try {
-    const payload = await apiFetch<ProfilePayload>(`/api/student-profile?studentId=${encodeURIComponent(studentId)}`, { signal });
-    if (payload && payload.student) {
-      // Overlay live fee summary so recorded payments reflect immediately
-      const liveFeeSummary = getPupilFeeSummary(studentId);
-      payload.fees = {
-        ...payload.fees,
-        summary: liveFeeSummary.summary,
-        accounts: liveFeeSummary.accounts,
-        installments: liveFeeSummary.installments,
-        upcoming: liveFeeSummary.upcoming.map((u) => ({
-          ...u,
-          paid_amount: 0,
-          status: "due",
-        })),
-        invoices: liveFeeSummary.invoices.map((inv) => ({
-          ...inv,
-          items: [{ description: `Tuition & Term Fee`, amount: inv.total }],
-        })),
-      };
-      return payload;
-    }
-  } catch {
-    // Fall back to offline/mock profile with live fee store
+  const payload = await apiFetch<ProfilePayload>(`/api/student-profile?studentId=${encodeURIComponent(studentId)}`, { signal });
+  if (!payload || !payload.student) {
+    throw new ApiError(404, "NOT_FOUND", "Student record could not be loaded");
   }
-  return buildProfileFallback(studentId);
+  // Overlay live fee summary so recorded payments reflect immediately
+  const liveFeeSummary = getPupilFeeSummary(studentId);
+  payload.fees = {
+    ...payload.fees,
+    summary: liveFeeSummary.summary,
+    accounts: liveFeeSummary.accounts,
+    installments: liveFeeSummary.installments.map((inst) => ({
+      ...inst,
+      paid_on: null,
+      invoice_id: null,
+    })),
+    upcoming: liveFeeSummary.upcoming.map((u) => ({
+      ...u,
+      paid_amount: 0,
+      status: "due",
+    })),
+    invoices: liveFeeSummary.invoices.map((inv) => ({
+      ...inv,
+      due_on: inv.due_on ?? null,
+      items: [{ description: `Tuition & Term Fee`, amount: inv.total }],
+      payments: inv.payments.map((p) => ({
+        id: p.id,
+        receipt_no: p.receipt_no,
+        amount: p.amount,
+        method: p.method,
+        paid_at: p.paid_at,
+        reference: p.reference ?? null,
+      })),
+    })),
+  };
+  return payload;
 }
 
 /* ------------------------------------------------------------------ *
