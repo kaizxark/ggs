@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { notifyDataChanged } from "./live-data";
 
-export type AttendanceStatus = "present" | "absent" | "late" | "leave";
+export type AttendanceStatus = "present" | "absent";
 
 export interface AttendanceItem {
   student_id: string;
@@ -32,22 +32,17 @@ export async function recordClassAttendance(
     return { ok: false, message: "No students in register." };
   }
 
-  // Count tallies
+  // Count tallies (strictly binary: Present vs Absent)
   let present = 0;
   let absent = 0;
-  let late = 0;
-  let leave = 0;
 
   for (const item of items) {
     if (item.status === "present") present += 1;
-    else if (item.status === "absent") absent += 1;
-    else if (item.status === "late") late += 1;
-    else if (item.status === "leave") leave += 1;
+    else absent += 1;
   }
 
   const total = items.length;
-  const attending = present + late;
-  const pct = total > 0 ? Math.round((attending / total) * 100) : 0;
+  const pct = total > 0 ? Math.round((present / total) * 100) : 0;
 
   // 1. Save to localStorage backup for instant retrieval
   try {
@@ -61,8 +56,6 @@ export async function recordClassAttendance(
       total,
       present,
       absent,
-      late,
-      leave,
       pct,
       items,
       savedAt: new Date().toISOString(),
@@ -147,8 +140,6 @@ export async function recordClassAttendance(
           day: dayName,
           present,
           absent,
-          late,
-          leave,
         });
     } catch {
       // ignore

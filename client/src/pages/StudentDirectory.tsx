@@ -1227,9 +1227,6 @@ function DrawerSection({
     push("Sessions marked", a.marked_sessions);
     push("Present", a.present);
     push("Absent", a.absent);
-    push("Late", a.late);
-    push("Half day", a.half_day);
-    push("Leave", a.leave);
     detail.attendance.trend.forEach((t) => push(`${t.month}`, `${formatPercent(t.percentage)} over ${t.sessions} sessions`));
     detail.attendance.absences.slice(0, 12).forEach((x) => push(formatDate(x.date), x.notes ?? x.status));
     detail.attendance.leaves.forEach((l) => {
@@ -1344,7 +1341,7 @@ function StudentDialog({
   onSubmit: (draft: StudentDraft) => Promise<void>;
 }) {
   usePageScrollLock();
-  const [activeTab, setActiveTab] = useState<"academic" | "personal" | "guardian" | "address">("academic");
+  const [activeTab, setActiveTab] = useState<"academic" | "guardian" | "address">("academic");
   const [form, setForm] = useState({
     full_name: student?.name || [student?.first_name, student?.last_name].filter(Boolean).join(" ") || "",
     usn: student?.usn ?? "",
@@ -1406,16 +1403,14 @@ function StudentDialog({
     return ["A", "B"];
   }, []);
 
-  const validateTab = (tab: "academic" | "personal" | "guardian" | "address"): Record<string, string> => {
+  const validateTab = (tab: "academic" | "guardian" | "address"): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (tab === "academic") {
       if (!form.full_name.trim()) errs.full_name = "Enter student's full name.";
       if (!form.grade) errs.grade = "Select student's class.";
       if (!form.section) errs.section = "Select student's section.";
       if (!form.joined_on) errs.joined_on = "Select admission date.";
-    } else if (tab === "personal") {
-      if (!form.date_of_birth) errs.date_of_birth = "Enter date of birth.";
-      if (!form.gender) errs.gender = "Select student's gender.";
+      if (!form.status) errs.status = "Select enrollment status.";
     } else if (tab === "guardian") {
       if (!form.guardian_name.trim()) errs.guardian_name = "Enter primary guardian's full name.";
       if (!form.guardian_relation) errs.guardian_relation = "Select relationship.";
@@ -1430,7 +1425,6 @@ function StudentDialog({
   const validateAll = (): Record<string, string> => {
     return {
       ...validateTab("academic"),
-      ...validateTab("personal"),
       ...validateTab("guardian"),
       ...validateTab("address"),
     };
@@ -1444,15 +1438,13 @@ function StudentDialog({
       return;
     }
     setError(null);
-    if (activeTab === "academic") setActiveTab("personal");
-    else if (activeTab === "personal") setActiveTab("guardian");
+    if (activeTab === "academic") setActiveTab("guardian");
     else if (activeTab === "guardian") setActiveTab("address");
   };
 
   const handleBack = () => {
     setError(null);
-    if (activeTab === "personal") setActiveTab("academic");
-    else if (activeTab === "guardian") setActiveTab("personal");
+    if (activeTab === "guardian") setActiveTab("academic");
     else if (activeTab === "address") setActiveTab("guardian");
   };
 
@@ -1460,10 +1452,8 @@ function StudentDialog({
     const allErrs = validateAll();
     if (Object.keys(allErrs).length > 0) {
       setFieldErrors(allErrs);
-      if (allErrs.full_name || allErrs.grade || allErrs.section || allErrs.joined_on) {
+      if (allErrs.full_name || allErrs.grade || allErrs.section || allErrs.joined_on || allErrs.status) {
         setActiveTab("academic");
-      } else if (allErrs.date_of_birth || allErrs.gender) {
-        setActiveTab("personal");
       } else if (allErrs.guardian_name || allErrs.guardian_relation || allErrs.guardian_phone) {
         setActiveTab("guardian");
       } else {
@@ -1527,8 +1517,7 @@ function StudentDialog({
     }
   };
 
-  const hasAcademicError = Boolean(fieldErrors.full_name || fieldErrors.grade || fieldErrors.section || fieldErrors.joined_on);
-  const hasPersonalError = Boolean(fieldErrors.date_of_birth || fieldErrors.gender);
+  const hasAcademicError = Boolean(fieldErrors.full_name || fieldErrors.grade || fieldErrors.section || fieldErrors.joined_on || fieldErrors.status);
   const hasGuardianError = Boolean(fieldErrors.guardian_name || fieldErrors.guardian_relation || fieldErrors.guardian_phone);
   const hasAddressError = false;
 
@@ -1595,13 +1584,6 @@ function StudentDialog({
                 value: "academic",
                 label: "Academic",
                 badge: hasAcademicError ? (
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 4, display: "inline-block" }} />
-                ) : undefined,
-              },
-              {
-                value: "personal",
-                label: "Personal & Bio",
-                badge: hasPersonalError ? (
                   <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 4, display: "inline-block" }} />
                 ) : undefined,
               },
@@ -1693,10 +1675,11 @@ function StudentDialog({
                 </label>
 
                 <label style={{ gridColumn: "span 2" }}>
-                  Enrollment status
+                  Enrollment status *
                   <FormSelect
                     value={form.status ?? "active"}
                     onChange={set("status")}
+                    error={fieldErrors.status}
                     options={[
                       { value: "active", label: "Active (Enrolled)" },
                       { value: "inactive", label: "Inactive" },
@@ -1704,6 +1687,7 @@ function StudentDialog({
                       { value: "withdrawn", label: "Withdrawn" },
                     ]}
                   />
+                  {fieldErrors.status && <span className="field-error">{fieldErrors.status}</span>}
                 </label>
 
                 <label style={{ gridColumn: "span 2" }}>
@@ -1722,7 +1706,7 @@ function StudentDialog({
                   />
                 </label>
 
-                {/* Annual Fee & Installment Policy Box */}
+                {/* Annual Fee Box */}
                 <div
                   style={{
                     gridColumn: "span 2",
@@ -1744,104 +1728,8 @@ function StudentDialog({
                       <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}> / year</span>
                     </span>
                   </div>
-                  <p style={{ margin: 0, fontSize: "11.5px", color: "var(--text-secondary)", lineHeight: 1.45 }}>
-                    • Class 6 to 8: ₹50,000 per year | Class 9 and 10: ₹60,000 per year.
-                    <br />
-                    • Installments are permitted; <strong>minimum installment is ₹15,000</strong>.
-                  </p>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === "personal" && (
-            <div className="form-grid">
-              <label style={{ gridColumn: "span 2" }}>
-                Date of birth *
-                <DateDropdowns
-                  value={form.date_of_birth}
-                  onChange={set("date_of_birth")}
-                  minYear={1995}
-                  maxYear={2026}
-                  error={fieldErrors.date_of_birth}
-                />
-              </label>
-
-              <label>
-                Gender *
-                <FormSelect
-                  value={form.gender ?? ""}
-                  onChange={set("gender")}
-                  options={[
-                    { value: "male", label: "Male" },
-                    { value: "female", label: "Female" },
-                    { value: "other", label: "Other" },
-                  ]}
-                  placeholder="Select gender…"
-                  error={fieldErrors.gender}
-                />
-                {fieldErrors.gender && <span className="field-error">{fieldErrors.gender}</span>}
-              </label>
-
-              <label>
-                Blood group (Optional)
-                <FormSelect
-                  value={form.blood_group}
-                  onChange={set("blood_group")}
-                  options={["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"].map((bg) => ({
-                    value: bg,
-                    label: bg,
-                  }))}
-                  placeholder="Select blood group…"
-                />
-              </label>
-
-              <label>
-                Nationality
-                <input
-                  value={form.nationality}
-                  onChange={(e) => set("nationality")(e.target.value)}
-                  placeholder="e.g. Indian"
-                />
-              </label>
-
-              <label>
-                Mother tongue
-                <input
-                  value={form.mother_tongue}
-                  onChange={(e) => set("mother_tongue")(e.target.value)}
-                  placeholder="e.g. English, Kannada, Hindi"
-                />
-              </label>
-
-              <label>
-                Religion / Category
-                <input
-                  value={form.religion}
-                  onChange={(e) => set("religion")(e.target.value)}
-                  placeholder="e.g. General / Not specified"
-                />
-              </label>
-
-              <label>
-                Student personal email (Optional)
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => set("email")(e.target.value)}
-                  placeholder="student@example.com"
-                />
-              </label>
-
-              <label>
-                Student phone number (Optional)
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={(e) => set("phone")(e.target.value)}
-                  placeholder="+91 Mobile number"
-                />
-              </label>
             </div>
           )}
 

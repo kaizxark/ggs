@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, ChevronDown } from "lucide-react";
 
 export interface DateDropdownsProps {
   value?: string; // ISO format "YYYY-MM-DD"
@@ -9,36 +10,38 @@ export interface DateDropdownsProps {
   disabled?: boolean;
   error?: string;
   className?: string;
+  showPreview?: boolean;
 }
 
 const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  { value: "01", short: "Jan", full: "January" },
+  { value: "02", short: "Feb", full: "February" },
+  { value: "03", short: "Mar", full: "March" },
+  { value: "04", short: "Apr", full: "April" },
+  { value: "05", short: "May", full: "May" },
+  { value: "06", short: "Jun", full: "June" },
+  { value: "07", short: "Jul", full: "July" },
+  { value: "08", short: "Aug", full: "August" },
+  { value: "09", short: "Sep", full: "September" },
+  { value: "10", short: "Oct", full: "October" },
+  { value: "11", short: "Nov", full: "November" },
+  { value: "12", short: "Dec", full: "December" },
 ];
 
 /**
  * Indian Standard Date Selector: Day -> Month -> Year dropdowns.
- * Internal state formats to standard ISO "YYYY-MM-DD" for backend parity.
+ * Formats internally to standard ISO "YYYY-MM-DD" for backend parity.
  */
 export function DateDropdowns({
   value,
   onChange,
-  minYear = 1980,
+  minYear = 2015,
   maxYear = 2035,
   defaultToToday = false,
   disabled = false,
   error,
   className = "",
+  showPreview = true,
 }: DateDropdownsProps) {
   // Parse current value
   const parsed = useMemo(() => {
@@ -83,10 +86,7 @@ export function DateDropdowns({
   }, [year, month]);
 
   const daysList = useMemo(() => {
-    return Array.from({ length: daysInMonth }, (_, i) => {
-      const d = String(i + 1).padStart(2, "0");
-      return d;
-    });
+    return Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, "0"));
   }, [daysInMonth]);
 
   const yearsList = useMemo(() => {
@@ -103,7 +103,7 @@ export function DateDropdowns({
     setYear(newYear);
 
     if (newDay && newMonth && newYear) {
-      // Validate day overflow
+      // Validate day overflow (e.g. Feb 31 -> Feb 28)
       const maxD = new Date(parseInt(newYear, 10), parseInt(newMonth, 10), 0).getDate();
       const validDay = parseInt(newDay, 10) > maxD ? String(maxD).padStart(2, "0") : newDay;
       onChange(`${newYear}-${newMonth}-${validDay}`);
@@ -112,83 +112,146 @@ export function DateDropdowns({
     }
   };
 
+  const selectedMonthObj = MONTH_NAMES.find((m) => m.value === month);
+  const previewLabel = useMemo(() => {
+    if (!day || !month || !year) return null;
+    const mObj = MONTH_NAMES.find((m) => m.value === month);
+    return `${day} ${mObj?.short || month} ${year}`;
+  }, [day, month, year]);
+
   const selectStyle: React.CSSProperties = {
+    width: "100%",
     height: "38px",
-    borderRadius: "10px",
-    background: "var(--bg-input, rgba(20, 21, 26, 0.75))",
-    border: error ? "1px solid var(--danger, #ff453a)" : "1px solid var(--border, rgba(255, 255, 255, 0.12))",
+    borderRadius: "9px",
+    background: "rgba(255, 255, 255, 0.04)",
+    border: error ? "1px solid var(--danger, #ff453a)" : "1px solid var(--border)",
     color: "var(--text-primary, #ffffff)",
     fontSize: "13px",
     fontWeight: 500,
-    padding: "0 10px",
+    padding: "0 28px 0 12px",
+    appearance: "none",
+    WebkitAppearance: "none",
     outline: "none",
     cursor: disabled ? "not-allowed" : "pointer",
-    transition: "border-color 0.15s ease",
+    transition: "border-color 0.15s ease, background 0.15s ease",
   };
 
   return (
     <div className={`date-dropdowns-group ${className}`} style={{ width: "100%" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 1.1fr", gap: "8px", width: "100%" }}>
-        {/* 1. Day Dropdown */}
-        <select
-          value={day}
-          disabled={disabled}
-          onChange={(e) => updateDate(e.target.value, month, year)}
-          style={selectStyle}
-          className="focus:border-[var(--brand)]"
-          aria-label="Day"
-        >
-          <option value="" disabled style={{ background: "#1c1e24", color: "#888" }}>
-            Day
-          </option>
-          {daysList.map((d) => (
-            <option key={d} value={d} style={{ background: "#1c1e24", color: "#fff" }}>
-              {parseInt(d, 10)}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 1.15fr", gap: "8px", width: "100%" }}>
+        {/* 1. Day Selector */}
+        <div style={{ position: "relative", width: "100%" }}>
+          <select
+            value={day}
+            disabled={disabled}
+            onChange={(e) => updateDate(e.target.value, month, year)}
+            style={selectStyle}
+            className="hover:border-[var(--brand)] focus:border-[var(--brand)]"
+            aria-label="Day"
+          >
+            <option value="" disabled style={{ background: "#181a20", color: "#888" }}>
+              Day
             </option>
-          ))}
-        </select>
-
-        {/* 2. Month Dropdown */}
-        <select
-          value={month}
-          disabled={disabled}
-          onChange={(e) => updateDate(day, e.target.value, year)}
-          style={selectStyle}
-          className="focus:border-[var(--brand)]"
-          aria-label="Month"
-        >
-          <option value="" disabled style={{ background: "#1c1e24", color: "#888" }}>
-            Month
-          </option>
-          {MONTH_NAMES.map((name, idx) => {
-            const mVal = String(idx + 1).padStart(2, "0");
-            return (
-              <option key={mVal} value={mVal} style={{ background: "#1c1e24", color: "#fff" }}>
-                {name}
+            {daysList.map((d) => (
+              <option key={d} value={d} style={{ background: "#181a20", color: "#f0f2f5" }}>
+                {parseInt(d, 10)}
               </option>
-            );
-          })}
-        </select>
+            ))}
+          </select>
+          <ChevronDown
+            size={13}
+            style={{
+              position: "absolute",
+              right: "10px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              pointerEvents: "none",
+              color: "var(--text-muted)",
+            }}
+          />
+        </div>
 
-        {/* 3. Year Dropdown */}
-        <select
-          value={year}
-          disabled={disabled}
-          onChange={(e) => updateDate(day, month, e.target.value)}
-          style={selectStyle}
-          className="focus:border-[var(--brand)]"
-          aria-label="Year"
-        >
-          <option value="" disabled style={{ background: "#1c1e24", color: "#888" }}>
-            Year
-          </option>
-          {yearsList.map((y) => (
-            <option key={y} value={y} style={{ background: "#1c1e24", color: "#fff" }}>
-              {y}
+        {/* 2. Month Selector */}
+        <div style={{ position: "relative", width: "100%" }}>
+          <select
+            value={month}
+            disabled={disabled}
+            onChange={(e) => updateDate(day, e.target.value, year)}
+            style={selectStyle}
+            className="hover:border-[var(--brand)] focus:border-[var(--brand)]"
+            aria-label="Month"
+          >
+            <option value="" disabled style={{ background: "#181a20", color: "#888" }}>
+              Month
             </option>
-          ))}
-        </select>
+            {MONTH_NAMES.map((m) => (
+              <option key={m.value} value={m.value} style={{ background: "#181a20", color: "#f0f2f5" }}>
+                {m.full}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={13}
+            style={{
+              position: "absolute",
+              right: "10px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              pointerEvents: "none",
+              color: "var(--text-muted)",
+            }}
+          />
+        </div>
+
+        {/* 3. Year Selector */}
+        <div style={{ position: "relative", width: "100%" }}>
+          <select
+            value={year}
+            disabled={disabled}
+            onChange={(e) => updateDate(day, month, e.target.value)}
+            style={selectStyle}
+            className="hover:border-[var(--brand)] focus:border-[var(--brand)]"
+            aria-label="Year"
+          >
+            <option value="" disabled style={{ background: "#181a20", color: "#888" }}>
+              Year
+            </option>
+            {yearsList.map((y) => (
+              <option key={y} value={y} style={{ background: "#181a20", color: "#f0f2f5" }}>
+                {y}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={13}
+            style={{
+              position: "absolute",
+              right: "10px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              pointerEvents: "none",
+              color: "var(--text-muted)",
+            }}
+          />
+        </div>
       </div>
+
+      {showPreview && previewLabel && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+            marginTop: "5px",
+            fontSize: "11px",
+            color: "var(--text-muted)",
+          }}
+        >
+          <CalendarDays size={12} className="text-[var(--brand)]" />
+          <span>Indian Format (DD-MM-YYYY): <strong style={{ color: "var(--text-secondary)" }}>{previewLabel}</strong></span>
+        </div>
+      )}
+
       {error && (
         <span className="field-error" style={{ display: "block", marginTop: "4px", fontSize: "11px", color: "var(--danger, #ff453a)" }}>
           {error}

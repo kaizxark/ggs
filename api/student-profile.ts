@@ -507,9 +507,7 @@ async function handler(req: Request): Promise<Response> {
       if (status in counts) counts[status] += 1;
     }
     const marked = records.length;
-    // Leave is an approved absence: the pupil was not in the room, and it is not
-    // counted against them.
-    const credit = counts.present + counts.late + counts.half_day + counts.leave;
+    const credit = counts.present;
     const percentage = marked > 0 ? round1((credit / marked) * 100) : null;
 
     // Month-by-month, for the trend chart.
@@ -520,7 +518,7 @@ async function handler(req: Request): Promise<Response> {
       const entry = monthly.get(month) ?? { present: 0, total: 0 };
       const status = String(r.status ?? "");
       entry.total += 1;
-      if (["present", "late", "half_day", "leave"].indexOf(status) !== -1) entry.present += 1;
+      if (status === "present") entry.present += 1;
       monthly.set(month, entry);
     }
     const trend = Array.from(monthly.entries())
@@ -532,7 +530,7 @@ async function handler(req: Request): Promise<Response> {
       .sort((a, b) => a.month.localeCompare(b.month));
 
     const absences = records
-      .filter((r) => ["absent", "half_day"].indexOf(String(r.status)) !== -1)
+      .filter((r) => String(r.status) === "absent")
       .slice(0, 20)
       .map((r) => ({
         date: r.attendance_date,

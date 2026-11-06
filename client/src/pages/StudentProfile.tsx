@@ -878,8 +878,6 @@ function AttendanceSection({ data }: { data: ProfilePayload }) {
         <Metric label="Attendance" value={formatPercent(s.percentage)} note={`${s.marked_sessions} sessions`} tone={toneForPercent(s.percentage, 90)} />
         <Metric label="Present" value={String(s.present)} note="Full days" />
         <Metric label="Absent" value={String(s.absent)} note="Full days" tone={s.absent > 0 ? "warning" : undefined} />
-        <Metric label="Late" value={String(s.late)} note="Arrived after the bell" />
-        <Metric label="Approved leave" value={String(s.leave)} note="Not counted against attendance" />
       </div>
 
       <div className="panel">

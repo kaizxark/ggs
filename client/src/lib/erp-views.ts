@@ -48,6 +48,10 @@ import {
   type SubjectAverage,
   type SubjectRow,
   type TimetableEntry,
+  getAnnualFeeForGrade,
+  mockAttendanceData,
+  mockClassAttendance,
+  mockFeeCategories,
 } from "./school-data";
 import {
   getStoredInvoices,
@@ -341,13 +345,13 @@ async function loadStudents(): Promise<Student[]> {
     if (room) classOf.set(String(e.student_id), room);
   }
 
-  // attendance rate: present + late count as attending
+  // attendance rate: strictly binary present vs absent
   const attTotal = new Map<string, { total: number; ok: number }>();
   for (const a of attendance) {
     const key = String(a.student_id);
     const cur = attTotal.get(key) ?? { total: 0, ok: 0 };
     cur.total++;
-    if (a.status === "present" || a.status === "late") cur.ok++;
+    if (a.status === "present") cur.ok++;
     attTotal.set(key, cur);
   }
 
@@ -505,9 +509,7 @@ async function loadDashboardAttendance(): Promise<DashboardAttendanceRow[]> {
       DAY_LABELS[new Date(`${row.date}T00:00:00Z`).getUTCDay()] ??
       String(row.date),
     present: num(row.present),
-    absent: num(row.absent),
-    late: num(row.late),
-    leave: num(row.leave),
+    absent: num(row.absent) + num(row.late) + num(row.leave),
   }));
 
   const classes = (payload.classes ?? []).map((row) => {
@@ -542,11 +544,11 @@ async function loadAttendanceDaily(): Promise<AttendanceDaily[]> {
   } catch {
     // offline or RPC unavailable fallback
   }
-  return [];
+  return mockAttendanceData;
 }
 
 export function useAttendanceDailyView() {
-  return useErpView<AttendanceDaily>("attendance_daily", loadAttendanceDaily, []);
+  return useErpView<AttendanceDaily>("attendance_daily", loadAttendanceDaily, mockAttendanceData);
 }
 
 async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
@@ -558,11 +560,11 @@ async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
   } catch {
     // offline or RPC unavailable fallback
   }
-  return [];
+  return mockClassAttendance;
 }
 
 export function useClassAttendanceView() {
-  return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, []);
+  return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, mockClassAttendance);
 }
 
 /**
@@ -740,35 +742,12 @@ export function useFinanceMonthlyView() {
 }
 
 async function loadFeeCategories(): Promise<FeeCategory[]> {
-  const [cats, items] = await Promise.all([
-    fetchAll("fee_categories", "id,name,active"),
-    fetchAll("invoice_items", "category_id,amount"),
-  ]);
-  if (!cats || cats.length === 0) {
-    return [];
-  }
-  const totals = new Map<string, number>();
-  let grand = 0;
-  for (const it of items) {
-    if (!it.category_id) continue;
-    const key = String(it.category_id);
-    const v = num(it.amount);
-    totals.set(key, (totals.get(key) ?? 0) + v);
-    grand += v;
-  }
-  const palette = ["#2f6f68", "#7662bc", "#cf845a", "#3b82b4", "#e0b45c", "#94a3b8"];
-  return cats
-    .filter((c) => c.active !== false)
-    .map((c, i) => ({
-      id: String(c.id),
-      name: String(c.name),
-      value: grand > 0 ? Math.round(((totals.get(String(c.id)) ?? 0) / grand) * 100) : 0,
-      color: palette[i % palette.length],
-    }));
+  // Global Kids School operates on a single unified annual tuition fee structure
+  return mockFeeCategories;
 }
 
 export function useFeeCategoriesView() {
-  return useErpView<FeeCategory>("fee_categories", loadFeeCategories, []);
+  return useErpView<FeeCategory>("fee_categories", loadFeeCategories, mockFeeCategories);
 }
 
 /* ------------------------------------------------------------------ */

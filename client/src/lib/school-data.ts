@@ -24,13 +24,13 @@ export type BaseRow = { id: RowId } & Record<string, unknown>;
 /* ------------------------------------------------------------------ */
 
 export const mockAttendanceData = [
-  { id: "mon", day: "Mon", present: 2268, absent: 118, late: 61, leave: 39 },
-  { id: "tue", day: "Tue", present: 2310, absent: 92, late: 52, leave: 32 },
-  { id: "wed", day: "Wed", present: 2290, absent: 104, late: 59, leave: 33 },
-  { id: "thu", day: "Thu", present: 2354, absent: 70, late: 35, leave: 27 },
-  { id: "fri", day: "Fri", present: 2318, absent: 86, late: 49, leave: 33 },
-  { id: "sat", day: "Sat", present: 2380, absent: 46, late: 28, leave: 32 },
-  { id: "today", day: "Today", present: 2357, absent: 79, late: 33, leave: 17 },
+  { id: "mon", day: "Mon", present: 2268, absent: 218 },
+  { id: "tue", day: "Tue", present: 2310, absent: 176 },
+  { id: "wed", day: "Wed", present: 2290, absent: 196 },
+  { id: "thu", day: "Thu", present: 2354, absent: 132 },
+  { id: "fri", day: "Fri", present: 2318, absent: 168 },
+  { id: "sat", day: "Sat", present: 2380, absent: 106 },
+  { id: "today", day: "Today", present: 2357, absent: 129 },
 ];
 
 export const mockStudents = [
@@ -220,7 +220,7 @@ export const mockMessages = [
 
 export const mockNotifications = [
   { id: 1, title: "Attendance alert", detail: "Grade 6 — B dropped below 90% for today", time: "12 min ago", unread: true, tone: "coral", kind: "Attendance", icon: "alert" },
-  { id: 2, title: "Fee payment received", detail: "Kapoor family paid ₹15,000 installment · INV-2026-1099", time: "48 min ago", unread: true, tone: "teal", kind: "Finance", icon: "rupee" },
+  { id: 2, title: "Fee payment received", detail: "Kapoor family paid ₹25,000 installment · INV-2026-1099", time: "48 min ago", unread: true, tone: "teal", kind: "Finance", icon: "rupee" },
   { id: 3, title: "Exam schedule published", detail: "Mid-term timetable is now visible to families", time: "2 hrs ago", unread: true, tone: "violet", kind: "Academic", icon: "file" },
   { id: 4, title: "Leave request pending", detail: "Arvind Iyer requested 2 days · 06–07 Oct", time: "3 hrs ago", unread: true, tone: "amber", kind: "Attendance", icon: "calendar" },
   { id: 6, title: "New parent message", detail: "Mrs. Nair · Ishita's exam schedule", time: "Yesterday", unread: false, tone: "teal", kind: "Message", icon: "message" },
@@ -236,7 +236,7 @@ export const mockPayments: Payment[] = [
   { id: "PAY-001", invoice_id: "INV-2026-1048", student: "Ishita Nair", amount: 30000, method: "Bank transfer", paid_at: "2026-09-28T08:52:00Z" },
   { id: "PAY-002", invoice_id: null, student: "Sara Fernandes", amount: 25000, method: "UPI", paid_at: "2026-09-28T08:15:00Z" },
   { id: "PAY-003", invoice_id: null, student: "Arjun Menon", amount: 30000, method: "Card", paid_at: "2026-09-27T16:40:00Z" },
-  { id: "PAY-004", invoice_id: "INV-2026-1099", student: "Vihaan Kapoor", amount: 15000, method: "Cash", paid_at: "2026-09-26T11:20:00Z" },
+  { id: "PAY-004", invoice_id: "INV-2026-1099", student: "Vihaan Kapoor", amount: 25000, method: "Cash", paid_at: "2026-09-26T11:20:00Z" },
 ];
 
 export const mockReportExports = [
@@ -271,10 +271,7 @@ export const mockGradeOutcomes = [
 ];
 
 export const mockFeeCategories = [
-  { id: "fc-1", name: "Tuition", value: 62, color: "#2f6f68" },
-  { id: "fc-2", name: "Transport", value: 18, color: "#7662bc" },
-  { id: "fc-3", name: "Activities", value: 12, color: "#cf845a" },
-  { id: "fc-4", name: "Other", value: 8, color: "#39434d" },
+  { id: "fc-1", name: "Tuition Fee", value: 100, color: "#2f6f68" },
 ];
 
 export const mockSettings: SettingRow[] = [
@@ -299,7 +296,7 @@ export const mockSettings: SettingRow[] = [
 
 export interface Student extends BaseRow { usn?: string; name: string; initials: string; grade: string; section: string; attendance: number; /** How many attendance rows back `attendance`. 0 means unmarked, not 0%. */ attendance_records: number; average: number; scored_papers: number; fees: string; status: string; tone: string; }
 export interface StaffMember extends BaseRow { usn: string; name: string; initials: string; role: string; department: string; email: string; attendance: number; status: string; tone: string; photo_url?: string | null; }
-export interface AttendanceDaily extends BaseRow { day: string; date?: string; label?: string; present: number; absent: number; late: number; leave: number; }
+export interface AttendanceDaily extends BaseRow { day: string; date?: string; label?: string; present: number; absent: number; late?: number; leave?: number; }
 export interface ClassAttendanceRow extends BaseRow { label: string; value: number; present: number; total: number; teacher: string; }
 export interface ScheduleItem extends BaseRow { time: string; subject: string; detail: string; color: string; }
 export interface ActivityItem extends BaseRow { category: ActivityCategory; time: string; title: string; detail: string; icon: string; color: string; }
@@ -315,7 +312,7 @@ export interface Exam extends BaseRow { name: string; subject: string; grade: st
 export interface ExamResult extends BaseRow { subject: string; grade: string; graded: number; total: number; published: boolean; }
 export interface LibraryBook extends BaseRow { title: string; author: string; category: string; copies: number; issued: number; status: string; }
 export interface TimetableEntry extends BaseRow { day: string; period: string; time: string; grade_6: string; grade_7: string; grade_8: string; grade_9: string; grade_10?: string; }
-export const MIN_INSTALLMENT_AMOUNT = 15000;
+export const MIN_INSTALLMENT_AMOUNT = 5000;
 
 export function getAnnualFeeForGrade(grade?: string | number | null): number {
   if (!grade) return 50000;

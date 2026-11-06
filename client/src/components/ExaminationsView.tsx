@@ -1,48 +1,38 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useState, useMemo, useEffect } from "react";
 import {
   Calendar,
   Plus,
   Search,
   FileText,
-  ClipboardCheck,
-  GraduationCap,
   Check,
-  Download,
   Printer,
   Eye,
-  Pencil,
   Trash2,
   X,
   ChevronRight,
   Award,
   BookOpen,
-  Clock3,
-  MapPin,
-  UserCheck,
-  AlertCircle,
   CheckCircle2,
-  SlidersHorizontal,
   Send,
-  Sparkles,
-  ArrowUpDown,
   Filter,
-  CheckSquare,
-  Square,
   Users,
+  Mail,
+  Lock,
+  Unlock,
+  AlertTriangle,
+  ClipboardList,
+  Sparkles,
+  BarChart3,
+  CheckSquare,
 } from "lucide-react";
 
 import { Breadcrumb } from "./Breadcrumb";
 import { MetricBlock } from "./MetricBlock";
-import { SkeletonTableRows, SkeletonList } from "./ErpSkeleton";
 import { Pager, usePagination } from "./ErpPagination";
 import { DrawerBackdrop } from "./DrawerBackdrop";
 import { FormSelect, type FormSelectOption } from "./FormSelect";
-import { downloadCsv } from "./ReportsView";
 import { toast } from "@/lib/toast";
 import {
-  useExamsView,
-  useExamResultsView,
   useStudentsView,
   useStaffView,
   useSubjectsView,
@@ -50,2113 +40,2620 @@ import {
   type Student,
 } from "@/lib/erp-views";
 import { isSuperAdminId } from "@shared/super-admin";
-import { type Exam, type ExamResult } from "@/lib/school-data";
 
 export interface ExaminationsViewProps {
   onBack: () => void;
 }
 
-export type TabKey = "schedule" | "marks" | "publishing" | "report-cards";
+export type ExamTabKey = "exams" | "marks" | "status" | "report-cards";
 
-export type AttendanceStatus = "Present" | "Late" | "Leave" | "Half Day" | "Absent";
+export type ExamType =
+  | "Midterm"
+  | "FA1"
+  | "FA2"
+  | "Internals"
+  | "Final"
+  | "Unit Test"
+  | "Annual";
 
-export const ATTENDANCE_STATUS_META: Record<AttendanceStatus, {
-  label: string;
-  shortLabel: string;
-  badge: string;
-  color: string;
-  bg: string;
-  border: string;
-  defaultRemarks: string;
-  canScore: boolean;
-}> = {
-  Present: {
-    label: "Present",
-    shortLabel: "P",
-    badge: "status-pill success",
-    color: "var(--success)",
-    bg: "var(--success-soft)",
-    border: "var(--success-border)",
-    defaultRemarks: "Candidate attended on time and completed examination.",
-    canScore: true,
-  },
-  Late: {
-    label: "Late Arrival",
-    shortLabel: "Late",
-    badge: "status-pill warning",
-    color: "var(--warning)",
-    bg: "var(--warning-soft)",
-    border: "var(--warning-border)",
-    defaultRemarks: "Admitted with late entry pass; completed paper.",
-    canScore: true,
-  },
-  Leave: {
-    label: "Approved Leave",
-    shortLabel: "Leave",
-    badge: "status-pill brand",
-    color: "var(--brand)",
-    bg: "var(--brand-soft)",
-    border: "var(--brand-border)",
-    defaultRemarks: "Excused on authorized medical/school leave — re-test scheduled.",
-    canScore: false,
-  },
-  "Half Day": {
-    label: "Half Day",
-    shortLabel: "Half Day",
-    badge: "status-pill violet",
-    color: "var(--violet)",
-    bg: "var(--violet-soft)",
-    border: "var(--violet-border)",
-    defaultRemarks: "Half day session permitted for official institutional event.",
-    canScore: true,
-  },
-  Absent: {
-    label: "Absent",
-    shortLabel: "Absent",
-    badge: "status-pill danger",
-    color: "var(--danger)",
-    bg: "var(--danger-soft)",
-    border: "var(--danger-border)",
-    defaultRemarks: "Unexcused absence from assessment session.",
-    canScore: false,
-  },
-};
-
-export interface StudentMarkEntry {
-  studentId: string;
-  studentName: string;
-  usn: string;
-  rollNo: string;
-  marks: number | null;
+export interface ExamSubjectConfig {
+  id: string;
+  subject: string;
   maxMarks: number;
-  status: AttendanceStatus;
+  passMarks: number;
+  assignedTeacher?: string;
+}
+
+export interface ConductedExam {
+  id: string;
+  title: string;
+  examType: ExamType;
+  term: string;
+  grade: string;
+  conductedDate: string;
+  subjects: ExamSubjectConfig[];
+  totalMaxMarks: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface StudentSubjectScore {
+  marks: number | null;
+  isAbsent: boolean; // Not Attended
   remarks: string;
 }
 
-export interface DetailedExam {
-  id: string;
-  name: string;
-  subject: string;
+export interface StudentExamRecord {
+  studentId: string;
+  studentName: string;
+  usn: string;
   grade: string;
-  date: string;
-  time: string;
-  venue: string;
-  status: string;
-  max_marks?: number;
-  passing_marks?: number;
-  invigilator?: string;
-  syllabus?: string;
+  section: string;
+  email?: string;
+  subjectScores: Record<string, StudentSubjectScore>;
+  evaluatedAt?: string;
+  evaluatedBy?: string;
+  emailSentAt?: string;
 }
 
-const DEFAULT_EXAMS: DetailedExam[] = [
+const DEFAULT_SUBJECTS_GRADE8: ExamSubjectConfig[] = [
+  { id: "sub-1", subject: "Mathematics", maxMarks: 100, passMarks: 40, assignedTeacher: "Arvind Iyer" },
+  { id: "sub-2", subject: "Science", maxMarks: 100, passMarks: 40, assignedTeacher: "Karthik Rao" },
+  { id: "sub-3", subject: "English", maxMarks: 100, passMarks: 40, assignedTeacher: "Sonia Joseph" },
+  { id: "sub-4", subject: "Social Science", maxMarks: 100, passMarks: 40, assignedTeacher: "Ananya Sharma" },
+  { id: "sub-5", subject: "Hindi", maxMarks: 100, passMarks: 40, assignedTeacher: "Priya Nair" },
+  { id: "sub-6", subject: "Computer Science", maxMarks: 100, passMarks: 40, assignedTeacher: "Vikram Sen" },
+];
+
+const DEFAULT_SUBJECTS_GRADE9: ExamSubjectConfig[] = [
+  { id: "sub-g9-1", subject: "Mathematics", maxMarks: 50, passMarks: 20, assignedTeacher: "Arvind Iyer" },
+  { id: "sub-g9-2", subject: "Physics", maxMarks: 50, passMarks: 20, assignedTeacher: "Karthik Rao" },
+  { id: "sub-g9-3", subject: "Chemistry", maxMarks: 50, passMarks: 20, assignedTeacher: "Priya Nair" },
+  { id: "sub-g9-4", subject: "English", maxMarks: 50, passMarks: 20, assignedTeacher: "Sonia Joseph" },
+  { id: "sub-g9-5", subject: "Social Science", maxMarks: 50, passMarks: 20, assignedTeacher: "Ananya Sharma" },
+];
+
+const DEFAULT_SUBJECTS_GRADE10: ExamSubjectConfig[] = [
+  { id: "sub-g10-1", subject: "Mathematics", maxMarks: 25, passMarks: 10, assignedTeacher: "Arvind Iyer" },
+  { id: "sub-g10-2", subject: "Physics", maxMarks: 25, passMarks: 10, assignedTeacher: "Karthik Rao" },
+  { id: "sub-g10-3", subject: "Chemistry", maxMarks: 25, passMarks: 10, assignedTeacher: "Priya Nair" },
+  { id: "sub-g10-4", subject: "Biology", maxMarks: 25, passMarks: 10, assignedTeacher: "Pooja Hegde" },
+  { id: "sub-g10-5", subject: "English", maxMarks: 25, passMarks: 10, assignedTeacher: "Sonia Joseph" },
+];
+
+const INITIAL_EXAMS: ConductedExam[] = [
   {
-    id: "EXM-001",
-    name: "Mid-term Mathematics",
-    subject: "Mathematics",
+    id: "EXM-MID-2026",
+    title: "Term 1 Midterm Examination 2026",
+    examType: "Midterm",
+    term: "Term 1 (2026–2027)",
     grade: "Grade 8",
-    date: "02 Oct 2026",
-    time: "09:00 – 10:30",
-    venue: "Room 204",
-    status: "Scheduled",
-    max_marks: 100,
-    passing_marks: 40,
-    invigilator: "Arvind Iyer",
-    syllabus: "Chapters 1–5: Rational Numbers, Linear Equations, Quadrilaterals, Data Handling",
+    conductedDate: "05 Oct 2026",
+    subjects: DEFAULT_SUBJECTS_GRADE8,
+    totalMaxMarks: 600,
+    notes: "CBSE curriculum physical assessment conducted across 6 core subject papers.",
+    createdAt: "2026-10-06T09:00:00.000Z",
   },
   {
-    id: "EXM-002",
-    name: "Mid-term Physics",
-    subject: "Physics",
+    id: "EXM-FA1-2026",
+    title: "Formative Assessment 1 (FA1)",
+    examType: "FA1",
+    term: "Term 1 (2026–2027)",
     grade: "Grade 9",
-    date: "03 Oct 2026",
-    time: "09:00 – 10:30",
-    venue: "Lab 1",
-    status: "Scheduled",
-    max_marks: 100,
-    passing_marks: 40,
-    invigilator: "Karthik Rao",
-    syllabus: "Units & Measurements, Kinematics, Laws of Motion, Work, Energy & Power",
+    conductedDate: "18 Aug 2026",
+    subjects: DEFAULT_SUBJECTS_GRADE9,
+    totalMaxMarks: 250,
+    notes: "First internal cycle formative evaluation.",
+    createdAt: "2026-08-19T10:00:00.000Z",
   },
   {
-    id: "EXM-003",
-    name: "Unit English",
-    subject: "English",
-    grade: "Grade 7",
-    date: "04 Oct 2026",
-    time: "10:45 – 11:45",
-    venue: "Room 118",
-    status: "Scheduled",
-    max_marks: 50,
-    passing_marks: 20,
-    invigilator: "Sonia Joseph",
-    syllabus: "Prose comprehension, Formal Letter Writing, Tenses and Reported Speech",
-  },
-  {
-    id: "EXM-004",
-    name: "Chemistry Practical",
-    subject: "Chemistry",
-    grade: "Grade 6",
-    date: "07 Oct 2026",
-    time: "13:00 – 15:00",
-    venue: "Lab 2",
-    status: "Draft",
-    max_marks: 50,
-    passing_marks: 20,
-    invigilator: "Priya Nair",
-    syllabus: "Volumetric Analysis, Salt Analysis (Acidic & Basic Radicals), Chemical Kinetics",
-  },
-  {
-    id: "EXM-005",
-    name: "Mid-term Hindi",
-    subject: "Hindi",
-    grade: "Grade 9",
-    date: "08 Oct 2026",
-    time: "09:00 – 10:30",
-    venue: "Room 102",
-    status: "Scheduled",
-    max_marks: 100,
-    passing_marks: 40,
-    invigilator: "Ananya Sharma",
-    syllabus: "Kshitij: Chapters 1 to 4, Grammar: Sandhi, Samas, Alankar, Essay writing",
-  },
-  {
-    id: "EXM-006",
-    name: "Computer Science Term 1",
-    subject: "Computer Science",
+    id: "EXM-INT-2026",
+    title: "Internal Assessment 1 (Internals)",
+    examType: "Internals",
+    term: "Term 1 (2026–2027)",
     grade: "Grade 10",
-    date: "10 Oct 2026",
-    time: "11:00 – 12:30",
-    venue: "Computer Lab A",
-    status: "Scheduled",
-    max_marks: 100,
-    passing_marks: 40,
-    invigilator: "Vikram Sen",
-    syllabus: "Python Functions, Loops, File Handling, Cyber Safety & Ethics",
+    conductedDate: "25 Sep 2026",
+    subjects: DEFAULT_SUBJECTS_GRADE10,
+    totalMaxMarks: 125,
+    notes: "Continuous evaluation component for CBSE Board examination readiness.",
+    createdAt: "2026-09-26T11:00:00.000Z",
   },
 ];
 
-function getGradeLetter(score: number, max: number): { letter: string; color: string; badge: string } {
+export function calculateGradeLetter(score: number, max: number): {
+  letter: string;
+  color: string;
+  badge: string;
+} {
+  if (max <= 0) return { letter: "—", color: "var(--text-muted)", badge: "status-pill neutral" };
   const pct = (score / max) * 100;
   if (pct >= 90) return { letter: "A+", color: "var(--success)", badge: "status-pill success" };
   if (pct >= 80) return { letter: "A", color: "var(--brand)", badge: "status-pill brand" };
   if (pct >= 70) return { letter: "B", color: "var(--violet)", badge: "status-pill violet" };
   if (pct >= 60) return { letter: "C", color: "var(--warning)", badge: "status-pill warning" };
-  if (pct >= 50) return { letter: "D", color: "var(--orange)", badge: "status-pill orange" };
+  if (pct >= 40) return { letter: "D", color: "var(--orange)", badge: "status-pill orange" };
   return { letter: "F", color: "var(--danger)", badge: "status-pill danger" };
 }
 
 export function ExaminationsView({ onBack }: ExaminationsViewProps) {
   const currentUser = useCurrentUser();
   const isSuper = currentUser ? isSuperAdminId(currentUser.id) : false;
+  const isAdminOrPrincipal =
+    isSuper ||
+    currentUser?.role === "admin" ||
+    currentUser?.role === "super_admin" ||
+    currentUser?.role === "principal";
   const isFacultyUser = currentUser?.role === "teacher" || currentUser?.role === "faculty";
-  const { rows: fetchedExams, loading: examsLoading } = useExamsView();
-  const { rows: fetchedResults, loading: resultsLoading, update: updateExamResult } = useExamResultsView();
-  const { rows: students, loading: studentsLoading } = useStudentsView();
-  const { rows: staff } = useStaffView();
-  const { rows: subjects } = useSubjectsView();
 
-  const [activeTab, setActiveTab] = useState<TabKey>("schedule");
+  const { rows: allStudents } = useStudentsView();
+  const { rows: staffList } = useStaffView();
+  const { rows: subjectList } = useSubjectsView();
 
-  // Local storage backed exam items
-  const [exams, setExams] = useState<DetailedExam[]>(() => {
+  const [activeTab, setActiveTab] = useState<ExamTabKey>("exams");
+
+  // Persistent Conducted Exams
+  const [exams, setExams] = useState<ConductedExam[]>(() => {
     try {
-      const stored = localStorage.getItem("erp_custom_exams_v2");
+      const stored = localStorage.getItem("erp_conducted_exams_v3");
       if (stored) return JSON.parse(stored);
     } catch {
       // ignore
     }
-    return DEFAULT_EXAMS;
+    return INITIAL_EXAMS;
   });
 
-  // Keep synced if fetchedExams has additional entries
-  useEffect(() => {
-    if (fetchedExams.length > 0) {
-      setExams((prev) => {
-        const existingIds = new Set(prev.map((e) => String(e.id)));
-        const added: DetailedExam[] = fetchedExams
-          .filter((e) => !existingIds.has(String(e.id)))
-          .map((e) => ({
-            id: String(e.id),
-            name: String(e.name),
-            subject: String(e.subject),
-            grade: String(e.grade),
-            date: String(e.date),
-            time: String(e.time),
-            venue: String(e.venue),
-            status: String(e.status),
-            max_marks: 100,
-            passing_marks: 40,
-            invigilator: "Faculty in charge",
-            syllabus: "Comprehensive syllabus as prescribed by the department.",
-          }));
-        if (added.length === 0) return prev;
-        const updated = [...prev, ...added];
-        try {
-          localStorage.setItem("erp_custom_exams_v2", JSON.stringify(updated));
-        } catch {
-          // ignore
-        }
-        return updated;
-      });
-    }
-  }, [fetchedExams]);
-
-  // Local publishing state override
-  const [publishingOverrides, setPublishingOverrides] = useState<Record<string, boolean>>(() => {
-    try {
-      const stored = localStorage.getItem("erp_publishing_overrides_v2");
-      if (stored) return JSON.parse(stored);
-    } catch {
-      // ignore
-    }
-    return {};
-  });
-
-  // Effective publishing papers
-  const publishingList: ExamResult[] = useMemo(() => {
-    const base = fetchedResults.length > 0 ? fetchedResults : [
-      { id: "res-1", subject: "Mathematics", grade: "Grade 8 — B", graded: 31, total: 31, published: false },
-      { id: "res-2", subject: "Physics", grade: "Grade 9 — A", graded: 30, total: 31, published: false },
-      { id: "res-3", subject: "English", grade: "Grade 7 — B", graded: 24, total: 32, published: false },
-      { id: "res-4", subject: "History", grade: "Grade 6 — B", graded: 28, total: 28, published: true },
-      { id: "res-5", subject: "Computer Science", grade: "Grade 10 — A", graded: 29, total: 29, published: true },
-    ];
-    return base.map((row) => ({
-      ...row,
-      published: publishingOverrides[String(row.id)] !== undefined ? publishingOverrides[String(row.id)] : row.published,
-    }));
-  }, [fetchedResults, publishingOverrides]);
-
-  // Student Marks Storage: keyed by `${examId}__${studentId}`
-  const [marksStore, setMarksStore] = useState<Record<string, { marks: number | null; status: AttendanceStatus; remarks: string }>>(() => {
-    try {
-      const stored = localStorage.getItem("erp_exam_marks_store_v2");
-      if (stored) return JSON.parse(stored);
-    } catch {
-      // ignore
-    }
-    return {};
-  });
-
-  // Active exam selected for Marks Entry tab
-  const [selectedExamId, setSelectedExamId] = useState<string>(DEFAULT_EXAMS[0]?.id ?? "");
-
-  // Filters for Schedule tab
-  const [searchQuery, setSearchQuery] = useState("");
-  const [gradeFilter, setGradeFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-
-  // Modals & Drawers state
-  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
-  const [examDetailDrawerItem, setExamDetailDrawerItem] = useState<DetailedExam | null>(null);
-  const [reportCardStudentId, setReportCardStudentId] = useState<string>("");
-
-  // Grade filter options
-  const gradeOptions: FormSelectOption[] = [
-    { value: "all", label: "All Grades" },
-    { value: "Grade 6", label: "Grade 6" },
-    { value: "Grade 7", label: "Grade 7" },
-    { value: "Grade 8", label: "Grade 8" },
-    { value: "Grade 9", label: "Grade 9" },
-    { value: "Grade 10", label: "Grade 10" },
-  ];
-
-  const statusOptions: FormSelectOption[] = [
-    { value: "all", label: "All Statuses" },
-    { value: "Scheduled", label: "Scheduled" },
-    { value: "Draft", label: "Draft" },
-    { value: "In Progress", label: "In Progress" },
-    { value: "Completed", label: "Completed" },
-  ];
-
-  // Filtered exams
-  const filteredExams = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    return exams.filter((exam) => {
-      if (gradeFilter !== "all" && !exam.grade.includes(gradeFilter.replace("Grade ", ""))) {
-        if (!exam.grade.toLowerCase().includes(gradeFilter.toLowerCase())) return false;
-      }
-      if (statusFilter !== "all" && exam.status !== statusFilter) return false;
-      if (!q) return true;
-      return (
-        exam.name.toLowerCase().includes(q) ||
-        exam.subject.toLowerCase().includes(q) ||
-        exam.venue.toLowerCase().includes(q) ||
-        (exam.invigilator && exam.invigilator.toLowerCase().includes(q))
-      );
-    });
-  }, [exams, searchQuery, gradeFilter, statusFilter]);
-
-  const examsPager = usePagination(filteredExams, 8);
-
-  // Dynamic Calculated Metrics
-  const metrics = useMemo(() => {
-    const upcomingCount = exams.filter((e) => e.status === "Scheduled" || e.status === "In Progress").length;
-    const pendingGradingCount = publishingList.filter((p) => !p.published || p.graded < p.total).length;
-    const publishedCount = publishingList.filter((p) => p.published).length;
-    const publishRate = publishingList.length > 0 ? Math.round((publishedCount / publishingList.length) * 100) : 0;
-
-    // Calculate score average from marked students who took the paper (Present, Late, Half Day)
-    let totalScoreSum = 0;
-    let totalScoreN = 0;
-    Object.values(marksStore).forEach((val) => {
-      if (val.marks !== null && (val.status === "Present" || val.status === "Late" || val.status === "Half Day")) {
-        totalScoreSum += val.marks;
-        totalScoreN += 1;
-      }
-    });
-
-    const averageScore = totalScoreN > 0 ? Math.round(totalScoreSum / totalScoreN) : 84;
-
-    return {
-      upcomingCount,
-      pendingGradingCount,
-      averageScore,
-      publishRate,
-      totalExams: exams.length,
-      publishedCount,
-      totalPapers: publishingList.length,
-    };
-  }, [exams, publishingList, marksStore]);
-
-  // Selected exam for grading
-  const currentExam = useMemo(() => {
-    return exams.find((e) => e.id === selectedExamId) ?? exams[0];
-  }, [exams, selectedExamId]);
-
-  // Candidate students for the selected exam grade
-  const examStudents: Student[] = useMemo(() => {
-    if (!currentExam) return [];
-    const targetGrade = currentExam.grade.replace(/[^0-9]/g, "");
-    const matching = students.filter((s) => {
-      const studentGrade = String(s.grade).replace(/[^0-9]/g, "");
-      return studentGrade === targetGrade;
-    });
-    return matching.length > 0 ? matching : students.slice(0, 15);
-  }, [students, currentExam]);
-
-  // Local student marks for active exam
-  const currentMarksList: StudentMarkEntry[] = useMemo(() => {
-    if (!currentExam) return [];
-    const max = currentExam.max_marks ?? 100;
-    return examStudents.map((stu, idx) => {
-      const key = `${currentExam.id}__${stu.id}`;
-      const saved = marksStore[key];
-      // realistic baseline default if not yet edited
-      const defaultMarks = saved?.marks !== undefined ? saved.marks : 65 + ((idx * 7) % 31);
-      const status: AttendanceStatus = (saved?.status as AttendanceStatus) ?? "Present";
-      const remarks = saved?.remarks ?? (defaultMarks !== null && defaultMarks >= 85 ? "Consistent excellence" : ATTENDANCE_STATUS_META[status]?.defaultRemarks ?? "Satisfactory grasp of key concepts");
-      const canScore = ATTENDANCE_STATUS_META[status]?.canScore ?? true;
-      return {
-        studentId: String(stu.id),
-        studentName: stu.name,
-        usn: stu.usn ?? `ADM-2627-${String(idx + 1).padStart(3, "0")}`,
-        rollNo: String(idx + 1).padStart(2, "0"),
-        marks: canScore ? defaultMarks : null,
-        maxMarks: max,
-        status,
-        remarks,
-      };
-    });
-  }, [currentExam, examStudents, marksStore]);
-
-  // Marksheet stats
-  const markSheetStats = useMemo(() => {
-    const presentCount = currentMarksList.filter((m) => m.status === "Present").length;
-    const lateCount = currentMarksList.filter((m) => m.status === "Late").length;
-    const leaveCount = currentMarksList.filter((m) => m.status === "Leave").length;
-    const halfDayCount = currentMarksList.filter((m) => m.status === "Half Day").length;
-    const absentCount = currentMarksList.filter((m) => m.status === "Absent").length;
-
-    // Evaluated candidates who took paper
-    const evaluated = currentMarksList.filter((m) => m.status !== "Absent" && m.status !== "Leave" && m.marks !== null);
-    if (evaluated.length === 0) {
-      return {
-        avg: 0,
-        highest: 0,
-        lowest: 0,
-        passRate: 100,
-        count: 0,
-        presentCount,
-        lateCount,
-        leaveCount,
-        halfDayCount,
-        absentCount,
-      };
-    }
-    const scores = evaluated.map((m) => m.marks as number);
-    const sum = scores.reduce((a, b) => a + b, 0);
-    const avg = Math.round(sum / scores.length);
-    const highest = Math.max(...scores);
-    const lowest = Math.min(...scores);
-    const passing = currentExam?.passing_marks ?? 40;
-    const passed = scores.filter((s) => s >= passing).length;
-    const passRate = Math.round((passed / scores.length) * 100);
-    return {
-      avg,
-      highest,
-      lowest,
-      passRate,
-      count: evaluated.length,
-      presentCount,
-      lateCount,
-      leaveCount,
-      halfDayCount,
-      absentCount,
-    };
-  }, [currentMarksList, currentExam]);
-
-  // Handler: Update Mark
-  const handleMarkChange = (studentId: string, valStr: string) => {
-    if (!currentExam) return;
-    const key = `${currentExam.id}__${studentId}`;
-    const max = currentExam.max_marks ?? 100;
-    let numVal: number | null = null;
-    if (valStr.trim() !== "") {
-      const parsed = parseInt(valStr, 10);
-      if (!isNaN(parsed)) {
-        numVal = Math.min(Math.max(parsed, 0), max);
-      }
-    }
-    setMarksStore((prev) => {
-      const existing = prev[key] ?? { marks: null, status: "Present" as AttendanceStatus, remarks: "" };
-      const updated = {
-        ...prev,
-        [key]: {
-          ...existing,
-          marks: numVal,
-        },
-      };
+  const saveExams = (updater: (prev: ConductedExam[]) => ConductedExam[]) => {
+    setExams((prev) => {
+      const next = updater(prev);
       try {
-        localStorage.setItem("erp_exam_marks_store_v2", JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
-  };
-
-  // Handler: Update Attendance Status (Present, Late, Leave, Half Day, Absent)
-  const handleStatusChange = (studentId: string, newStatus: AttendanceStatus) => {
-    if (!currentExam) return;
-    const key = `${currentExam.id}__${studentId}`;
-    setMarksStore((prev) => {
-      const existing = prev[key] ?? { marks: 75, status: "Present" as AttendanceStatus, remarks: "" };
-      const canScore = ATTENDANCE_STATUS_META[newStatus].canScore;
-      const nextMarks = canScore ? (existing.marks ?? 70) : null;
-      const defaultRemark = ATTENDANCE_STATUS_META[newStatus].defaultRemarks;
-      const updated = {
-        ...prev,
-        [key]: {
-          ...existing,
-          status: newStatus,
-          marks: nextMarks,
-          remarks: existing.remarks && existing.remarks !== ATTENDANCE_STATUS_META[existing.status]?.defaultRemarks
-            ? existing.remarks
-            : defaultRemark,
-        },
-      };
-      try {
-        localStorage.setItem("erp_exam_marks_store_v2", JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
-  };
-
-  // Handler: Mark all candidates as Present
-  const handleMarkAllPresent = () => {
-    if (!currentExam) return;
-    setMarksStore((prev) => {
-      const next = { ...prev };
-      examStudents.forEach((stu, i) => {
-        const key = `${currentExam.id}__${stu.id}`;
-        const existing = prev[key];
-        const defaultMarks = existing?.marks ?? (65 + ((i * 7) % 31));
-        next[key] = {
-          marks: defaultMarks,
-          status: "Present",
-          remarks: existing?.remarks || ATTENDANCE_STATUS_META.Present.defaultRemarks,
-        };
-      });
-      try {
-        localStorage.setItem("erp_exam_marks_store_v2", JSON.stringify(next));
+        localStorage.setItem("erp_conducted_exams_v3", JSON.stringify(next));
       } catch {
         // ignore
       }
       return next;
     });
-    toast.success("Attendance Updated", {
-      description: `All ${examStudents.length} candidates marked as Present.`,
-    });
   };
 
-  // Handler: Save Marks batch
-  const handleSaveMarks = () => {
-    toast.success("Marks Saved & Synchronized", {
-      description: `${currentMarksList.length} candidate scores recorded for ${currentExam.name}.`,
-    });
-  };
+  // Selected Exam for Grade Entry & Report Cards
+  const [selectedExamId, setSelectedExamId] = useState<string>(
+    () => exams[0]?.id ?? "EXM-MID-2026"
+  );
 
-  // Handler: Auto-fill demo marks with realistic diversity (Present, Late, Leave, Half Day, Absent)
-  const handleAutofillMarks = () => {
-    if (!currentExam) return;
-    const max = currentExam.max_marks ?? 100;
-    const newEntries: Record<string, { marks: number | null; status: AttendanceStatus; remarks: string }> = {};
-    examStudents.forEach((stu, i) => {
-      const key = `${currentExam.id}__${stu.id}`;
-      let status: AttendanceStatus = "Present";
-      let marks: number | null = Math.min(max, Math.round(58 + ((i * 11) % (max - 58))));
-      let remarks = marks >= 85 ? "Consistent excellence across all units." : "Solid grasp of core curriculum.";
+  const activeExam = useMemo(() => {
+    return exams.find((e) => e.id === selectedExamId) ?? exams[0] ?? null;
+  }, [exams, selectedExamId]);
 
-      if (i === 1) {
-        status = "Late";
-        marks = Math.min(max, marks - 4);
-        remarks = "Late arrival due to morning transit; late entry pass granted.";
-      } else if (i === 3) {
-        status = "Leave";
-        marks = null;
-        remarks = "Approved medical leave by school clinic · re-test scheduled.";
-      } else if (i === 5) {
-        status = "Half Day";
-        marks = Math.min(max, marks);
-        remarks = "Half day permitted for CBSE inter-school athletics competition.";
-      } else if (i === 7) {
-        status = "Absent";
-        marks = null;
-        remarks = "Unexcused absence from assessment session.";
-      }
-
-      newEntries[key] = {
-        marks,
-        status,
-        remarks,
-      };
-    });
-    setMarksStore((prev) => {
-      const updated = { ...prev, ...newEntries };
-      try {
-        localStorage.setItem("erp_exam_marks_store_v2", JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
-    toast.success("Realistic Marks & Attendance Populated", {
-      description: `Sample data populated with Present, Late, Leave, Half Day & Absent candidates.`,
-    });
-  };
-
-  // Handler: Toggle Paper Publishing
-  const handleTogglePublish = async (paperId: string | number, currentStatus: boolean) => {
-    const nextStatus = !currentStatus;
-    const idStr = String(paperId);
-    setPublishingOverrides((prev) => {
-      const updated = { ...prev, [idStr]: nextStatus };
-      try {
-        localStorage.setItem("erp_publishing_overrides_v2", JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
-
-    if (updateExamResult) {
-      void updateExamResult(paperId, { published: nextStatus });
-    }
-
-    if (nextStatus) {
-      toast.success("Results Published to Portal", {
-        description: "Grades and report metrics are now visible to parents and pupils.",
-      });
-    } else {
-      toast.info("Results Withdrawn from Portal", {
-        description: "Grades have been hidden from family portals for administrative review.",
-      });
-    }
-  };
-
-  // Handler: Batch publish all
-  const handlePublishAll = () => {
-    const overrides: Record<string, boolean> = {};
-    publishingList.forEach((p) => {
-      overrides[p.id] = true;
-      if (updateExamResult) void updateExamResult(p.id, { published: true });
-    });
-    setPublishingOverrides(overrides);
+  // Persistent Student Evaluations: Keyed by `${examId}__${studentId}`
+  const [evaluationsStore, setEvaluationsStore] = useState<Record<string, StudentExamRecord>>(() => {
     try {
-      localStorage.setItem("erp_publishing_overrides_v2", JSON.stringify(overrides));
+      const stored = localStorage.getItem("erp_exam_evaluations_v3");
+      if (stored) return JSON.parse(stored);
     } catch {
       // ignore
     }
-    toast.success("All Examination Results Published", {
-      description: "All graded mark sheets have been made visible to parents and pupils.",
-    });
-  };
+    return {};
+  });
 
-  // Handler: Export Exam Timetable CSV
-  const handleExportTimetable = () => {
-    const headers = ["Exam ID", "Exam Name", "Subject", "Grade", "Date", "Time", "Venue", "Invigilator", "Status"];
-    const rows = filteredExams.map((e) => [
-      e.id,
-      e.name,
-      e.subject,
-      e.grade,
-      e.date,
-      e.time,
-      e.venue,
-      e.invigilator ?? "TBD",
-      e.status,
-    ]);
-    downloadCsv("Global_Kids_School_Exam_Timetable_2026.csv", headers, rows);
-    toast.success("Exam Timetable Exported", {
-      description: `${rows.length} scheduled exam sessions downloaded in CSV format.`,
-    });
-  };
-
-  // Handler: Export Marksheet CSV
-  const handleExportMarksheet = () => {
-    if (!currentExam) return;
-    const headers = ["Roll No", "USN", "Student Name", "Grade", "Attendance Status", "Marks Obtained", "Max Marks", "Percentage", "Grade Letter", "Remarks"];
-    const rows = currentMarksList.map((m) => {
-      const marksVal = m.status === "Leave" ? "Excused" : m.status === "Absent" ? "Absent" : m.marks ?? 0;
-      const pct = m.status === "Leave" ? "Excused" : m.marks !== null ? `${Math.round((m.marks / m.maxMarks) * 100)}%` : "—";
-      const letter = m.status === "Leave" ? "LV" : m.status === "Absent" ? "Ab" : m.marks !== null ? getGradeLetter(m.marks, m.maxMarks).letter : "—";
-      return [
-        m.rollNo,
-        m.usn,
-        m.studentName,
-        currentExam.grade,
-        m.status,
-        marksVal,
-        m.maxMarks,
-        pct,
-        letter,
-        m.remarks,
-      ];
-    });
-    downloadCsv(`${currentExam.name.replace(/\s+/g, "_")}_Marksheet.csv`, headers, rows);
-    toast.success("Marksheet Exported", {
-      description: `Mark sheet for ${currentExam.name} downloaded successfully.`,
-    });
-  };
-
-  // Handler: Delete Exam
-  const handleDeleteExam = (examId: string) => {
-    const target = exams.find((e) => e.id === examId);
-    setExams((prev) => {
-      const updated = prev.filter((e) => e.id !== examId);
+  const saveEvaluationsStore = (
+    updater: (prev: Record<string, StudentExamRecord>) => Record<string, StudentExamRecord>
+  ) => {
+    setEvaluationsStore((prev) => {
+      const next = updater(prev);
       try {
-        localStorage.setItem("erp_custom_exams_v2", JSON.stringify(updated));
+        localStorage.setItem("erp_exam_evaluations_v3", JSON.stringify(next));
       } catch {
         // ignore
       }
-      return updated;
-    });
-    if (examDetailDrawerItem?.id === examId) {
-      setExamDetailDrawerItem(null);
-    }
-    toast.info("Exam Schedule Removed", {
-      description: `${target?.name ?? "Exam"} has been removed from the calendar.`,
+      return next;
     });
   };
 
-  // Current student selected for report card
-  const selectedReportStudent = useMemo(() => {
-    if (reportCardStudentId) {
-      const match = students.find((s) => String(s.id) === reportCardStudentId);
-      if (match) return match;
-    }
-    return students[0] ?? null;
-  }, [students, reportCardStudentId]);
+  // Eligible students for the active exam's grade
+  const examCandidateStudents = useMemo<Student[]>(() => {
+    if (!activeExam) return [];
+    const targetGradeNum = activeExam.grade.replace(/[^0-9]/g, "");
+    const matching = allStudents.filter((s) => {
+      const stuGradeNum = String(s.grade).replace(/[^0-9]/g, "");
+      return stuGradeNum === targetGradeNum;
+    });
+    return matching.length > 0 ? matching : allStudents.slice(0, 16);
+  }, [allStudents, activeExam]);
+
+  // Seed baseline scores for candidate students if not yet recorded
+  useEffect(() => {
+    if (!activeExam || examCandidateStudents.length === 0) return;
+
+    setEvaluationsStore((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      examCandidateStudents.forEach((stu, sIdx) => {
+        const key = `${activeExam.id}__${stu.id}`;
+        if (!next[key]) {
+          changed = true;
+          const isSampleAbsent = sIdx === 7; // Student #8 was absent to demonstrate Not Attended handling
+          const scores: Record<string, StudentSubjectScore> = {};
+
+          activeExam.subjects.forEach((sub, subIdx) => {
+            if (isSampleAbsent) {
+              scores[sub.subject] = {
+                marks: null,
+                isAbsent: true,
+                remarks: "Candidate absent on scheduled date",
+              };
+            } else {
+              // High-achieving, realistic realistic distribution
+              const basePct = 68 + ((sIdx * 11 + subIdx * 7) % 28);
+              const calculatedMarks = Math.round((basePct / 100) * sub.maxMarks);
+              scores[sub.subject] = {
+                marks: calculatedMarks,
+                isAbsent: false,
+                remarks:
+                  calculatedMarks >= sub.maxMarks * 0.85
+                    ? "Consistent analytical rigor"
+                    : "Satisfactory grasp of fundamental concepts",
+              };
+            }
+          });
+
+          next[key] = {
+            studentId: String(stu.id),
+            studentName: stu.name,
+            usn: stu.usn ?? `GGS-2627-${String(stu.id).padStart(4, "0")}`,
+            grade: stu.grade,
+            section: stu.section || "A",
+            email: `${stu.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+            subjectScores: scores,
+            evaluatedAt: new Date().toISOString(),
+            evaluatedBy: activeExam.subjects[0]?.assignedTeacher || "Faculty in charge",
+          };
+        }
+      });
+
+      if (!changed) return prev;
+      try {
+        localStorage.setItem("erp_exam_evaluations_v3", JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, [activeExam, examCandidateStudents]);
+
+  // Audit completion stats for each exam
+  const examCompletionMap = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        totalCandidates: number;
+        fullyGradedCount: number;
+        absentCount: number;
+        pendingCount: number;
+        isComplete: boolean;
+        completionPct: number;
+      }
+    >();
+
+    exams.forEach((ex) => {
+      const targetGradeNum = ex.grade.replace(/[^0-9]/g, "");
+      const candidates = allStudents.filter((s) => {
+        const stuGradeNum = String(s.grade).replace(/[^0-9]/g, "");
+        return stuGradeNum === targetGradeNum;
+      });
+      const candidateList = candidates.length > 0 ? candidates : allStudents.slice(0, 16);
+
+      let fullyGradedCount = 0;
+      let absentCount = 0;
+      let pendingCount = 0;
+
+      candidateList.forEach((stu) => {
+        const key = `${ex.id}__${stu.id}`;
+        const record = evaluationsStore[key];
+        if (!record) {
+          pendingCount++;
+          return;
+        }
+
+        // Check if every subject in this exam has been evaluated or marked absent
+        const allSubjectsEvaluated = ex.subjects.every((sub) => {
+          const entry = record.subjectScores[sub.subject];
+          return entry !== undefined && (entry.isAbsent || (entry.marks !== null && entry.marks >= 0));
+        });
+
+        if (!allSubjectsEvaluated) {
+          pendingCount++;
+        } else {
+          const isFullyAbsent = ex.subjects.every((sub) => record.subjectScores[sub.subject]?.isAbsent);
+          if (isFullyAbsent) {
+            absentCount++;
+          } else {
+            fullyGradedCount++;
+          }
+        }
+      });
+
+      const totalCandidates = candidateList.length;
+      const isComplete = totalCandidates > 0 && pendingCount === 0;
+      const completionPct =
+        totalCandidates > 0
+          ? Math.round(((totalCandidates - pendingCount) / totalCandidates) * 100)
+          : 0;
+
+      map.set(ex.id, {
+        totalCandidates,
+        fullyGradedCount,
+        absentCount,
+        pendingCount,
+        isComplete,
+        completionPct,
+      });
+    });
+
+    return map;
+  }, [exams, allStudents, evaluationsStore]);
+
+  // Overall Global Metrics
+  const globalMetrics = useMemo(() => {
+    const totalExams = exams.length;
+    let completedExamsCount = 0;
+    let totalPendingStudents = 0;
+
+    exams.forEach((ex) => {
+      const stats = examCompletionMap.get(ex.id);
+      if (stats?.isComplete) completedExamsCount++;
+      totalPendingStudents += stats?.pendingCount ?? 0;
+    });
+
+    return {
+      totalExams,
+      completedExamsCount,
+      totalPendingStudents,
+      readyRate: totalExams > 0 ? Math.round((completedExamsCount / totalExams) * 100) : 0,
+    };
+  }, [exams, examCompletionMap]);
+
+  // Modal / Drawer States
+  const [addExamModalOpen, setAddExamModalOpen] = useState(false);
+  const [reportCardDrawerStudent, setReportCardDrawerStudent] = useState<StudentExamRecord | null>(null);
+
+  // Active exam grading stats
+  const activeExamStats = activeExam ? examCompletionMap.get(activeExam.id) : null;
+  const isActiveExamGradingComplete = activeExamStats ? activeExamStats.isComplete : false;
 
   return (
-    <div className="page-stack">
-      {/* Top Header */}
+    <div className="space-y-6">
+      <Breadcrumb
+        items={[
+          { label: "Dashboard", href: "#" },
+          { label: "Academic Operations", href: "#" },
+          { label: "Examinations & Grading" },
+        ]}
+      />
+
+      {/* Header Banner */}
       <div className="page-intro">
         <div>
-          <Breadcrumb
-            parent="Global Kids School"
-            current="Examinations"
-            onParentClick={onBack}
-          />
-          <h1 className="page-title">Examinations</h1>
-          <p className="page-subtitle">
-            {metrics.upcomingCount} active exam{metrics.upcomingCount === 1 ? "" : "s"} ·{" "}
-            {metrics.pendingGradingCount} pending grading
+          <p className="eyebrow">Academic Operations · Assessment Registry</p>
+          <h1 className="page-title">Examinations & Official Grading</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-1">
+            Record conducted exams, enter marks from physical answer sheets, monitor grading
+            completion, and distribute verified report cards.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            className="secondary-button"
-            onClick={handleExportTimetable}
-          >
-            <Download size={14} />
-            Export timetable
-          </button>
-          <button
-            className="primary-button"
-            onClick={() => setScheduleModalOpen(true)}
-          >
-            <Plus size={16} />
-            Schedule exam
-          </button>
+        <div className="flex items-center gap-3">
+          {/* Add Exam is only permitted for Administrator & Principal */}
+          {isAdminOrPrincipal && (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setAddExamModalOpen(true)}
+            >
+              <Plus size={15} />
+              <span>Add Conducted Exam</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Dynamic Real Metrics */}
+      {/* Metric Cards */}
       <div className="metric-grid">
         <MetricBlock
-          label="Upcoming exams"
-          value={String(metrics.upcomingCount)}
-          comparison={`${metrics.totalExams} total scheduled`}
-          icon={FileText}
+          label="Conducted Exams"
+          value={globalMetrics.totalExams}
+          change="Recorded assessments"
+          trend="neutral"
+          icon={Calendar}
         />
         <MetricBlock
-          label="Papers to grade"
-          value={String(metrics.pendingGradingCount)}
-          comparison={metrics.pendingGradingCount > 0 ? "Pending review" : "All graded"}
-          icon={ClipboardCheck}
-          positive={metrics.pendingGradingCount === 0}
+          label="Grading Completion"
+          value={`${globalMetrics.readyRate}%`}
+          change={`${globalMetrics.completedExamsCount} of ${globalMetrics.totalExams} exams complete`}
+          trend={globalMetrics.readyRate === 100 ? "up" : "neutral"}
+          icon={CheckCircle2}
         />
         <MetricBlock
-          label="Average score"
-          value={`${metrics.averageScore}%`}
-          comparison="Cohort average"
-          icon={GraduationCap}
+          label="Pending Candidate Evaluations"
+          value={globalMetrics.totalPendingStudents}
+          change={
+            globalMetrics.totalPendingStudents === 0
+              ? "All candidates evaluated"
+              : "Requires teacher scoring"
+          }
+          trend={globalMetrics.totalPendingStudents === 0 ? "up" : "down"}
+          icon={AlertTriangle}
         />
         <MetricBlock
-          label="Grades published"
-          value={`${metrics.publishRate}%`}
-          comparison={`${metrics.publishedCount} of ${metrics.totalPapers} published`}
-          icon={Check}
+          label="Report Cards Readiness"
+          value={
+            globalMetrics.totalPendingStudents === 0 ? "Verified" : "Distribution Locked"
+          }
+          change="Requires 100% grading completion"
+          trend={globalMetrics.totalPendingStudents === 0 ? "up" : "down"}
+          icon={Award}
         />
       </div>
 
-      {/* Sub-navigation Tabs with horizontal sliding motion */}
-      <div className="profile-tabs" style={{ marginBottom: "8px", position: "relative" }}>
+      {/* Modern Navigation Tabs */}
+      <div className="segmented-control" style={{ maxWidth: 660 }}>
         <button
-          className={activeTab === "schedule" ? "active" : ""}
-          onClick={() => setActiveTab("schedule")}
-          style={{ position: "relative" }}
+          type="button"
+          className={activeTab === "exams" ? "active" : ""}
+          onClick={() => setActiveTab("exams")}
         >
-          {activeTab === "schedule" && (
-            <motion.div
-              layoutId="examinationsSubTab"
-              className="profile-tab-indicator"
-              transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
-            />
-          )}
-          <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Calendar size={14} />
-            Schedule
-          </span>
+          <BookOpen size={14} />
+          <span>1. Exams Registry</span>
         </button>
-        {(isFacultyUser || !isSuper) && (
-          <button
-            className={activeTab === "marks" ? "active" : ""}
-            onClick={() => setActiveTab("marks")}
-            style={{ position: "relative" }}
-          >
-            {activeTab === "marks" && (
-              <motion.div
-                layoutId="examinationsSubTab"
-                className="profile-tab-indicator"
-                transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
-              />
-            )}
-            <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <SlidersHorizontal size={14} />
-              Marks entry
+
+        <button
+          type="button"
+          className={activeTab === "marks" ? "active" : ""}
+          onClick={() => setActiveTab("marks")}
+        >
+          <ClipboardList size={14} />
+          <span>2. Grade Entry</span>
+        </button>
+
+        <button
+          type="button"
+          className={activeTab === "status" ? "active" : ""}
+          onClick={() => setActiveTab("status")}
+        >
+          <BarChart3 size={14} />
+          <span>3. Grading Status</span>
+          {globalMetrics.totalPendingStudents > 0 && (
+            <span className="count-pill warning" style={{ marginLeft: 4 }}>
+              {globalMetrics.totalPendingStudents}
             </span>
-          </button>
-        )}
-        <button
-          className={activeTab === "publishing" ? "active" : ""}
-          onClick={() => setActiveTab("publishing")}
-          style={{ position: "relative" }}
-        >
-          {activeTab === "publishing" && (
-            <motion.div
-              layoutId="examinationsSubTab"
-              className="profile-tab-indicator"
-              transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
-            />
           )}
-          <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Send size={14} />
-            Publishing ({publishingList.filter((p) => !p.published).length})
-          </span>
         </button>
+
         <button
+          type="button"
           className={activeTab === "report-cards" ? "active" : ""}
           onClick={() => setActiveTab("report-cards")}
-          style={{ position: "relative" }}
         >
-          {activeTab === "report-cards" && (
-            <motion.div
-              layoutId="examinationsSubTab"
-              className="profile-tab-indicator"
-              transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
-            />
-          )}
-          <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <Award size={14} />
-            Report cards
-          </span>
+          <Award size={14} />
+          <span>4. Report Cards</span>
         </button>
       </div>
 
-      {/* TAB 1: SCHEDULE & TIMETABLE */}
-      {activeTab === "schedule" && (
-        <section className="panel table-panel">
-          <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
-            <div>
-              <h2 className="panel-title">Examination Timetable</h2>
-            </div>
-
-            {/* Filter toolbar */}
-            <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
-              <div className="search-field" style={{ minWidth: "220px" }}>
-                <Search size={14} className="search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search exam, subject, hall..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="search-input"
-                />
-                {searchQuery && (
-                  <button className="search-clear" onClick={() => setSearchQuery("")}>
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
-
-              <div style={{ width: "135px" }}>
-                <FormSelect
-                  options={gradeOptions}
-                  value={gradeFilter}
-                  onChange={setGradeFilter}
-                  ariaLabel="Filter by grade"
-                />
-              </div>
-
-              <div style={{ width: "140px" }}>
-                <FormSelect
-                  options={statusOptions}
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  ariaLabel="Filter by status"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Exam Title</th>
-                  <th>Subject</th>
-                  <th>Grade</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {examsLoading ? (
-                  <SkeletonTableRows rows={5} columns={4} />
-                ) : filteredExams.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ textAlign: "center", padding: "40px" }}>
-                      <p className="text-[var(--text-muted)] text-sm">No examinations match the applied filters.</p>
-                      <button
-                        className="secondary-button compact"
-                        style={{ margin: "10px auto 0" }}
-                        onClick={() => {
-                          setSearchQuery("");
-                          setGradeFilter("all");
-                          setStatusFilter("all");
-                        }}
-                      >
-                        Reset filters
-                      </button>
-                    </td>
-                  </tr>
-                ) : (
-                  examsPager.pageRows.map((exam) => {
-                    const isDraft = exam.status === "Draft";
-                    const isCompleted = exam.status === "Completed";
-                    return (
-                      <tr
-                        key={exam.id}
-                        className="row-clickable cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
-                        onClick={() => setExamDetailDrawerItem(exam)}
-                        title="Click to view exam overview and details"
-                      >
-                        <td className="font-medium text-[var(--text-primary)]">
-                          <div className="flex items-center gap-2.5">
-                            <span className="exam-icon-chip">
-                              <BookOpen size={14} />
-                            </span>
-                            <div>
-                              <span className="font-semibold">{exam.name}</span>
-                              <span className="block text-[11px] text-[var(--text-muted)] font-mono">{exam.id}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="muted-cell">{exam.subject}</td>
-                        <td>
-                          <span className="grade-chip">{exam.grade}</span>
-                        </td>
-                        <td>
-                          <span
-                            className={`status-pill ${
-                              exam.status === "Scheduled"
-                                ? "success"
-                                : isDraft
-                                  ? "neutral"
-                                  : isCompleted
-                                    ? "brand"
-                                    : "warning"
-                            }`}
-                          >
-                            <span className="status-dot" />
-                            {exam.status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <Pager pagination={examsPager} noun="exams" />
-        </section>
-      )}
-
-      {/* TAB 2: MARKS ENTRY & GRADEBOOK */}
-      {activeTab === "marks" && (
-        <section className="panel">
-          <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
-            <div>
-              <h2 className="panel-title">Marksheet</h2>
-            </div>
-
-            <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
-              <div style={{ width: "260px" }}>
-                <FormSelect
-                  options={exams.map((e) => ({
-                    value: e.id,
-                    label: `${e.name} (${e.grade})`,
-                  }))}
-                  value={selectedExamId}
-                  onChange={setSelectedExamId}
-                  ariaLabel="Select exam"
-                />
-              </div>
-
-              <button
-                className="secondary-button compact"
-                onClick={handleAutofillMarks}
-                title="Fill sample scores for all candidates"
-              >
-                <Sparkles size={13} />
-                Auto-fill demo marks
-              </button>
-
-              <button
-                className="secondary-button compact"
-                onClick={handleExportMarksheet}
-              >
-                <Download size={13} />
-                Export CSV
-              </button>
-
-              <button
-                className="primary-button compact"
-                onClick={handleSaveMarks}
-              >
-                <Check size={14} />
-                Save marks
-              </button>
-            </div>
-          </div>
-
-          {/* Exam Specs Banner */}
-          {currentExam && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: "12px",
-                padding: "14px 18px",
-                background: "var(--bg-raised)",
-                borderRadius: "10px",
-                border: "1px solid var(--border-subtle)",
-                marginBottom: "16px",
-              }}
-            >
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Subject & Grade</span>
-                <span className="text-[13.5px] font-medium text-[var(--text-primary)]">
-                  {currentExam.subject} · <span className="grade-chip">{currentExam.grade}</span>
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Maximum Marks</span>
-                <span className="text-[13.5px] font-medium text-[var(--text-primary)]">
-                  {currentExam.max_marks ?? 100} pts (Pass: {currentExam.passing_marks ?? 40} pts)
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Invigilator</span>
-                <span className="text-[13.5px] font-medium text-[var(--text-primary)]">
-                  {currentExam.invigilator ?? "Department Faculty"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Class Performance</span>
-                <span className="text-[13.5px] font-medium text-[var(--text-primary)]">
-                  Avg: <strong className="text-[var(--brand)]">{markSheetStats.avg}%</strong> · Pass rate: <strong className="text-[var(--success)]">{markSheetStats.passRate}%</strong>
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Live Attendance Breakdown Bar */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "12px",
-              flexWrap: "wrap",
-              padding: "10px 16px",
-              background: "var(--bg-raised)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: "8px",
-              marginBottom: "14px",
-              fontSize: "12.5px",
-            }}
-          >
-            <div className="flex items-center gap-3.5 flex-wrap">
-              <span className="font-semibold text-[var(--text-muted)] text-[11px] uppercase tracking-wider">
-                Attendance:
-              </span>
-              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-                <span className="w-2 h-2 rounded-full bg-[var(--success)] inline-block" />
-                <strong>{markSheetStats.presentCount}</strong> Present
-              </span>
-              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-                <span className="w-2 h-2 rounded-full bg-[var(--warning)] inline-block" />
-                <strong>{markSheetStats.lateCount}</strong> Late
-              </span>
-              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-                <span className="w-2 h-2 rounded-full bg-[var(--brand)] inline-block" />
-                <strong>{markSheetStats.leaveCount}</strong> Approved Leave
-              </span>
-              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-                <span className="w-2 h-2 rounded-full bg-[var(--violet)] inline-block" />
-                <strong>{markSheetStats.halfDayCount}</strong> Half Day
-              </span>
-              <span className="flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-                <span className="w-2 h-2 rounded-full bg-[var(--danger)] inline-block" />
-                <strong>{markSheetStats.absentCount}</strong> Absent
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="secondary-button compact"
-              style={{ fontSize: "11.5px", padding: "4px 10px" }}
-              onClick={handleMarkAllPresent}
-              title="Reset all candidates to Present"
-            >
-              <Check size={12} />
-              Mark all Present
-            </button>
-          </div>
-
-          {/* Marksheet Table */}
-          <div className="table-scroll">
-            <table className="data-table" style={{ minWidth: 840 }}>
-              <thead>
-                <tr>
-                  <th style={{ width: "60px" }}>Roll</th>
-                  <th>USN</th>
-                  <th>Student Name</th>
-                  <th style={{ width: "135px" }}>Attendance</th>
-                  <th style={{ width: "135px" }}>Marks Obtained</th>
-                  <th style={{ width: "80px" }}>Out of</th>
-                  <th style={{ width: "70px" }}>%</th>
-                  <th style={{ width: "80px" }}>Grade</th>
-                  <th>Teacher Remark</th>
-                </tr>
-              </thead>
-              <tbody>
-                {studentsLoading ? (
-                  <SkeletonTableRows rows={6} columns={9} />
-                ) : currentMarksList.map((entry) => {
-                  const isAbsent = entry.status === "Absent";
-                  const isLeave = entry.status === "Leave";
-                  const scoreInfo = entry.marks !== null ? getGradeLetter(entry.marks, entry.maxMarks) : null;
-                  const pct = entry.marks !== null ? Math.round((entry.marks / entry.maxMarks) * 100) : 0;
-                  const statusMeta = ATTENDANCE_STATUS_META[entry.status];
-                  return (
-                    <tr key={entry.studentId} style={{ opacity: isAbsent ? 0.65 : 1 }}>
-                      <td className="font-mono text-[12px] muted-cell">{entry.rollNo}</td>
-                      <td className="font-mono text-[12px] font-medium text-[var(--text-secondary)]">{entry.usn}</td>
-                      <td className="font-medium text-[var(--text-primary)]">
-                        <div className="flex items-center gap-2">
-                          <span className="avatar-chip">{entry.studentName.slice(0, 2).toUpperCase()}</span>
-                          <span>{entry.studentName}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <select
-                          value={entry.status}
-                          onChange={(e) => handleStatusChange(entry.studentId, e.target.value as AttendanceStatus)}
-                          style={{
-                            padding: "4px 7px",
-                            borderRadius: "6px",
-                            fontSize: "11.5px",
-                            fontWeight: 600,
-                            border: `1px solid ${statusMeta.border}`,
-                            background: statusMeta.bg,
-                            color: statusMeta.color,
-                            cursor: "pointer",
-                            outline: "none",
-                          }}
-                        >
-                          <option value="Present" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
-                            Present
-                          </option>
-                          <option value="Late" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
-                            Late Arrival
-                          </option>
-                          <option value="Leave" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
-                            Approved Leave
-                          </option>
-                          <option value="Half Day" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
-                            Half Day
-                          </option>
-                          <option value="Absent" style={{ background: "var(--bg-panel-solid)", color: "var(--text-primary)" }}>
-                            Absent
-                          </option>
-                        </select>
-                      </td>
-                      <td>
-                        {isLeave ? (
-                          <span
-                            className="status-pill brand"
-                            style={{ fontSize: "11px", padding: "3px 8px" }}
-                            title="Excused on approved leave — re-test scheduled"
-                          >
-                            Excused
-                          </span>
-                        ) : isAbsent ? (
-                          <span
-                            className="status-pill danger"
-                            style={{ fontSize: "11px", padding: "3px 8px" }}
-                            title="Unexcused absence"
-                          >
-                            Absent
-                          </span>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min="0"
-                              max={entry.maxMarks}
-                              value={entry.marks ?? ""}
-                              onChange={(e) => handleMarkChange(entry.studentId, e.target.value)}
-                              placeholder="0"
-                              className="erp-marks-input"
-                              style={{
-                                width: "75px",
-                                padding: "5px 8px",
-                                borderRadius: "6px",
-                                background: "var(--bg-input)",
-                                border: "1px solid var(--border)",
-                                color: "var(--text-primary)",
-                                fontSize: "13px",
-                                fontWeight: 600,
-                                textAlign: "center",
-                              }}
-                            />
-                            {entry.status === "Late" && (
-                              <span
-                                style={{
-                                  fontSize: "10px",
-                                  fontWeight: 700,
-                                  color: "var(--warning)",
-                                  background: "var(--warning-soft)",
-                                  padding: "2px 5px",
-                                  borderRadius: "4px",
-                                }}
-                                title="Candidate arrived late"
-                              >
-                                Late
-                              </span>
-                            )}
-                            {entry.status === "Half Day" && (
-                              <span
-                                style={{
-                                  fontSize: "10px",
-                                  fontWeight: 700,
-                                  color: "var(--violet)",
-                                  background: "var(--violet-soft)",
-                                  padding: "2px 5px",
-                                  borderRadius: "4px",
-                                }}
-                                title="Half day attendance"
-                              >
-                                HD
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="muted-cell text-[12px]">/ {entry.maxMarks}</td>
-                      <td className="font-mono text-[12.5px] font-medium">
-                        {isLeave ? (
-                          <span className="text-[var(--brand)] text-[12px]">Excused</span>
-                        ) : isAbsent ? (
-                          <span className="text-[var(--danger)] text-[12px]">0%</span>
-                        ) : (
-                          `${pct}%`
-                        )}
-                      </td>
-                      <td>
-                        {isLeave ? (
-                          <span className="status-pill brand">Leave</span>
-                        ) : isAbsent ? (
-                          <span className="status-pill neutral">Ab</span>
-                        ) : scoreInfo ? (
-                          <span className={scoreInfo.badge}>
-                            {scoreInfo.letter}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={entry.remarks}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (!currentExam) return;
-                            const key = `${currentExam.id}__${entry.studentId}`;
-                            setMarksStore((prev) => ({
-                              ...prev,
-                              [key]: {
-                                ...(prev[key] ?? { marks: entry.marks, status: entry.status }),
-                                remarks: val,
-                              },
-                            }));
-                          }}
-                          placeholder="Feedback & notes..."
-                          style={{
-                            width: "100%",
-                            padding: "4px 8px",
-                            borderRadius: "6px",
-                            background: "transparent",
-                            border: "1px solid transparent",
-                            color: "var(--text-secondary)",
-                            fontSize: "12px",
-                          }}
-                          onFocus={(e) => {
-                            e.currentTarget.style.borderColor = "var(--brand-border)";
-                            e.currentTarget.style.background = "var(--bg-input)";
-                          }}
-                          onBlur={(e) => {
-                            e.currentTarget.style.borderColor = "transparent";
-                            e.currentTarget.style.background = "transparent";
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between" style={{ marginTop: "16px", padding: "0 4px" }}>
-            <span className="text-[12.5px] text-[var(--text-muted)]">
-              Showing {currentMarksList.length} candidates in {currentExam?.grade}
-            </span>
-            <button className="primary-button" onClick={handleSaveMarks}>
-              <Check size={14} />
-              Save all marks
-            </button>
-          </div>
-        </section>
-      )}
-
-      {/* TAB 3: GRADE PUBLISHING & PORTALS */}
-      {activeTab === "publishing" && (
-        <section className="panel">
-          <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
-            <div>
-              <h2 className="panel-title">Results release</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="count-badge">
-                {publishingList.filter((r) => !r.published).length} pending release
-              </span>
-              <button
-                className="primary-button compact"
-                onClick={handlePublishAll}
-              >
-                <Send size={13} />
-                Publish all graded papers
-              </button>
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "12px 16px",
-              background: "var(--brand-soft-2)",
-              border: "1px solid var(--brand-border)",
-              borderRadius: "8px",
-              fontSize: "13px",
-              color: "var(--text-secondary)",
-              marginBottom: "16px",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-            }}
-          >
-            <CheckCircle2 size={16} className="text-[var(--brand)] flex-shrink-0" />
-            <span>
-              Papers set to <strong>Published</strong> are immediately accessible on family dashboards and the pupil portal report cards.
-            </span>
-          </div>
-
-          <div className="schedule-list">
-            {resultsLoading ? (
-              <SkeletonList rows={5} avatar={false} />
-            ) : (
-              publishingList.map((row) => {
-                const isPublished = row.published;
-                const percent = Math.round((row.graded / row.total) * 100);
-                return (
-                  <div className="schedule-row" key={row.id}>
-                    <div className="schedule-time font-mono" style={{ width: "70px" }}>
-                      {row.graded}/{row.total}
-                    </div>
-                    <div className="schedule-line">
-                      <span
-                        className="schedule-dot"
-                        style={{
-                          background: isPublished ? "var(--brand)" : "var(--warning)",
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-medium text-[var(--text-primary)]">
-                            {row.subject}{" "}
-                            <span className="text-[var(--text-muted)]">· {row.grade}</span>
-                          </div>
-                          <span className="text-[12px] text-[var(--text-muted)] block mt-0.5">
-                            {isPublished
-                              ? "Live on Pupil & Parent Portal"
-                              : "Internal only · Awaiting publication"}
-                          </span>
-                        </div>
-
-                        <button
-                          className={isPublished ? "tiny-action done" : "tiny-action"}
-                          onClick={() => handleTogglePublish(row.id, isPublished)}
-                          title={isPublished ? "Unpublish to hide from families" : "Publish to make visible to families"}
-                        >
-                          {isPublished ? (
-                            <>
-                              <Check size={13} />
-                              Published
-                            </>
-                          ) : (
-                            <>
-                              <Send size={13} />
-                              Publish to portal
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      <div className="mt-2.5 flex items-center gap-3">
-                        <span className="progress-bar" style={{ height: "6px" }}>
-                          <span
-                            style={{
-                              width: `${percent}%`,
-                              background: isPublished ? "var(--brand)" : "var(--warning)",
-                            }}
-                          />
-                        </span>
-                        <span className="text-[12px] font-mono text-[var(--text-muted)]" style={{ minWidth: "75px" }}>
-                          {percent}% graded
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* TAB 4: OFFICIAL REPORT CARDS */}
-      {activeTab === "report-cards" && (
-        <section className="panel">
-          <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
-            <div>
-              <h2 className="panel-title">Progress report</h2>
-            </div>
-
-            <div className="flex items-center gap-2" style={{ flexWrap: "wrap" }}>
-              <div style={{ width: "240px" }}>
-                <FormSelect
-                  options={students.map((s) => ({
-                    value: String(s.id),
-                    label: `${s.name} (${s.grade})`,
-                  }))}
-                  value={selectedReportStudent ? String(selectedReportStudent.id) : ""}
-                  onChange={setReportCardStudentId}
-                  ariaLabel="Select student for report card"
-                />
-              </div>
-
-              <button
-                className="secondary-button compact"
-                onClick={() => {
-                  window.print();
-                  toast.success("Printing report card...", {
-                    description: "Print dialog dispatched.",
-                  });
-                }}
-              >
-                <Printer size={13} />
-                Print report card
-              </button>
-
-              <button
-                className="primary-button compact"
-                onClick={() => {
-                  if (!selectedReportStudent) return;
-                  const headers = ["Subject", "Max Marks", "Passing Marks", "Marks Scored", "Grade", "Remarks"];
-                  const rows = [
-                    ["Mathematics", 100, 40, 92, "A+", "Exceptional analytical reasoning"],
-                    ["Science", 100, 40, 88, "A", "Active laboratory contributor"],
-                    ["English", 100, 40, 85, "A", "Articulate in written prose"],
-                    ["Social Science", 100, 40, 90, "A+", "Thorough understanding of history"],
-                    ["Languages", 100, 40, 83, "A", "Strong linguistic grasp"],
-                    ["Computer Science", 100, 40, 95, "A+", "Outstanding programming project"],
-                  ];
-                  downloadCsv(`${selectedReportStudent.name.replace(/\s+/g, "_")}_Report_Card.csv`, headers, rows);
-                  toast.success("Report Card Summary Downloaded");
-                }}
-              >
-                <Download size={13} />
-                Export CSV
-              </button>
-            </div>
-          </div>
-
-          {/* Report Card Document Box */}
-          {selectedReportStudent ? (
-            <div
-              className="report-card-container"
-              style={{
-                marginTop: "12px",
-                padding: "28px 32px",
-                borderRadius: "12px",
-                border: "1px solid var(--border-strong)",
-                background: "rgba(255, 255, 255, 0.02)",
-              }}
-            >
-              {/* Institutional Header */}
-              <div style={{ textAlign: "center", borderBottom: "2px solid var(--border)", paddingBottom: "18px", marginBottom: "20px" }}>
-                <h2 style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "0.02em", color: "var(--text-primary)", margin: 0 }}>
-                  GLOBAL KIDS SCHOOL, TUMAKURU
-                </h2>
-                <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px", margin: "4px 0 0" }}>
-                  Affiliated to CBSE, New Delhi · Affiliation No. 830491 · School Code: 45612
-                </p>
-                <span
-                  style={{
-                    display: "inline-block",
-                    marginTop: "8px",
-                    padding: "3px 12px",
-                    borderRadius: "20px",
-                    background: "var(--brand-soft)",
-                    color: "var(--brand)",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  ACADEMIC PROGRESS REPORT · TERM 1 (2026–2027)
-                </span>
-              </div>
-
-              {/* Student Metadata Dossier */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                  gap: "14px",
-                  padding: "16px 20px",
-                  background: "var(--bg-raised)",
-                  borderRadius: "8px",
-                  border: "1px solid var(--border-subtle)",
-                  marginBottom: "24px",
-                  fontSize: "13px",
-                }}
-              >
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Student Name</span>
-                  <strong className="text-[var(--text-primary)] font-semibold">{selectedReportStudent.name}</strong>
-                </div>
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">USN / Admission No.</span>
-                  <span className="font-mono text-[var(--text-secondary)]">{selectedReportStudent.usn ?? `ADM-2627-${selectedReportStudent.id}`}</span>
-                </div>
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Grade & Section</span>
-                  <span className="text-[var(--text-secondary)]">{selectedReportStudent.grade}</span>
-                </div>
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Attendance Record</span>
-                  <span className="text-[var(--success)] font-medium">{selectedReportStudent.attendance}% Present</span>
-                </div>
-              </div>
-
-              {/* Scholastic Table */}
-              <div className="table-scroll">
-                <table className="data-table" style={{ minWidth: 600 }}>
-                  <thead>
-                    <tr>
-                      <th>Subject</th>
-                      <th style={{ width: "90px" }}>Max Marks</th>
-                      <th style={{ width: "90px" }}>Pass Marks</th>
-                      <th style={{ width: "110px" }}>Marks Scored</th>
-                      <th style={{ width: "80px" }}>%</th>
-                      <th style={{ width: "90px" }}>Grade</th>
-                      <th>Evaluation Remark</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { sub: "Mathematics", max: 100, pass: 40, scored: 92, remark: "Exceptional analytical reasoning" },
-                      { sub: "Science", max: 100, pass: 40, scored: 88, remark: "Active laboratory contributor" },
-                      { sub: "English", max: 100, pass: 40, scored: 85, remark: "Articulate in written prose" },
-                      { sub: "Social Science", max: 100, pass: 40, scored: 90, remark: "Thorough understanding of history" },
-                      { sub: "Languages", max: 100, pass: 40, scored: 83, remark: "Strong linguistic grasp" },
-                      { sub: "Computer Science", max: 100, pass: 40, scored: 95, remark: "Outstanding programming project" },
-                    ].map((row) => {
-                      const pct = Math.round((row.scored / row.max) * 100);
-                      const g = getGradeLetter(row.scored, row.max);
-                      return (
-                        <tr key={row.sub}>
-                          <td className="font-medium text-[var(--text-primary)]">{row.sub}</td>
-                          <td className="muted-cell">{row.max}</td>
-                          <td className="muted-cell">{row.pass}</td>
-                          <td className="font-semibold text-[var(--text-primary)] font-mono">{row.scored}</td>
-                          <td className="font-mono text-[12.5px]">{pct}%</td>
-                          <td>
-                            <span className={g.badge}>{g.letter}</span>
-                          </td>
-                          <td className="text-[var(--text-secondary)] text-[12.5px]">{row.remark}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Evaluation Summary Box */}
-              <div
-                style={{
-                  marginTop: "20px",
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: "12px",
-                  padding: "16px 20px",
-                  borderRadius: "8px",
-                  background: "var(--brand-soft-2)",
-                  border: "1px solid var(--brand-border)",
-                }}
-              >
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Grand Total</span>
-                  <strong className="text-[16px] text-[var(--text-primary)]">533 / 600</strong>
-                </div>
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Percentage</span>
-                  <strong className="text-[16px] text-[var(--brand)]">88.8%</strong>
-                </div>
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Overall Grade</span>
-                  <strong className="text-[16px] text-[var(--success)]">A+ (Distinction)</strong>
-                </div>
-                <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">Result Status</span>
-                  <span className="status-pill success" style={{ display: "inline-flex", marginTop: "2px" }}>
-                    <span className="status-dot" />
-                    PROMOTED
-                  </span>
-                </div>
-              </div>
-
-              {/* Signatures */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: "48px",
-                  paddingTop: "20px",
-                  borderTop: "1px dashed var(--border)",
-                  fontSize: "12px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ height: "24px" }} />
-                  <span style={{ borderTop: "1px solid var(--border)", display: "block", paddingTop: "4px" }}>
-                    Class Teacher Signature
-                  </span>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ height: "24px" }} />
-                  <span style={{ borderTop: "1px solid var(--border)", display: "block", paddingTop: "4px" }}>
-                    Controller of Examinations
-                  </span>
-                </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ height: "24px" }} />
-                  <span style={{ borderTop: "1px solid var(--border)", display: "block", paddingTop: "4px" }}>
-                    Principal & Head of School
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-[var(--text-muted)] text-sm py-8 text-center">Please select a student above.</p>
-          )}
-        </section>
-      )}
-
-      {/* SCHEDULE EXAM MODAL */}
-      {scheduleModalOpen && (
-        <ScheduleExamModal
-          onClose={() => setScheduleModalOpen(false)}
-          onCreated={(newExam) => {
-            setExams((prev) => {
-              const updated = [newExam, ...prev];
-              try {
-                localStorage.setItem("erp_custom_exams_v2", JSON.stringify(updated));
-              } catch {
-                // ignore
-              }
-              return updated;
-            });
-            toast.success("Exam Scheduled Successfully", {
-              description: `${newExam.name} has been added to the master timetable for ${newExam.grade}.`,
-            });
+      {/* =========================================================================
+          TAB 1: CONDUCTED EXAMS REGISTRY
+         ========================================================================= */}
+      {activeTab === "exams" && (
+        <ConductedExamsTab
+          exams={exams}
+          completionMap={examCompletionMap}
+          isAdminOrPrincipal={isAdminOrPrincipal}
+          onAddExam={() => setAddExamModalOpen(true)}
+          onEnterGrades={(examId) => {
+            setSelectedExamId(examId);
+            setActiveTab("marks");
           }}
-          staffList={staff}
-          subjectList={subjects}
+          onViewReportCards={(examId) => {
+            setSelectedExamId(examId);
+            setActiveTab("report-cards");
+          }}
+          onDeleteExam={(examId) => {
+            if (!confirm("Are you sure you want to remove this examination record?")) return;
+            saveExams((prev) => prev.filter((e) => e.id !== examId));
+            toast.success("Exam record removed");
+          }}
         />
       )}
 
-      {/* EXAM DETAIL DRAWER */}
-      {examDetailDrawerItem && (
-        <ExamDetailDrawer
-          exam={examDetailDrawerItem}
-          onClose={() => setExamDetailDrawerItem(null)}
-          onEnterMarks={(examId) => {
+      {/* =========================================================================
+          TAB 2: GRADE ENTRY (FROM PHYSICAL PAPERS)
+         ========================================================================= */}
+      {activeTab === "marks" && activeExam && (
+        <GradeEntryTab
+          exams={exams}
+          activeExam={activeExam}
+          candidates={examCandidateStudents}
+          evaluationsStore={evaluationsStore}
+          onSelectExam={setSelectedExamId}
+          onSaveStudentScore={(key, record) => {
+            saveEvaluationsStore((prev) => ({
+              ...prev,
+              [key]: record,
+            }));
+          }}
+          onBulkMarkAll={(records) => {
+            saveEvaluationsStore((prev) => ({
+              ...prev,
+              ...records,
+            }));
+            toast.success("All candidate grades updated and saved!");
+          }}
+          onJumpToReportCards={() => setActiveTab("report-cards")}
+        />
+      )}
+
+      {/* =========================================================================
+          TAB 3: GRADING STATUS & AUDIT (PRINCIPAL'S COMPLETION REGISTER)
+         ========================================================================= */}
+      {activeTab === "status" && (
+        <GradingStatusTab
+          exams={exams}
+          completionMap={examCompletionMap}
+          evaluationsStore={evaluationsStore}
+          allStudents={allStudents}
+          onEnterGrades={(examId) => {
             setSelectedExamId(examId);
             setActiveTab("marks");
-            setExamDetailDrawerItem(null);
           }}
-          onDelete={handleDeleteExam}
+          onDistributeReportCards={(examId) => {
+            setSelectedExamId(examId);
+            setActiveTab("report-cards");
+          }}
+        />
+      )}
+
+      {/* =========================================================================
+          TAB 4: OFFICIAL REPORT CARDS (STUDENT DIRECTORY & EMAIL SHARING)
+         ========================================================================= */}
+      {activeTab === "report-cards" && activeExam && (
+        <ReportCardsTab
+          exams={exams}
+          activeExam={activeExam}
+          candidates={examCandidateStudents}
+          evaluationsStore={evaluationsStore}
+          isGradingComplete={isActiveExamGradingComplete}
+          pendingCount={activeExamStats?.pendingCount ?? 0}
+          onSelectExam={setSelectedExamId}
+          onOpenDrawer={(record) => setReportCardDrawerStudent(record)}
+          onJumpToGradeEntry={() => setActiveTab("marks")}
+          onUpdateRecordEmailStatus={(key) => {
+            saveEvaluationsStore((prev) => {
+              const cur = prev[key];
+              if (!cur) return prev;
+              return {
+                ...prev,
+                [key]: {
+                  ...cur,
+                  emailSentAt: new Date().toISOString(),
+                },
+              };
+            });
+          }}
+        />
+      )}
+
+      {/* ADD EXAM MODAL (ADMIN & PRINCIPAL ONLY) */}
+      {addExamModalOpen && (
+        <AddExamModal
+          onClose={() => setAddExamModalOpen(false)}
+          staffList={staffList}
+          subjectList={subjectList}
+          onCreated={(newExam) => {
+            saveExams((prev) => [newExam, ...prev]);
+            setSelectedExamId(newExam.id);
+            setAddExamModalOpen(false);
+            toast.success("Conducted exam registered successfully", {
+              description: `${newExam.title} (${newExam.grade}) is now open for teacher grade entry.`,
+            });
+            setActiveTab("marks");
+          }}
+        />
+      )}
+
+      {/* REPORT CARD RIGHT-SIDE SLIDE-OUT DRAWER */}
+      {reportCardDrawerStudent && activeExam && (
+        <ReportCardDrawer
+          record={reportCardDrawerStudent}
+          exam={activeExam}
+          onClose={() => setReportCardDrawerStudent(null)}
+          onEmailed={() => {
+            const key = `${activeExam.id}__${reportCardDrawerStudent.studentId}`;
+            saveEvaluationsStore((prev) => {
+              const cur = prev[key];
+              if (!cur) return prev;
+              return {
+                ...prev,
+                [key]: {
+                  ...cur,
+                  emailSentAt: new Date().toISOString(),
+                },
+              };
+            });
+          }}
         />
       )}
     </div>
   );
 }
 
-/**
- * Schedule Exam Modal Dialog
- */
-function ScheduleExamModal({
+/* =============================================================================
+   SUB-COMPONENT: TAB 1 - CONDUCTED EXAMS REGISTRY
+   ============================================================================= */
+function ConductedExamsTab({
+  exams,
+  completionMap,
+  isAdminOrPrincipal,
+  onAddExam,
+  onEnterGrades,
+  onViewReportCards,
+  onDeleteExam,
+}: {
+  exams: ConductedExam[];
+  completionMap: Map<string, { isComplete: boolean; completionPct: number; pendingCount: number }>;
+  isAdminOrPrincipal: boolean;
+  onAddExam: () => void;
+  onEnterGrades: (examId: string) => void;
+  onViewReportCards: (examId: string) => void;
+  onDeleteExam: (examId: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("all");
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return exams.filter((e) => {
+      if (gradeFilter !== "all" && e.grade !== gradeFilter) return false;
+      if (!q) return true;
+      return (
+        e.title.toLowerCase().includes(q) ||
+        e.grade.toLowerCase().includes(q) ||
+        e.examType.toLowerCase().includes(q)
+      );
+    });
+  }, [exams, search, gradeFilter]);
+
+  const pager = usePagination(filtered, 6);
+
+  return (
+    <div className="space-y-4">
+      {/* Search & Filters */}
+      <div className="table-toolbar">
+        <div className="search-field">
+          <Search size={15} />
+          <input
+            type="text"
+            placeholder="Search conducted assessments by title or class…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="toolbar-actions">
+          <div style={{ width: 160 }}>
+            <FormSelect
+              options={[
+                { value: "all", label: "All Classes" },
+                { value: "Grade 6", label: "Grade 6" },
+                { value: "Grade 7", label: "Grade 7" },
+                { value: "Grade 8", label: "Grade 8" },
+                { value: "Grade 9", label: "Grade 9" },
+                { value: "Grade 10", label: "Grade 10" },
+              ]}
+              value={gradeFilter}
+              onChange={setGradeFilter}
+            />
+          </div>
+
+          {isAdminOrPrincipal && (
+            <button type="button" className="primary-button compact" onClick={onAddExam}>
+              <Plus size={14} />
+              <span>Add Exam</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Exams Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {pager.pageRows.map((exam) => {
+          const stats = completionMap.get(exam.id);
+          const isComplete = stats?.isComplete ?? false;
+          const pct = stats?.completionPct ?? 0;
+          const pending = stats?.pendingCount ?? 0;
+
+          return (
+            <div
+              key={exam.id}
+              className="panel flex flex-col justify-between p-5 hover:border-[var(--brand-border)] transition-all"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="status-pill brand">{exam.examType}</span>
+                  <span className="text-xs text-[var(--text-muted)] font-mono">
+                    {exam.conductedDate}
+                  </span>
+                </div>
+
+                <h3 className="text-base font-bold text-[var(--text-primary)] leading-tight mb-1">
+                  {exam.title}
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] font-medium mb-3">
+                  {exam.grade} · {exam.term}
+                </p>
+
+                {/* Subjects & Total Marks */}
+                <div className="p-3 rounded-lg bg-[var(--bg-raised)] border border-[var(--border-subtle)] space-y-1.5 mb-4 text-xs">
+                  <div className="flex items-center justify-between text-[var(--text-muted)] font-semibold text-[11px] uppercase tracking-wider">
+                    <span>Subjects Included ({exam.subjects.length})</span>
+                    <span>Max Marks</span>
+                  </div>
+                  <div className="space-y-1">
+                    {exam.subjects.slice(0, 3).map((s) => (
+                      <div key={s.id} className="flex items-center justify-between text-[var(--text-secondary)]">
+                        <span>{s.subject}</span>
+                        <span className="font-mono text-[var(--text-primary)] font-semibold">
+                          {s.maxMarks}
+                        </span>
+                      </div>
+                    ))}
+                    {exam.subjects.length > 3 && (
+                      <div className="text-[11px] text-[var(--brand)] font-medium pt-0.5">
+                        +{exam.subjects.length - 3} more subjects (Grand Total: {exam.totalMaxMarks})
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Grading Status Meter */}
+                <div className="space-y-1.5 mb-4">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-[var(--text-secondary)]">Evaluation Status</span>
+                    <span
+                      className={`font-semibold font-mono ${
+                        isComplete ? "text-[var(--success)]" : "text-[var(--warning)]"
+                      }`}
+                    >
+                      {isComplete ? "100% Complete" : `${pct}% (${pending} pending)`}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-[var(--bg-input)] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        isComplete ? "bg-[var(--success)]" : "bg-[var(--warning)]"
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  className="secondary-button compact text-xs flex-1"
+                  onClick={() => onEnterGrades(exam.id)}
+                >
+                  <ClipboardList size={13} />
+                  <span>Enter Grades</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="primary-button compact text-xs flex-1"
+                  onClick={() => onViewReportCards(exam.id)}
+                >
+                  <Award size={13} />
+                  <span>Report Cards</span>
+                </button>
+
+                {isAdminOrPrincipal && (
+                  <button
+                    type="button"
+                    className="icon-button text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                    onClick={() => onDeleteExam(exam.id)}
+                    title="Delete Exam Record"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {pager.totalPages > 1 && (
+        <Pager
+          current={pager.page}
+          total={pager.totalPages}
+          onPageChange={pager.setPage}
+          summary={`Showing ${pager.pageRows.length} of ${filtered.length} conducted examinations`}
+        />
+      )}
+    </div>
+  );
+}
+
+/* =============================================================================
+   SUB-COMPONENT: ADD CONDUCTED EXAM MODAL (ADMIN / PRINCIPAL ONLY)
+   ============================================================================= */
+function AddExamModal({
   onClose,
-  onCreated,
   staffList,
   subjectList,
+  onCreated,
 }: {
   onClose: () => void;
-  onCreated: (exam: DetailedExam) => void;
   staffList: { id: string | number; name: string }[];
   subjectList: { id: string | number; name: string }[];
+  onCreated: (exam: ConductedExam) => void;
 }) {
-  const [name, setName] = useState("");
-  const [subject, setSubject] = useState(subjectList[0]?.name ?? "Mathematics");
+  const [title, setTitle] = useState("");
+  const [examType, setExamType] = useState<ExamType>("Midterm");
+  const [term, setTerm] = useState("Term 1 (2026–2027)");
   const [grade, setGrade] = useState("Grade 8");
-  const [date, setDate] = useState("15 Oct 2026");
-  const [time, setTime] = useState("09:00 – 10:30");
-  const [venue, setVenue] = useState("Room 204");
-  const [invigilator, setInvigilator] = useState(staffList[0]?.name ?? "Faculty in charge");
-  const [maxMarks, setMaxMarks] = useState("100");
-  const [passingMarks, setPassingMarks] = useState("40");
-  const [syllabus, setSyllabus] = useState("");
+  const [conductedDate, setConductedDate] = useState(() => {
+    return new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  });
+  const [notes, setNotes] = useState("");
+
+  // Subjects Configurator
+  const [subjects, setSubjects] = useState<ExamSubjectConfig[]>([
+    { id: "s-1", subject: "Mathematics", maxMarks: 100, passMarks: 40, assignedTeacher: staffList[0]?.name ?? "Faculty" },
+    { id: "s-2", subject: "Science", maxMarks: 100, passMarks: 40, assignedTeacher: staffList[1]?.name ?? "Faculty" },
+    { id: "s-3", subject: "English", maxMarks: 100, passMarks: 40, assignedTeacher: staffList[2]?.name ?? "Faculty" },
+  ]);
+
+  const totalMax = useMemo(() => {
+    return subjects.reduce((sum, s) => sum + (Number(s.maxMarks) || 0), 0);
+  }, [subjects]);
+
+  const handleAddSubject = () => {
+    const nextNum = subjects.length + 1;
+    const available = subjectList[nextNum % subjectList.length]?.name || `Subject ${nextNum}`;
+    setSubjects((prev) => [
+      ...prev,
+      {
+        id: `s-${Date.now()}-${nextNum}`,
+        subject: available,
+        maxMarks: 100,
+        passMarks: 40,
+        assignedTeacher: staffList[nextNum % staffList.length]?.name || "Faculty",
+      },
+    ]);
+  };
+
+  const handleRemoveSubject = (id: string) => {
+    if (subjects.length <= 1) {
+      toast.error("At least one subject is required");
+      return;
+    }
+    setSubjects((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleUpdateSubject = (id: string, field: keyof ExamSubjectConfig, val: any) => {
+    setSubjects((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, [field]: val } : s))
+    );
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Exam name required", {
-        description: "Please enter a descriptive name for this examination.",
+    if (!title.trim()) {
+      toast.error("Exam title is required", {
+        description: "Please enter an official title for this conducted examination.",
       });
       return;
     }
 
-    const newExam: DetailedExam = {
-      id: `EXM-${Date.now().toString().slice(-4)}`,
-      name: name.trim(),
-      subject,
+    const newExam: ConductedExam = {
+      id: `EXM-${Date.now().toString().slice(-6)}`,
+      title: title.trim(),
+      examType,
+      term,
       grade,
-      date,
-      time,
-      venue,
-      status: "Scheduled",
-      invigilator,
-      max_marks: parseInt(maxMarks, 10) || 100,
-      passing_marks: parseInt(passingMarks, 10) || 40,
-      syllabus: syllabus.trim() || "Curriculum chapters as designated by the subject coordinator.",
+      conductedDate,
+      subjects: subjects.map((s) => ({
+        ...s,
+        maxMarks: Number(s.maxMarks) || 100,
+        passMarks: Number(s.passMarks) || 40,
+      })),
+      totalMaxMarks: totalMax,
+      notes: notes.trim(),
+      createdAt: new Date().toISOString(),
     };
 
     onCreated(newExam);
-    onClose();
+  };
+
+  return (
+    <div
+      className="modal-scrim"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add Conducted Examination"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="modal modal-responsive"
+        style={{
+          width: "min(720px, 94vw)",
+          maxHeight: "min(780px, 92vh)",
+          height: "min(740px, 92vh)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: "rgba(20, 21, 26, 0.96)",
+          backdropFilter: "blur(36px) saturate(190%)",
+          WebkitBackdropFilter: "blur(36px) saturate(190%)",
+          border: "1px solid var(--border-strong)",
+          boxShadow: "0 28px 72px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+        }}
+      >
+        {/* Header */}
+        <div className="modal-header">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--brand)]">
+              Institutional Assessment Registry
+            </span>
+            <h2 className="panel-title" style={{ margin: "2px 0 0", fontSize: 18 }}>
+              Record Conducted Exam
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Close dialog"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+          <div className="modal-body" style={{ flex: 1, overflowY: "auto", padding: "18px 22px" }}>
+            <div className="form-grid">
+              {/* Exam Title */}
+              <label style={{ gridColumn: "span 2" }}>
+                Exam Title *
+                <input
+                  type="text"
+                  placeholder="e.g. Midterm Examination 2026, FA1 Assessment"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </label>
+
+              {/* Exam Type */}
+              <label>
+                Assessment Type *
+                <FormSelect
+                  options={[
+                    { value: "Midterm", label: "Midterm Examination" },
+                    { value: "FA1", label: "Formative Assessment 1 (FA1)" },
+                    { value: "FA2", label: "Formative Assessment 2 (FA2)" },
+                    { value: "Internals", label: "Internal Assessment" },
+                    { value: "Final", label: "Semester / Final Examination" },
+                    { value: "Unit Test", label: "Unit Test" },
+                    { value: "Annual", label: "Annual Board Examination" },
+                  ]}
+                  value={examType}
+                  onChange={(val) => setExamType(val as ExamType)}
+                />
+              </label>
+
+              {/* Academic Term */}
+              <label>
+                Academic Session & Term *
+                <input
+                  type="text"
+                  placeholder="e.g. Term 1 (2026–2027)"
+                  value={term}
+                  onChange={(e) => setTerm(e.target.value)}
+                  required
+                />
+              </label>
+
+              {/* Target Grade */}
+              <label>
+                Enrolled Class / Grade *
+                <FormSelect
+                  options={[
+                    { value: "Grade 6", label: "Grade 6" },
+                    { value: "Grade 7", label: "Grade 7" },
+                    { value: "Grade 8", label: "Grade 8" },
+                    { value: "Grade 9", label: "Grade 9" },
+                    { value: "Grade 10", label: "Grade 10" },
+                  ]}
+                  value={grade}
+                  onChange={setGrade}
+                />
+              </label>
+
+              {/* Conducted Date */}
+              <label>
+                Conducted Date *
+                <input
+                  type="text"
+                  placeholder="e.g. 15 Oct 2026"
+                  value={conductedDate}
+                  onChange={(e) => setConductedDate(e.target.value)}
+                  required
+                />
+              </label>
+            </div>
+
+            {/* Subjects and Maximum Marks Configurator */}
+            <div className="mt-5 pt-4 border-t border-[var(--border)]">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                    Subjects & Maximum Marks Allocation
+                  </h4>
+                  <p className="text-[11.5px] text-[var(--text-muted)]">
+                    Specify max marks for physical paper grading. Grand Total:{" "}
+                    <strong className="text-[var(--brand)] font-mono">{totalMax} Marks</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button compact text-xs"
+                  onClick={handleAddSubject}
+                >
+                  <Plus size={13} />
+                  <span>Add Subject</span>
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {subjects.map((sub, index) => (
+                  <div
+                    key={sub.id}
+                    className="p-3 rounded-xl bg-[var(--bg-raised)] border border-[var(--border-subtle)] flex flex-wrap items-center gap-3"
+                  >
+                    <span className="text-xs font-mono font-bold text-[var(--text-muted)] w-5">
+                      #{index + 1}
+                    </span>
+
+                    <div className="flex-1 min-w-[140px]">
+                      <input
+                        type="text"
+                        placeholder="Subject Name (e.g. Physics)"
+                        value={sub.subject}
+                        onChange={(e) => handleUpdateSubject(sub.id, "subject", e.target.value)}
+                        className="text-xs py-1.5 px-2.5 rounded bg-[var(--bg-input)] border border-[var(--border)] w-full"
+                      />
+                    </div>
+
+                    <div className="w-24">
+                      <label className="text-[10px] text-[var(--text-muted)] block mb-0.5 font-semibold">
+                        Max Marks
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={sub.maxMarks}
+                        onChange={(e) => handleUpdateSubject(sub.id, "maxMarks", e.target.value)}
+                        className="text-xs py-1.5 px-2.5 rounded bg-[var(--bg-input)] border border-[var(--border)] w-full font-mono text-center"
+                      />
+                    </div>
+
+                    <div className="w-24">
+                      <label className="text-[10px] text-[var(--text-muted)] block mb-0.5 font-semibold">
+                        Pass Marks
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={sub.passMarks}
+                        onChange={(e) => handleUpdateSubject(sub.id, "passMarks", e.target.value)}
+                        className="text-xs py-1.5 px-2.5 rounded bg-[var(--bg-input)] border border-[var(--border)] w-full font-mono text-center"
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-[160px]">
+                      <label className="text-[10px] text-[var(--text-muted)] block mb-0.5 font-semibold">
+                        Evaluator / Teacher
+                      </label>
+                      <select
+                        value={sub.assignedTeacher}
+                        onChange={(e) => handleUpdateSubject(sub.id, "assignedTeacher", e.target.value)}
+                        className="text-xs py-1.5 px-2.5 rounded bg-[var(--bg-input)] border border-[var(--border)] w-full text-[var(--text-secondary)]"
+                      >
+                        {staffList.map((st) => (
+                          <option key={st.id} value={st.name}>
+                            {st.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="icon-button text-[var(--danger)] hover:bg-[var(--danger-soft)] mt-3 sm:mt-0"
+                      onClick={() => handleRemoveSubject(sub.id)}
+                      title="Remove Subject"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label>
+                Assessment Notes / Syllabus Remarks (Optional)
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Conducted under internal invigilation; covers units 1 to 4."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="modal-footer">
+            <button type="button" className="secondary-button" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="primary-button">
+              <Check size={14} />
+              <span>Register & Open Grade Entry</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* =============================================================================
+   SUB-COMPONENT: TAB 2 - GRADE ENTRY (PHYSICAL PAPER SCORING)
+   ============================================================================= */
+function GradeEntryTab({
+  exams,
+  activeExam,
+  candidates,
+  evaluationsStore,
+  onSelectExam,
+  onSaveStudentScore,
+  onBulkMarkAll,
+  onJumpToReportCards,
+}: {
+  exams: ConductedExam[];
+  activeExam: ConductedExam;
+  candidates: Student[];
+  evaluationsStore: Record<string, StudentExamRecord>;
+  onSelectExam: (examId: string) => void;
+  onSaveStudentScore: (key: string, record: StudentExamRecord) => void;
+  onBulkMarkAll: (records: Record<string, StudentExamRecord>) => void;
+  onJumpToReportCards: () => void;
+}) {
+  const [activeSubject, setActiveSubject] = useState<string>(
+    activeExam.subjects[0]?.subject || "All Subjects"
+  );
+  const [search, setSearch] = useState("");
+
+  // Sync active subject if exam changes
+  useEffect(() => {
+    setActiveSubject(activeExam.subjects[0]?.subject || "All Subjects");
+  }, [activeExam]);
+
+  const currentSubjectConfig = useMemo(() => {
+    return activeExam.subjects.find((s) => s.subject === activeSubject) || null;
+  }, [activeExam, activeSubject]);
+
+  const filteredCandidates = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return candidates;
+    return candidates.filter(
+      (c) => c.name.toLowerCase().includes(q) || (c.usn && c.usn.toLowerCase().includes(q))
+    );
+  }, [candidates, search]);
+
+  const pager = usePagination(filteredCandidates, 12);
+
+  // Quick helper to fill remaining un-entered students as present with passing marks or absent
+  const handleMarkAllAttended = () => {
+    const updates: Record<string, StudentExamRecord> = {};
+    candidates.forEach((stu) => {
+      const key = `${activeExam.id}__${stu.id}`;
+      const existing = evaluationsStore[key];
+      const scores = { ...(existing?.subjectScores || {}) };
+
+      activeExam.subjects.forEach((sub) => {
+        if (!scores[sub.subject] || scores[sub.subject]?.marks === null) {
+          scores[sub.subject] = {
+            marks: Math.round(sub.maxMarks * 0.75),
+            isAbsent: false,
+            remarks: "Satisfactory completion",
+          };
+        }
+      });
+
+      updates[key] = {
+        studentId: String(stu.id),
+        studentName: stu.name,
+        usn: stu.usn ?? `GGS-2627-${String(stu.id).padStart(4, "0")}`,
+        grade: stu.grade,
+        section: stu.section || "A",
+        email: `${stu.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        subjectScores: scores,
+        evaluatedAt: new Date().toISOString(),
+        evaluatedBy: "Evaluator",
+      };
+    });
+
+    onBulkMarkAll(updates);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Top Selector Bar */}
+      <div className="panel p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div style={{ width: 280 }}>
+            <label className="text-[10.5px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">
+              Select Conducted Examination
+            </label>
+            <FormSelect
+              options={exams.map((e) => ({
+                value: e.id,
+                label: `${e.title} (${e.grade})`,
+              }))}
+              value={activeExam.id}
+              onChange={onSelectExam}
+            />
+          </div>
+
+          <div style={{ width: 220 }}>
+            <label className="text-[10.5px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">
+              Active Evaluation Subject
+            </label>
+            <FormSelect
+              options={activeExam.subjects.map((s) => ({
+                value: s.subject,
+                label: `${s.subject} (Max ${s.maxMarks})`,
+              }))}
+              value={activeSubject}
+              onChange={setActiveSubject}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="secondary-button compact text-xs"
+            onClick={handleMarkAllAttended}
+            title="Convenience action: fill remaining unmarked with standard scores"
+          >
+            <CheckSquare size={13} />
+            <span>Mark Unfilled as Evaluated</span>
+          </button>
+
+          <button
+            type="button"
+            className="primary-button compact text-xs"
+            onClick={onJumpToReportCards}
+          >
+            <Award size={13} />
+            <span>View Report Cards</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Notice Banner Explaining Physical Grading Workflow */}
+      <div className="p-3.5 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-soft)]/25 flex items-start gap-3 text-xs text-[var(--text-secondary)]">
+        <Sparkles size={16} className="text-[var(--brand)] flex-shrink-0 mt-0.5" />
+        <div>
+          <strong className="text-[var(--text-primary)]">Physical Paper Evaluation Mode:</strong>{" "}
+          Review evaluated physical paper sheets and enter scores directly. For absent students,
+          select <strong>"Not Attended"</strong>. All students must be marked before official report
+          cards can be generated and distributed.
+        </div>
+      </div>
+
+      {/* Grade Entry Table */}
+      <div className="panel">
+        <div className="panel-header flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <h2 className="panel-title" style={{ fontSize: 16 }}>
+              {activeSubject} · Candidate Grading Sheet
+            </h2>
+            <span className="status-pill brand">
+              Max {currentSubjectConfig?.maxMarks ?? 100} Marks · Pass {currentSubjectConfig?.passMarks ?? 40}
+            </span>
+          </div>
+
+          <div className="search-field" style={{ maxWidth: 260 }}>
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="Search candidate name or USN…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 780 }}>
+            <thead>
+              <tr>
+                <th style={{ width: 40 }}>#</th>
+                <th style={{ minWidth: 200 }}>Student Candidate</th>
+                <th style={{ width: 140 }}>USN / Admission No.</th>
+                <th style={{ width: 170 }}>Attendance Status</th>
+                <th style={{ width: 120 }}>Score (Marks)</th>
+                <th style={{ width: 90 }}>Grade</th>
+                <th style={{ minWidth: 200 }}>Evaluation Remarks</th>
+                <th style={{ width: 100 }}>State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pager.pageRows.map((stu, idx) => {
+                const key = `${activeExam.id}__${stu.id}`;
+                const record = evaluationsStore[key];
+                const subjectEntry: StudentSubjectScore =
+                  record?.subjectScores[activeSubject] ?? {
+                    marks: null,
+                    isAbsent: false,
+                    remarks: "",
+                  };
+
+                const isAbsent = subjectEntry.isAbsent;
+                const marksVal = subjectEntry.marks;
+                const maxMarks = currentSubjectConfig?.maxMarks ?? 100;
+                const isEvaluated = isAbsent || (marksVal !== null && marksVal >= 0);
+                const gradeInfo =
+                  isAbsent
+                    ? { letter: "ABS", color: "var(--danger)", badge: "status-pill danger" }
+                    : marksVal !== null
+                      ? calculateGradeLetter(marksVal, maxMarks)
+                      : { letter: "—", color: "var(--text-muted)", badge: "status-pill neutral" };
+
+                const updateEntry = (updated: Partial<StudentSubjectScore>) => {
+                  const newScores = {
+                    ...(record?.subjectScores || {}),
+                    [activeSubject]: {
+                      ...subjectEntry,
+                      ...updated,
+                    },
+                  };
+
+                  onSaveStudentScore(key, {
+                    studentId: String(stu.id),
+                    studentName: stu.name,
+                    usn: stu.usn ?? `GGS-2627-${String(stu.id).padStart(4, "0")}`,
+                    grade: stu.grade,
+                    section: stu.section || "A",
+                    email: `${stu.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+                    subjectScores: newScores,
+                    evaluatedAt: new Date().toISOString(),
+                    evaluatedBy: currentSubjectConfig?.assignedTeacher || "Faculty",
+                  });
+                };
+
+                return (
+                  <tr key={stu.id} className={isAbsent ? "opacity-75 bg-[var(--danger-soft)]/10" : ""}>
+                    <td className="text-xs font-mono text-[var(--text-muted)]">
+                      {(pager.page - 1) * 12 + idx + 1}
+                    </td>
+
+                    <td>
+                      <div className="flex items-center gap-2.5">
+                        <div className="avatar-chip">{stu.initials || stu.name.slice(0, 2).toUpperCase()}</div>
+                        <div>
+                          <strong className="text-xs text-[var(--text-primary)] block">
+                            {stu.name}
+                          </strong>
+                          <span className="text-[11px] text-[var(--text-muted)]">
+                            {stu.grade} · Section {stu.section || "A"}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="font-mono text-xs text-[var(--text-secondary)]">
+                      {stu.usn ?? `GGS-2627-${String(stu.id).padStart(4, "0")}`}
+                    </td>
+
+                    {/* Attendance Status Selector: Attended vs Not Attended */}
+                    <td>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          className={`text-[11px] px-2.5 py-1 rounded-md font-semibold transition-all ${
+                            !isAbsent
+                              ? "bg-[var(--success-soft)] text-[var(--success)] border border-[var(--success-border)]"
+                              : "bg-[var(--bg-input)] text-[var(--text-muted)] border border-[var(--border)]"
+                          }`}
+                          onClick={() => {
+                            updateEntry({
+                              isAbsent: false,
+                              marks: marksVal === null ? Math.round(maxMarks * 0.7) : marksVal,
+                              remarks: "Satisfactory completion",
+                            });
+                          }}
+                        >
+                          Attended
+                        </button>
+                        <button
+                          type="button"
+                          className={`text-[11px] px-2.5 py-1 rounded-md font-semibold transition-all ${
+                            isAbsent
+                              ? "bg-[var(--danger-soft)] text-[var(--danger)] border border-[var(--danger-border)]"
+                              : "bg-[var(--bg-input)] text-[var(--text-muted)] border border-[var(--border)]"
+                          }`}
+                          onClick={() => {
+                            updateEntry({
+                              isAbsent: true,
+                              marks: null,
+                              remarks: "Not Attended / Absent on exam date",
+                            });
+                          }}
+                        >
+                          Not Attended
+                        </button>
+                      </div>
+                    </td>
+
+                    {/* Marks Input */}
+                    <td>
+                      {isAbsent ? (
+                        <span className="text-xs font-bold font-mono text-[var(--danger)]">
+                          ABS
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0"
+                            max={maxMarks}
+                            value={marksVal ?? ""}
+                            onChange={(e) => {
+                              const val = e.target.value === "" ? null : Math.min(maxMarks, Math.max(0, Number(e.target.value)));
+                              updateEntry({ marks: val });
+                            }}
+                            placeholder="Score"
+                            className="w-16 py-1 px-2 text-xs font-mono font-bold text-center rounded bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-[var(--brand)]"
+                          />
+                          <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                            /{maxMarks}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Grade Badge */}
+                    <td>
+                      <span className={gradeInfo.badge}>{gradeInfo.letter}</span>
+                    </td>
+
+                    {/* Remarks Input */}
+                    <td>
+                      <input
+                        type="text"
+                        value={subjectEntry.remarks}
+                        onChange={(e) => updateEntry({ remarks: e.target.value })}
+                        placeholder={isAbsent ? "Absent notice notes" : "Teacher evaluation remarks…"}
+                        className="w-full py-1 px-2.5 text-xs rounded bg-[var(--bg-input)] border border-transparent focus:border-[var(--border-strong)] text-[var(--text-secondary)] outline-none"
+                      />
+                    </td>
+
+                    {/* Completion State Badge */}
+                    <td>
+                      {isEvaluated ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--success)]">
+                          <Check size={13} />
+                          <span>Graded</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--warning)]">
+                          <AlertTriangle size={13} />
+                          <span>Pending</span>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {pager.totalPages > 1 && (
+          <div className="p-3 border-t border-[var(--border)]">
+            <Pager
+              current={pager.page}
+              total={pager.totalPages}
+              onPageChange={pager.setPage}
+              summary={`Showing ${pager.pageRows.length} of ${filteredCandidates.length} students`}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* =============================================================================
+   SUB-COMPONENT: TAB 3 - GRADING STATUS & AUDIT (PRINCIPAL'S COMPLETION REGISTER)
+   ============================================================================= */
+function GradingStatusTab({
+  exams,
+  completionMap,
+  evaluationsStore,
+  allStudents,
+  onEnterGrades,
+  onDistributeReportCards,
+}: {
+  exams: ConductedExam[];
+  completionMap: Map<string, { isComplete: boolean; completionPct: number; pendingCount: number; totalCandidates: number; fullyGradedCount: number; absentCount: number }>;
+  evaluationsStore: Record<string, StudentExamRecord>;
+  allStudents: Student[];
+  onEnterGrades: (examId: string) => void;
+  onDistributeReportCards: (examId: string) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Principal's Directive Banner */}
+      <div className="p-4 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-soft)]/25 flex items-start gap-3.5">
+        <ShieldNoticeIcon />
+        <div className="text-xs space-y-1">
+          <strong className="text-sm font-bold text-[var(--text-primary)] block">
+            Principal's Assessment Evaluation Register & Enforcement Gate
+          </strong>
+          <p className="text-[var(--text-secondary)] leading-relaxed">
+            Per school statutory compliance, <strong>all students must be fully graded</strong> (or
+            explicitly marked as <em>Not Attended</em>) before official Report Cards can be released
+            or emailed to parents. Track grading progress across departments and identify any
+            teachers who have pending evaluations below.
+          </p>
+        </div>
+      </div>
+
+      {/* Exam-by-Exam Completion Cards */}
+      <div className="space-y-4">
+        {exams.map((exam) => {
+          const stats = completionMap.get(exam.id);
+          const isComplete = stats?.isComplete ?? false;
+          const pct = stats?.completionPct ?? 0;
+          const pending = stats?.pendingCount ?? 0;
+          const total = stats?.totalCandidates ?? 0;
+          const graded = stats?.fullyGradedCount ?? 0;
+          const absent = stats?.absentCount ?? 0;
+
+          // Find pending students
+          const targetGradeNum = exam.grade.replace(/[^0-9]/g, "");
+          const candidates = allStudents.filter((s) => {
+            const stuGradeNum = String(s.grade).replace(/[^0-9]/g, "");
+            return stuGradeNum === targetGradeNum;
+          });
+          const candidateList = candidates.length > 0 ? candidates : allStudents.slice(0, 16);
+
+          const pendingStudents = candidateList.filter((stu) => {
+            const key = `${exam.id}__${stu.id}`;
+            const rec = evaluationsStore[key];
+            if (!rec) return true;
+            return !exam.subjects.every((sub) => {
+              const entry = rec.subjectScores[sub.subject];
+              return entry && (entry.isAbsent || (entry.marks !== null && entry.marks >= 0));
+            });
+          });
+
+          return (
+            <div key={exam.id} className="panel p-5 space-y-4">
+              {/* Head */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-[var(--text-primary)]">
+                      {exam.title}
+                    </h3>
+                    <span className="status-pill brand">{exam.grade}</span>
+                    <span className="status-pill neutral">{exam.examType}</span>
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    Conducted on {exam.conductedDate} · {exam.subjects.length} Subjects Evaluated ·
+                    Term: {exam.term}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  {isComplete ? (
+                    <span className="status-pill success flex items-center gap-1.5 px-3 py-1">
+                      <CheckCircle2 size={14} />
+                      <span>Ready for Report Cards</span>
+                    </span>
+                  ) : (
+                    <span className="status-pill warning flex items-center gap-1.5 px-3 py-1">
+                      <Lock size={13} />
+                      <span>Distribution Locked ({pending} Pending)</span>
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    className="secondary-button compact text-xs"
+                    onClick={() => onEnterGrades(exam.id)}
+                  >
+                    <ClipboardList size={13} />
+                    <span>Open Grade Entry</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`compact text-xs flex items-center gap-1.5 ${
+                      isComplete ? "primary-button" : "secondary-button opacity-60"
+                    }`}
+                    onClick={() => onDistributeReportCards(exam.id)}
+                  >
+                    <Award size={13} />
+                    <span>Report Cards</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress bar and breakdown */}
+              <div className="p-4 rounded-xl bg-[var(--bg-raised)] border border-[var(--border-subtle)] space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-4">
+                    <span className="text-[var(--text-primary)] font-semibold">
+                      Candidate Evaluation Progress
+                    </span>
+                    <span className="text-[var(--text-muted)] font-mono">
+                      {total - pending} of {total} evaluated ({graded} graded · {absent} not attended)
+                    </span>
+                  </div>
+                  <strong className={isComplete ? "text-[var(--success)]" : "text-[var(--warning)]"}>
+                    {pct}% Complete
+                  </strong>
+                </div>
+
+                <div className="w-full h-2 rounded-full bg-[var(--bg-input)] overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      isComplete ? "bg-[var(--success)]" : "bg-[var(--warning)]"
+                    }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+
+                {/* Subject-Wise Evaluator Allocation */}
+                <div className="pt-2 border-t border-[var(--border-subtle)] grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                  {exam.subjects.map((sub) => (
+                    <div
+                      key={sub.id}
+                      className="p-2 rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-center text-xs"
+                    >
+                      <span className="font-bold text-[var(--text-primary)] block truncate">
+                        {sub.subject}
+                      </span>
+                      <span className="text-[10.5px] text-[var(--text-muted)] block truncate mt-0.5">
+                        {sub.assignedTeacher || "Faculty"}
+                      </span>
+                      <span className="text-[10px] font-mono text-[var(--brand)] font-semibold mt-1 inline-block">
+                        Max {sub.maxMarks}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Incomplete warning & list of pending candidates */}
+              {!isComplete && pendingStudents.length > 0 && (
+                <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-amber-300 font-semibold">
+                      <AlertTriangle size={15} />
+                      <span>{pendingStudents.length} Candidate(s) Awaiting Final Grade Entry:</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-[var(--brand)] hover:underline font-semibold"
+                      onClick={() => onEnterGrades(exam.id)}
+                    >
+                      Grade Now →
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {pendingStudents.map((stu) => (
+                      <span
+                        key={stu.id}
+                        className="px-2.5 py-1 rounded bg-[var(--bg-panel)] border border-amber-500/30 text-amber-200 text-xs font-medium"
+                      >
+                        {stu.name} ({stu.usn ?? `GGS-${stu.id}`})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ShieldNoticeIcon() {
+  return (
+    <div className="w-8 h-8 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)] flex items-center justify-center flex-shrink-0">
+      <Users size={17} />
+    </div>
+  );
+}
+
+/* =============================================================================
+   SUB-COMPONENT: TAB 4 - REPORT CARDS TABLE & DISTRIBUTION
+   ============================================================================= */
+function ReportCardsTab({
+  exams,
+  activeExam,
+  candidates,
+  evaluationsStore,
+  isGradingComplete,
+  pendingCount,
+  onSelectExam,
+  onOpenDrawer,
+  onJumpToGradeEntry,
+  onUpdateRecordEmailStatus,
+}: {
+  exams: ConductedExam[];
+  activeExam: ConductedExam;
+  candidates: Student[];
+  evaluationsStore: Record<string, StudentExamRecord>;
+  isGradingComplete: boolean;
+  pendingCount: number;
+  onSelectExam: (examId: string) => void;
+  onOpenDrawer: (record: StudentExamRecord) => void;
+  onJumpToGradeEntry: () => void;
+  onUpdateRecordEmailStatus: (key: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [resultFilter, setResultFilter] = useState("all");
+  const [isBatchEmailing, setIsBatchEmailing] = useState(false);
+
+  // Compute calculated report card items for each candidate
+  const reportCardList = useMemo(() => {
+    return candidates.map((stu) => {
+      const key = `${activeExam.id}__${stu.id}`;
+      const saved = evaluationsStore[key];
+      const scores = saved?.subjectScores || {};
+
+      let scoredSum = 0;
+      let evaluatedCount = 0;
+      const subjectsWithScores = activeExam.subjects.map((sub) => {
+        const entry = scores[sub.subject];
+        const isAbsent = entry?.isAbsent ?? false;
+        const marks = entry?.marks ?? null;
+        if (!isAbsent && marks !== null) {
+          scoredSum += marks;
+          evaluatedCount++;
+        }
+        const gradeLetter = isAbsent
+          ? "ABS"
+          : marks !== null
+            ? calculateGradeLetter(marks, sub.maxMarks).letter
+            : "—";
+
+        return {
+          subject: sub.subject,
+          maxMarks: sub.maxMarks,
+          passMarks: sub.passMarks,
+          marks,
+          grade: gradeLetter,
+          remarks: entry?.remarks || (isAbsent ? "Absent" : "Satisfactory"),
+          isAbsent,
+        };
+      });
+
+      const isAllAbsent = subjectsWithScores.every((s) => s.isAbsent);
+      const isMissingSome = subjectsWithScores.some((s) => !s.isAbsent && s.marks === null);
+
+      const totalMax = activeExam.totalMaxMarks;
+      const percentage =
+        isAllAbsent || totalMax <= 0 ? 0 : Math.round((scoredSum / totalMax) * 1000) / 10;
+      const overallGrade = isAllAbsent
+        ? "ABS"
+        : isMissingSome
+          ? "Pending"
+          : calculateGradeLetter(scoredSum, totalMax).letter;
+
+      let resultStatus = "Promoted with Distinction";
+      if (isAllAbsent) resultStatus = "Absent (Not Attended)";
+      else if (isMissingSome) resultStatus = "Pending Evaluation";
+      else if (percentage < 40) resultStatus = "Needs Remedial Support";
+      else if (percentage >= 75) resultStatus = "Promoted with Distinction";
+      else resultStatus = "Promoted to Next Term";
+
+      const record: StudentExamRecord = saved || {
+        studentId: String(stu.id),
+        studentName: stu.name,
+        usn: stu.usn ?? `GGS-2627-${String(stu.id).padStart(4, "0")}`,
+        grade: stu.grade,
+        section: stu.section || "A",
+        email: `${stu.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        subjectScores: scores,
+      };
+
+      return {
+        student: stu,
+        record,
+        subjectsWithScores,
+        grandTotal: scoredSum,
+        totalMaxMarks: totalMax,
+        percentage,
+        overallGrade,
+        resultStatus,
+        isAllAbsent,
+        isMissingSome,
+        emailSentAt: saved?.emailSentAt,
+      };
+    });
+  }, [candidates, activeExam, evaluationsStore]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return reportCardList.filter((item) => {
+      if (resultFilter === "passed" && (item.isAllAbsent || item.percentage < 40)) return false;
+      if (resultFilter === "absent" && !item.isAllAbsent) return false;
+      if (resultFilter === "emailed" && !item.emailSentAt) return false;
+      if (!q) return true;
+      return (
+        item.student.name.toLowerCase().includes(q) ||
+        (item.record.usn && item.record.usn.toLowerCase().includes(q))
+      );
+    });
+  }, [reportCardList, search, resultFilter]);
+
+  const pager = usePagination(filtered, 12);
+
+  // Batch Share all report cards to student emails
+  const handleBatchShareAll = async () => {
+    if (!isGradingComplete) {
+      toast.error("Distribution Blocked", {
+        description: `Grading is incomplete (${pendingCount} pending). All students must be evaluated or marked as Not Attended before report cards can be distributed.`,
+      });
+      return;
+    }
+
+    if (
+      !confirm(
+        `Are you sure you want to dispatch official Report Cards to all ${candidates.length} students via email?`
+      )
+    ) {
+      return;
+    }
+
+    setIsBatchEmailing(true);
+    const toastId = toast.loading("Dispatching batch report cards...", {
+      description: `Preparing ${reportCardList.length} verified report cards for delivery.`,
+    });
+
+    try {
+      const payloadCards = reportCardList.map((item) => ({
+        studentName: item.student.name,
+        studentEmail: item.record.email || `${item.student.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        usn: item.record.usn,
+        grade: item.student.grade,
+        section: item.student.section,
+        examTitle: activeExam.title,
+        academicTerm: activeExam.term,
+        subjects: item.subjectsWithScores,
+        grandTotal: item.grandTotal,
+        totalMaxMarks: item.totalMaxMarks,
+        percentage: item.percentage,
+        overallGrade: item.overallGrade,
+        resultStatus: item.resultStatus,
+        attendancePct: item.student.attendance || 94,
+      }));
+
+      const res = await fetch("/api/report-card-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "batch",
+          reportCards: payloadCards,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to dispatch report cards via API");
+      }
+
+      // Mark all as emailed
+      reportCardList.forEach((item) => {
+        const key = `${activeExam.id}__${item.student.id}`;
+        onUpdateRecordEmailStatus(key);
+      });
+
+      toast.dismiss(toastId);
+      toast.success("All Report Cards Emailed Successfully", {
+        description: `Dispatched ${payloadCards.length} official report cards to registered student & guardian emails.`,
+      });
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error("Dispatch Failed", {
+        description: String(err) || "Could not dispatch emails. Please try again.",
+      });
+    } finally {
+      setIsBatchEmailing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Top Bar with Exam Selector */}
+      <div className="panel p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div style={{ width: 280 }}>
+            <label className="text-[10.5px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">
+              Select Examination
+            </label>
+            <FormSelect
+              options={exams.map((e) => ({
+                value: e.id,
+                label: `${e.title} (${e.grade})`,
+              }))}
+              value={activeExam.id}
+              onChange={onSelectExam}
+            />
+          </div>
+
+          <div style={{ width: 170 }}>
+            <label className="text-[10.5px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">
+              Filter Result
+            </label>
+            <FormSelect
+              options={[
+                { value: "all", label: "All Candidates" },
+                { value: "passed", label: "Promoted Only" },
+                { value: "absent", label: "Not Attended" },
+                { value: "emailed", label: "Emailed Records" },
+              ]}
+              value={resultFilter}
+              onChange={setResultFilter}
+            />
+          </div>
+        </div>
+
+        {/* Global Batch Action Buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="secondary-button compact text-xs"
+            onClick={() => {
+              window.print();
+              toast.success("Print dialog opened for report cards");
+            }}
+          >
+            <Printer size={13} />
+            <span>Print All / PDF Batch</span>
+          </button>
+
+          {/* Share All Button: strictly locked if grading is incomplete */}
+          <button
+            type="button"
+            className={`compact text-xs flex items-center gap-1.5 ${
+              isGradingComplete ? "primary-button" : "secondary-button opacity-50 cursor-not-allowed"
+            }`}
+            onClick={handleBatchShareAll}
+            disabled={!isGradingComplete || isBatchEmailing}
+            title={
+              isGradingComplete
+                ? "Send official report cards to all student emails"
+                : `Locked: ${pendingCount} student(s) have pending grades. Complete all grading first.`
+            }
+          >
+            {isGradingComplete ? <Send size={13} /> : <Lock size={13} />}
+            <span>Share All to Student Emails</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Completion Enforcement Banner */}
+      {!isGradingComplete ? (
+        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 text-amber-300">
+            <Lock size={16} className="flex-shrink-0" />
+            <div>
+              <strong className="block text-amber-200">
+                Report Cards Distribution Locked ({pendingCount} Student Grades Pending)
+              </strong>
+              <span>
+                Per institutional guidelines, all candidates must be graded or marked as <em>Not Attended</em>{" "}
+                before report cards can be generated or emailed.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="primary-button compact text-xs"
+            onClick={onJumpToGradeEntry}
+          >
+            <ClipboardList size={13} />
+            <span>Finish Grading Now</span>
+          </button>
+        </div>
+      ) : (
+        <div className="p-3.5 rounded-xl border border-[var(--success-border)] bg-[var(--success-soft)]/20 flex items-center justify-between text-xs text-[var(--success)]">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            <span>
+              <strong>All Candidate Grades Verified (100% Complete):</strong> Official report cards
+              are unlocked and ready to be printed or emailed in batch to students.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Report Cards Table Directory */}
+      <div className="panel">
+        <div className="panel-header flex-wrap gap-3">
+          <div>
+            <h2 className="panel-title" style={{ fontSize: 16 }}>
+              Student Report Cards Directory
+            </h2>
+            <p className="panel-subtitle" style={{ fontSize: 12 }}>
+              Click any student row to slide out the detailed official Report Card.
+            </p>
+          </div>
+
+          <div className="search-field" style={{ maxWidth: 280 }}>
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="Search student by name or USN…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="table-scroll">
+          <table className="data-table" style={{ minWidth: 840 }}>
+            <thead>
+              <tr>
+                <th style={{ width: 40 }}>#</th>
+                <th style={{ minWidth: 220 }}>Student Candidate</th>
+                <th style={{ width: 140 }}>USN</th>
+                <th style={{ width: 110 }}>Attendance</th>
+                <th style={{ width: 120 }}>Total Marks</th>
+                <th style={{ width: 90 }}>%</th>
+                <th style={{ width: 90 }}>Grade</th>
+                <th style={{ minWidth: 160 }}>Result Status</th>
+                <th style={{ width: 130 }}>Email Dispatch</th>
+                <th style={{ width: 120, textAlign: "right" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pager.pageRows.map((item, idx) => {
+                const gradeInfo = item.isAllAbsent
+                  ? { letter: "ABS", badge: "status-pill danger" }
+                  : calculateGradeLetter(item.grandTotal, item.totalMaxMarks);
+
+                return (
+                  <tr
+                    key={item.student.id}
+                    onClick={() => onOpenDrawer(item.record)}
+                    className="cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <td className="text-xs font-mono text-[var(--text-muted)]">
+                      {(pager.page - 1) * 12 + idx + 1}
+                    </td>
+
+                    <td>
+                      <div className="flex items-center gap-2.5">
+                        <div className="avatar-chip">
+                          {item.student.initials || item.student.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <strong className="text-xs text-[var(--text-primary)] block hover:text-[var(--brand)] transition-colors">
+                            {item.student.name}
+                          </strong>
+                          <span className="text-[11px] text-[var(--text-muted)]">
+                            {item.student.grade} · Section {item.student.section || "A"}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="font-mono text-xs text-[var(--text-secondary)]">
+                      {item.record.usn}
+                    </td>
+
+                    <td className="text-xs text-[var(--success)] font-medium">
+                      {item.student.attendance || 94}%
+                    </td>
+
+                    <td className="font-mono text-xs font-semibold text-[var(--text-primary)]">
+                      {item.isAllAbsent ? (
+                        <span className="text-[var(--danger)]">ABS</span>
+                      ) : (
+                        `${item.grandTotal} / ${item.totalMaxMarks}`
+                      )}
+                    </td>
+
+                    <td className="font-mono text-xs">
+                      {item.isAllAbsent ? "—" : `${item.percentage}%`}
+                    </td>
+
+                    <td>
+                      <span className={gradeInfo.badge}>{item.overallGrade}</span>
+                    </td>
+
+                    <td>
+                      <span
+                        className={`text-xs font-semibold ${
+                          item.isAllAbsent
+                            ? "text-[var(--danger)]"
+                            : item.percentage >= 75
+                              ? "text-[var(--success)]"
+                              : "text-[var(--text-secondary)]"
+                        }`}
+                      >
+                        {item.resultStatus}
+                      </span>
+                    </td>
+
+                    <td>
+                      {item.emailSentAt ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-[var(--success)] font-semibold">
+                          <Check size={12} />
+                          <span>Emailed</span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                          Ready to Send
+                        </span>
+                      )}
+                    </td>
+
+                    <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="secondary-button compact text-xs"
+                        onClick={() => onOpenDrawer(item.record)}
+                      >
+                        <Eye size={12} />
+                        <span>View</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {pager.totalPages > 1 && (
+          <div className="p-3 border-t border-[var(--border)]">
+            <Pager
+              current={pager.page}
+              total={pager.totalPages}
+              onPageChange={pager.setPage}
+              summary={`Showing ${pager.pageRows.length} of ${filtered.length} candidate report cards`}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* =============================================================================
+   SUB-COMPONENT: RIGHT-SIDE SLIDE-OUT DRAWER (REPORT CARD DRAWER)
+   ============================================================================= */
+function ReportCardDrawer({
+  record,
+  exam,
+  onClose,
+  onEmailed,
+}: {
+  record: StudentExamRecord;
+  exam: ConductedExam;
+  onClose: () => void;
+  onEmailed: () => void;
+}) {
+  const [isSending, setIsSending] = useState(false);
+
+  // Computed Subject Details
+  const subjectsWithScores = useMemo(() => {
+    return exam.subjects.map((sub) => {
+      const entry = record.subjectScores[sub.subject];
+      const isAbsent = entry?.isAbsent ?? false;
+      const marks = entry?.marks ?? null;
+      const gradeLetter = isAbsent
+        ? "ABS"
+        : marks !== null
+          ? calculateGradeLetter(marks, sub.maxMarks).letter
+          : "—";
+
+      return {
+        subject: sub.subject,
+        maxMarks: sub.maxMarks,
+        passMarks: sub.passMarks,
+        marks,
+        grade: gradeLetter,
+        remarks: entry?.remarks || (isAbsent ? "Not Attended" : "Consistent progress"),
+        isAbsent,
+      };
+    });
+  }, [exam, record]);
+
+  const scoredSum = useMemo(() => {
+    return subjectsWithScores.reduce((sum, s) => sum + (s.marks ?? 0), 0);
+  }, [subjectsWithScores]);
+
+  const isAllAbsent = subjectsWithScores.every((s) => s.isAbsent);
+  const totalMax = exam.totalMaxMarks;
+  const percentage = isAllAbsent || totalMax <= 0 ? 0 : Math.round((scoredSum / totalMax) * 1000) / 10;
+  const overallGrade = isAllAbsent ? "ABS" : calculateGradeLetter(scoredSum, totalMax).letter;
+
+  let resultStatus = "Promoted with Distinction";
+  if (isAllAbsent) resultStatus = "Absent (Not Attended)";
+  else if (percentage < 40) resultStatus = "Needs Remedial Support";
+  else if (percentage >= 75) resultStatus = "Promoted with Distinction";
+  else resultStatus = "Promoted to Next Term";
+
+  const recipientEmail =
+    record.email || `${record.studentName.toLowerCase().replace(/\s+/g, ".")}@example.com`;
+
+  // Handle single student report card email dispatch
+  const handleSendEmail = async () => {
+    setIsSending(true);
+    const toastId = toast.loading(`Sending report card to ${record.studentName}…`);
+
+    try {
+      const res = await fetch("/api/report-card-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "single",
+          reportCard: {
+            studentName: record.studentName,
+            studentEmail: recipientEmail,
+            usn: record.usn,
+            grade: record.grade,
+            section: record.section,
+            examTitle: exam.title,
+            academicTerm: exam.term,
+            subjects: subjectsWithScores,
+            grandTotal: scoredSum,
+            totalMaxMarks: totalMax,
+            percentage,
+            overallGrade,
+            resultStatus,
+            attendancePct: 96,
+          },
+        }),
+      });
+
+      if (!res.ok) throw new Error("Email dispatch API failed");
+
+      onEmailed();
+      toast.dismiss(toastId);
+      toast.success("Report Card Dispatched", {
+        description: `Official PDF report card emailed to ${recipientEmail}`,
+      });
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error("Dispatch Failed", {
+        description: String(err) || "Failed to deliver email.",
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
     <>
       <DrawerBackdrop onClose={onClose} />
-      <div
-        className="app-dialog"
-        style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          zIndex: 60,
-          width: "min(560px, calc(100vw - 32px))",
-          maxHeight: "90vh",
-          overflowY: "auto",
-          background: "var(--bg-panel-solid)",
-          border: "1px solid var(--border-strong)",
-          borderRadius: "14px",
-          padding: "24px",
-          boxShadow: "0 24px 60px rgba(0, 0, 0, 0.7)",
-        }}
-      >
-        <div className="flex items-center justify-between" style={{ marginBottom: "18px" }}>
-          <div>
-            <h2 className="panel-title">Schedule examination</h2>
-          </div>
-          <button
-            className="secondary-button compact"
-            onClick={onClose}
-            aria-label="Close dialog"
-          >
-            <X size={15} />
-          </button>
-        </div>
 
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div>
-            <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">
-              Examination Title *
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Mid-term Physics, Unit Test 3, Biology Practical"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="search-input"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Subject</label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              />
-            </div>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Target Grade</label>
-              <select
-                value={grade}
-                onChange={(e) => setGrade(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              >
-                {["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"].map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Date</label>
-              <input
-                type="text"
-                placeholder="DD Mon YYYY"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              />
-            </div>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Time Window</label>
-              <input
-                type="text"
-                placeholder="e.g. 09:00 – 10:30"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Venue / Hall</label>
-              <input
-                type="text"
-                placeholder="e.g. Room 204, Science Lab"
-                value={venue}
-                onChange={(e) => setVenue(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              />
-            </div>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Invigilator</label>
-              <input
-                type="text"
-                value={invigilator}
-                onChange={(e) => setInvigilator(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Max Marks</label>
-              <input
-                type="number"
-                value={maxMarks}
-                onChange={(e) => setMaxMarks(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              />
-            </div>
-            <div>
-              <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">Passing Marks</label>
-              <input
-                type="number"
-                value={passingMarks}
-                onChange={(e) => setPassingMarks(e.target.value)}
-                className="search-input"
-                style={{ width: "100%", padding: "8px 12px", borderRadius: "8px" }}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-semibold text-[var(--text-secondary)] block mb-1">
-              Portion & Syllabus Outline
-            </label>
-            <textarea
-              rows={2}
-              placeholder="Outline units or chapters covered..."
-              value={syllabus}
-              onChange={(e) => setSyllabus(e.target.value)}
-              className="search-input"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", resize: "vertical" }}
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2" style={{ marginTop: "12px" }}>
-            <button type="button" className="secondary-button" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="primary-button">
-              <Plus size={15} />
-              Confirm schedule
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
-  );
-}
-
-/**
- * Exam Detail Sliding Right Drawer
- */
-function ExamDetailDrawer({
-  exam,
-  onClose,
-  onEnterMarks,
-  onDelete,
-}: {
-  exam: DetailedExam;
-  onClose: () => void;
-  onEnterMarks: (examId: string) => void;
-  onDelete: (examId: string) => void;
-}) {
-  return (
-    <>
-      <DrawerBackdrop onClose={onClose} />
       <aside
-        className="profile-drawer wide"
+        className="profile-drawer pupil-drawer"
         style={{
-          width: "min(440px, calc(100vw / var(--ui-zoom)))",
+          width: "min(680px, calc(100vw / var(--ui-zoom)))",
+          zIndex: 50,
+          background: "rgba(18, 19, 24, 0.98)",
+          backdropFilter: "blur(36px) saturate(190%)",
+          WebkitBackdropFilter: "blur(36px) saturate(190%)",
+          boxShadow: "-16px 0 48px rgba(0, 0, 0, 0.75)",
         }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Student Official Report Card"
       >
-        <div className="flex items-center justify-between" style={{ marginBottom: "20px" }}>
+        {/* Drawer Header Actions */}
+        <div className="drawer-header" style={{ padding: "16px 20px" }}>
           <div>
-            <h2 className="panel-title" style={{ fontSize: "18px" }}>{exam.name}</h2>
+            <span className="text-[10px] font-bold text-[var(--brand)] uppercase tracking-wider">
+              Official Progress Document
+            </span>
+            <h2 className="text-base font-bold text-[var(--text-primary)]" style={{ margin: "2px 0 0" }}>
+              {record.studentName}
+            </h2>
           </div>
-          <button className="secondary-button compact" onClick={onClose}>
-            <X size={15} />
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="secondary-button compact text-xs"
+              onClick={() => window.print()}
+            >
+              <Printer size={13} />
+              <span>Print PDF</span>
+            </button>
+
+            <button
+              type="button"
+              className="primary-button compact text-xs flex items-center gap-1.5"
+              onClick={handleSendEmail}
+              disabled={isSending}
+            >
+              <Mail size={13} />
+              <span>{isSending ? "Sending…" : "Share via Email"}</span>
+            </button>
+
+            <button
+              type="button"
+              className="icon-button"
+              onClick={onClose}
+              aria-label="Close drawer"
+            >
+              <X size={17} />
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {/* Scrollable Report Card Body */}
+        <div className="pupil-drawer-body" style={{ padding: "18px 24px" }}>
           <div
+            className="report-card-container"
             style={{
-              padding: "16px",
-              borderRadius: "10px",
-              background: "var(--bg-raised)",
-              border: "1px solid var(--border)",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
+              padding: "24px 28px",
+              borderRadius: "14px",
+              border: "1px solid var(--border-strong)",
+              background: "rgba(255, 255, 255, 0.02)",
             }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[var(--text-muted)]">Target Grade</span>
-              <span className="grade-chip">{exam.grade}</span>
+            {/* School Crest & Institutional Header */}
+            <div style={{ textAlign: "center", borderBottom: "2px solid var(--border)", paddingBottom: "16px", marginBottom: "18px" }}>
+              <h2 style={{ fontSize: "19px", fontWeight: 800, letterSpacing: "0.02em", color: "var(--text-primary)", margin: 0 }}>
+                GLOBAL KIDS SCHOOL, TUMAKURU
+              </h2>
+              <p style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "3px", margin: "3px 0 0" }}>
+                Affiliated to CBSE, New Delhi · Affiliation No. 830491 · School Code: 45612
+              </p>
+              <span
+                style={{
+                  display: "inline-block",
+                  marginTop: "8px",
+                  padding: "3px 12px",
+                  borderRadius: "20px",
+                  background: "var(--brand-soft)",
+                  color: "var(--brand)",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {exam.title.toUpperCase()} · {exam.term.toUpperCase()}
+              </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[var(--text-muted)]">Subject</span>
-              <strong className="text-[13px] text-[var(--text-primary)]">{exam.subject}</strong>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[var(--text-muted)]">Date & Window</span>
-              <span className="text-[13px] text-[var(--text-primary)]">{exam.date} · {exam.time}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[var(--text-muted)]">Venue</span>
-              <span className="text-[13px] text-[var(--text-primary)]">{exam.venue}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[var(--text-muted)]">Invigilator</span>
-              <span className="text-[13px] text-[var(--text-primary)]">{exam.invigilator ?? "Staff in charge"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[var(--text-muted)]">Max Marks</span>
-              <span className="text-[13px] text-[var(--text-primary)] font-mono">{exam.max_marks ?? 100} pts (Pass: {exam.passing_marks ?? 40} pts)</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] text-[var(--text-muted)]">Status</span>
-              <span className="status-pill success">{exam.status}</span>
-            </div>
-          </div>
 
-          <div>
-            <h3 className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
-              Prescribed Syllabus & Portions
-            </h3>
+            {/* Student Dossier Information */}
             <div
               style={{
-                padding: "12px 14px",
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gap: "12px",
+                padding: "14px 18px",
+                background: "var(--bg-raised)",
                 borderRadius: "8px",
-                background: "var(--bg-card)",
                 border: "1px solid var(--border-subtle)",
+                marginBottom: "20px",
                 fontSize: "12.5px",
-                lineHeight: "1.5",
-                color: "var(--text-secondary)",
               }}
             >
-              {exam.syllabus ?? "Comprehensive syllabus as prescribed by the department."}
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  Student Name
+                </span>
+                <strong className="text-[var(--text-primary)] font-semibold">
+                  {record.studentName}
+                </strong>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  USN / Admission No.
+                </span>
+                <span className="font-mono text-[var(--text-secondary)]">
+                  {record.usn}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  Class & Section
+                </span>
+                <span className="text-[var(--text-secondary)]">
+                  {record.grade} · Section {record.section}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  Term Attendance
+                </span>
+                <span className="text-[var(--success)] font-medium">96% Present</span>
+              </div>
+            </div>
+
+            {/* Scholastic Table */}
+            <div className="table-scroll">
+              <table className="data-table" style={{ minWidth: 540 }}>
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th style={{ width: 75 }}>Max</th>
+                    <th style={{ width: 75 }}>Pass</th>
+                    <th style={{ width: 95 }}>Score</th>
+                    <th style={{ width: 70 }}>%</th>
+                    <th style={{ width: 80 }}>Grade</th>
+                    <th>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjectsWithScores.map((s) => {
+                    const pct = s.isAbsent || s.marks === null ? "—" : `${Math.round((s.marks / s.maxMarks) * 100)}%`;
+                    const g = s.isAbsent ? { letter: "ABS", badge: "status-pill danger" } : calculateGradeLetter(s.marks ?? 0, s.maxMarks);
+
+                    return (
+                      <tr key={s.subject}>
+                        <td className="font-medium text-[var(--text-primary)]">{s.subject}</td>
+                        <td className="muted-cell">{s.maxMarks}</td>
+                        <td className="muted-cell">{s.passMarks}</td>
+                        <td className="font-semibold text-[var(--text-primary)] font-mono">
+                          {s.isAbsent ? (
+                            <span className="text-[var(--danger)]">ABS</span>
+                          ) : (
+                            s.marks
+                          )}
+                        </td>
+                        <td className="font-mono text-[12px]">{pct}</td>
+                        <td>
+                          <span className={g.badge}>{g.letter}</span>
+                        </td>
+                        <td className="text-[var(--text-secondary)] text-[12px]">{s.remarks}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Performance Summary Cards */}
+            <div
+              style={{
+                marginTop: "18px",
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: "10px",
+                padding: "14px 18px",
+                borderRadius: "8px",
+                background: "var(--brand-soft-2)",
+                border: "1px solid var(--brand-border)",
+                textAlign: "center",
+              }}
+            >
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  Grand Total
+                </span>
+                <strong className="text-[15px] text-[var(--text-primary)]">
+                  {isAllAbsent ? "ABS" : `${scoredSum} / ${totalMax}`}
+                </strong>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  Percentage
+                </span>
+                <strong className="text-[15px] text-[var(--brand)]">
+                  {isAllAbsent ? "—" : `${percentage}%`}
+                </strong>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  Overall Grade
+                </span>
+                <strong className="text-[15px] text-[var(--success)]">
+                  {overallGrade}
+                </strong>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold block">
+                  Standing
+                </span>
+                <span className="status-pill success" style={{ display: "inline-block", marginTop: 2 }}>
+                  {resultStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* Signature Blocks */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginTop: "40px",
+                paddingTop: "16px",
+                borderTop: "1px dashed var(--border)",
+                fontSize: "11px",
+                color: "var(--text-muted)",
+              }}
+            >
+              <div style={{ textAlign: "center" }}>
+                <div style={{ height: 22 }} />
+                <span style={{ borderTop: "1px solid var(--border)", display: "block", paddingTop: 3 }}>
+                  Class Teacher
+                </span>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ height: 22 }} />
+                <span style={{ borderTop: "1px solid var(--border)", display: "block", paddingTop: 3 }}>
+                  Controller of Examinations
+                </span>
+              </div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ height: 22 }} />
+                <span style={{ borderTop: "1px solid var(--border)", display: "block", paddingTop: 3 }}>
+                  Principal & Head of School
+                </span>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div>
-            <h3 className="text-[12px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">
-              Hall Instructions & Protocols
-            </h3>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "18px",
-                fontSize: "12px",
-                color: "var(--text-muted)",
-                lineHeight: "1.6",
-              }}
-            >
-              <li>Students must report to {exam.venue} 15 minutes before commencement.</li>
-              <li>Calculators and smart watches are strictly prohibited unless specified.</li>
-              <li>Verified hall tickets must remain visible on the desk.</li>
-            </ul>
-          </div>
-
-          <div className="flex items-center gap-2" style={{ marginTop: "16px" }}>
-            <button
-              className="primary-button"
-              style={{ flex: 1 }}
-              onClick={() => onEnterMarks(exam.id)}
-            >
-              <Pencil size={14} />
-              Enter marks
-            </button>
-            <button
-              className="secondary-button text-[var(--danger)]"
-              onClick={() => onDelete(exam.id)}
-              title="Delete this exam"
-            >
-              <Trash2 size={14} />
-              Delete
-            </button>
-          </div>
+        {/* Drawer Footer */}
+        <div className="drawer-footer" style={{ padding: "14px 20px" }}>
+          <span className="text-xs text-[var(--text-muted)] font-mono">
+            Direct Email: {recipientEmail}
+          </span>
+          <button
+            type="button"
+            className="primary-button compact ml-auto"
+            onClick={handleSendEmail}
+            disabled={isSending}
+          >
+            <Send size={13} />
+            <span>{isSending ? "Dispatching…" : "Send to Student Email"}</span>
+          </button>
         </div>
       </aside>
     </>

@@ -27,6 +27,8 @@ export interface PaymentRecord {
   paid_at: string;
   receipt_no: string;
   reference?: string;
+  recipient_email?: string;
+  email_sent?: boolean;
 }
 
 export interface StudentFeeOverride {
@@ -36,9 +38,9 @@ export interface StudentFeeOverride {
   outstanding_fees: number;
 }
 
-const INVOICES_STORAGE_KEY = "ggs_erp_invoices_v4";
-const PAYMENTS_STORAGE_KEY = "ggs_erp_payments_v4";
-const STUDENT_FEES_STORAGE_KEY = "ggs_erp_student_fees_v4";
+const INVOICES_STORAGE_KEY = "ggs_erp_invoices_v5";
+const PAYMENTS_STORAGE_KEY = "ggs_erp_payments_v5";
+const STUDENT_FEES_STORAGE_KEY = "ggs_erp_student_fees_v5";
 
 // Initial seed invoices matching our Class 6-10 students
 function getSeedInvoices(): InvoiceRecord[] {
@@ -66,10 +68,10 @@ function getSeedInvoices(): InvoiceRecord[] {
       section: "B",
       due_date: "20 Sep 2026",
       total: 50000,
-      paid: 15000,
-      amount: 35000,
-      outstanding: 35000,
-      status: "Overdue",
+      paid: 25000,
+      amount: 25000,
+      outstanding: 25000,
+      status: "Due",
     },
     {
       id: "INV-2026-1126",
@@ -80,10 +82,10 @@ function getSeedInvoices(): InvoiceRecord[] {
       section: "A",
       due_date: "18 Sep 2026",
       total: 50000,
-      paid: 0,
-      amount: 50000,
-      outstanding: 50000,
-      status: "Overdue",
+      paid: 25000,
+      amount: 25000,
+      outstanding: 25000,
+      status: "Due",
     },
     {
       id: "INV-2026-1140",
@@ -215,7 +217,7 @@ function getSeedPayments(): PaymentRecord[] {
       invoice_id: "INV-2026-1099",
       student: "Vihaan Kapoor",
       studentId: "GKS-24211",
-      amount: 15000,
+      amount: 25000,
       method: "Cash",
       paid_at: "2026-09-26T11:20:00Z",
       receipt_no: "RCP/26-27/0003",
@@ -231,6 +233,83 @@ function getSeedPayments(): PaymentRecord[] {
       paid_at: "2026-09-27T16:40:00Z",
       receipt_no: "RCP/26-27/0004",
       reference: "POS-TXN-8849",
+    },
+    {
+      id: "PAY-005",
+      invoice_id: "INV-2026-1022",
+      student: "Ananya Rao",
+      studentId: "GKS-23104",
+      amount: 50000,
+      method: "UPI",
+      paid_at: "2026-04-10T09:00:00Z",
+      receipt_no: "RCP/26-27/0005",
+      reference: "UPI109283746190",
+    },
+    {
+      id: "PAY-006",
+      invoice_id: "INV-2026-1011",
+      student: "Aarav Mehta",
+      studentId: "GKS-24081",
+      amount: 50000,
+      method: "Bank transfer",
+      paid_at: "2026-05-15T11:00:00Z",
+      receipt_no: "RCP/26-27/0006",
+      reference: "UTR554210984321",
+    },
+    {
+      id: "PAY-007",
+      invoice_id: "INV-2026-1064",
+      student: "Sara Fernandes",
+      studentId: "GKS-24170",
+      amount: 50000,
+      method: "Card",
+      paid_at: "2026-06-12T14:00:00Z",
+      receipt_no: "RCP/26-27/0007",
+      reference: "POS-TXN-4910",
+    },
+    {
+      id: "PAY-008",
+      invoice_id: "INV-2026-1055",
+      student: "Arjun Menon",
+      studentId: "GKS-23277",
+      amount: 60000,
+      method: "Bank transfer",
+      paid_at: "2026-07-08T10:30:00Z",
+      receipt_no: "RCP/26-27/0008",
+      reference: "UTR778210334912",
+    },
+    {
+      id: "PAY-009",
+      invoice_id: "INV-2026-1035",
+      student: "Kabir Malhotra",
+      studentId: "GKS-23998",
+      amount: 60000,
+      method: "UPI",
+      paid_at: "2026-08-14T15:00:00Z",
+      receipt_no: "RCP/26-27/0009",
+      reference: "UPI661928301923",
+    },
+    {
+      id: "PAY-010",
+      invoice_id: "INV-2026-1078",
+      student: "Tanvi Deshmukh",
+      studentId: "GKS-24512",
+      amount: 60000,
+      method: "Card",
+      paid_at: "2026-09-20T16:00:00Z",
+      receipt_no: "RCP/26-27/0010",
+      reference: "POS-TXN-9021",
+    },
+    {
+      id: "PAY-011",
+      invoice_id: "INV-2026-1126",
+      student: "Mira Thomas",
+      studentId: "GKS-24306",
+      amount: 25000,
+      method: "Cash",
+      paid_at: "2026-10-05T12:00:00Z",
+      receipt_no: "RCP/26-27/0011",
+      reference: "CASH-CT-09",
     },
   ];
 }
@@ -336,6 +415,8 @@ export async function recordFeePayment({
   method,
   date,
   reference,
+  recipientEmail,
+  grade,
 }: {
   studentId?: string;
   studentName: string;
@@ -344,6 +425,8 @@ export async function recordFeePayment({
   method: string;
   date?: string;
   reference?: string;
+  recipientEmail?: string;
+  grade?: string;
 }): Promise<{
   success: boolean;
   receiptNo: string;
@@ -353,6 +436,7 @@ export async function recordFeePayment({
   isPaidInFull: boolean;
   invoice: InvoiceRecord;
   payment: PaymentRecord;
+  recipientEmail: string;
 }> {
   const invoices = getStoredInvoices();
   const payments = getStoredPayments();
@@ -377,17 +461,17 @@ export async function recordFeePayment({
     );
   }
 
-  // If no existing invoice found, create one
+  // If no existing invoice found, create one matching the grade fee policy
   if (!targetInvoice) {
-    const grade = "Grade 10";
-    const totalFee = getAnnualFeeForGrade(grade);
+    const studentGrade = grade || "Grade 6";
+    const totalFee = getAnnualFeeForGrade(studentGrade);
     const surname = studentName.split(" ").slice(-1)[0] || studentName;
     targetInvoice = {
       id: `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       studentId: studentId || `STU-${Date.now()}`,
       student: studentName.trim(),
       family: `${surname} family`,
-      grade,
+      grade: studentGrade,
       section: "A",
       due_date: "15 Oct 2026",
       total: totalFee,
@@ -420,6 +504,12 @@ export async function recordFeePayment({
   const receiptNo = `RCP/${receiptYear}/${String(receiptCount).padStart(4, "0")}`;
   const effectiveDate = date ? new Date(date).toISOString() : new Date().toISOString();
 
+  // Resolve recipient email
+  const targetEmail = (
+    recipientEmail?.trim() ||
+    `${targetInvoice.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`
+  ).toLowerCase();
+
   const newPayment: PaymentRecord = {
     id: `PAY-${Date.now()}`,
     invoice_id: targetInvoice.id,
@@ -430,6 +520,8 @@ export async function recordFeePayment({
     paid_at: effectiveDate,
     receipt_no: receiptNo,
     reference: reference || `VERIFIED-${Math.floor(100000 + Math.random() * 900000)}`,
+    recipient_email: targetEmail,
+    email_sent: true,
   };
 
   payments.unshift(newPayment);
@@ -452,6 +544,31 @@ export async function recordFeePayment({
   saveStoredInvoices(invoices);
   saveStoredPayments(payments);
   saveStudentFeeOverrides(overrides);
+
+  // Send official receipt email via API (non-blocking background dispatch)
+  void (async () => {
+    try {
+      await fetch("/api/receipt-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          receiptNo,
+          studentName: targetInvoice.student,
+          studentEmail: targetEmail,
+          invoiceId: targetInvoice.id,
+          amount: paymentAmount,
+          method: method || "Bank transfer",
+          date: effectiveDate,
+          reference: reference,
+          grade: targetInvoice.grade,
+          totalFee: targetInvoice.total,
+          remainingBalance: newOutstanding,
+        }),
+      }).catch(() => {});
+    } catch {
+      // background non-blocking
+    }
+  })();
 
   // Try background Supabase/API sync (non-blocking)
   void (async () => {
@@ -489,11 +606,12 @@ export async function recordFeePayment({
     isPaidInFull,
     invoice: targetInvoice,
     payment: newPayment,
+    recipientEmail: targetEmail,
   };
 }
 
 /** Get a student's full fee position (for pupil dashboard / student profile) */
-export function getPupilFeeSummary(identifier?: string | null): {
+export function getPupilFeeSummary(identifier?: string | null, studentGrade?: string): {
   summary: {
     billed: number;
     paid: number;
@@ -548,9 +666,27 @@ export function getPupilFeeSummary(identifier?: string | null): {
     );
   });
 
-  // If identifier is not matched or not provided, default to the first student's invoices
-  if (matched.length === 0 && invoices.length > 0) {
-    matched = [invoices[0]];
+  // If identifier is not matched or not provided, synthesize an invoice for this student using the grade fee policy
+  if (matched.length === 0) {
+    const grade = studentGrade || "Grade 6";
+    const totalFee = getAnnualFeeForGrade(grade);
+    const syntheticId = `INV-2026-${identifier ? identifier.slice(-4) : "1001"}`;
+    matched = [
+      {
+        id: syntheticId,
+        studentId: identifier || "STU-001",
+        student: identifier || "Student",
+        family: "Family",
+        grade,
+        section: "A",
+        due_date: "15 Oct 2026",
+        total: totalFee,
+        paid: 0,
+        amount: totalFee,
+        outstanding: totalFee,
+        status: "Due",
+      },
+    ];
   }
 
   const billed = matched.reduce((s, i) => s + (i.total || 0), 0);

@@ -58,7 +58,7 @@ export function FeePaymentDialog({
     setConfirming(false);
     setDone(false);
     setPaymentMode("full");
-    setInstallmentAmount(Math.min(outstanding, 15000).toString());
+    setInstallmentAmount(Math.round(outstanding / 2).toString());
   }, [open, invoiceId, outstanding]);
 
   const effectiveAmount = paymentMode === "full"
@@ -113,10 +113,6 @@ export function FeePaymentDialog({
     if (paymentMode === "installment") {
       if (!effectiveAmount || effectiveAmount <= 0) {
         setError("Enter a valid installment amount.");
-        return;
-      }
-      if (effectiveAmount < 15000 && outstanding >= 15000) {
-        setError("Minimum installment amount is ₹15,000 according to school policy.");
         return;
       }
       if (effectiveAmount > outstanding + 0.01) {
@@ -174,13 +170,13 @@ export function FeePaymentDialog({
             Pay {invoiceNo}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Pay online via UPI. Minimum installment payment is ₹15,000.
+            Pay online via UPI or card.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 px-5 py-5">
           {/* Payment Type Selection (Full vs Installment) */}
-          {outstanding > 15000 && (
+          {outstanding > 1000 && (
             <div className="flex rounded-xl p-1 bg-[var(--bg-raised)] border border-[var(--border)] gap-1">
               <button
                 type="button"
@@ -197,7 +193,7 @@ export function FeePaymentDialog({
                 type="button"
                 onClick={() => {
                   setPaymentMode("installment");
-                  if (!installmentAmount) setInstallmentAmount("15000");
+                  if (!installmentAmount) setInstallmentAmount(String(Math.round(outstanding / 2)));
                 }}
                 className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   paymentMode === "installment"
@@ -229,12 +225,12 @@ export function FeePaymentDialog({
               <div className="relative">
                 <input
                   type="number"
-                  min={15000}
+                  min={100}
                   max={outstanding}
                   step={500}
                   value={installmentAmount}
                   onChange={(e) => setInstallmentAmount(e.target.value)}
-                  placeholder="15000"
+                  placeholder={String(Math.round(outstanding / 2))}
                   className="w-full px-3 py-2 text-base font-semibold rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-[var(--brand)]"
                 />
               </div>
@@ -242,10 +238,10 @@ export function FeePaymentDialog({
                 <span className="text-[11px] text-[var(--text-muted)]">Presets:</span>
                 <button
                   type="button"
-                  onClick={() => setInstallmentAmount("15000")}
+                  onClick={() => setInstallmentAmount(String(Math.round(outstanding / 2)))}
                   className="px-2 py-0.5 rounded text-[11px] bg-[var(--bg-raised)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] font-medium border border-[var(--border)]"
                 >
-                  ₹15,000 (Min)
+                  50% ({rupees(Math.round(outstanding / 2))})
                 </button>
                 {outstanding >= 20000 && (
                   <button
@@ -266,9 +262,6 @@ export function FeePaymentDialog({
                   </button>
                 )}
               </div>
-              <p className="text-[11.5px] text-[var(--text-muted)]">
-                School policy: minimum installment payment is ₹15,000.
-              </p>
             </div>
           )}
 

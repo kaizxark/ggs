@@ -146,6 +146,7 @@ import {
   type RowId,
   type Settings,
   type Student,
+  getAnnualFeeForGrade,
 } from "../lib/school-data";
 import {
   recordClassAttendance,
@@ -2102,10 +2103,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                 </span>
                 <span className="skeleton-legend-item">
                   <span className="erp-skeleton erp-skeleton-dot" />
-                  <SkeletonText width={26} height={9} />
-                </span>
-                <span className="skeleton-legend-item">
-                  <span className="erp-skeleton erp-skeleton-dot" />
                   <SkeletonText width={38} height={9} />
                 </span>
               </>
@@ -2114,10 +2111,6 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                 <span>
                   <i className="legend-dot bg-[var(--success)]" />
                   Present
-                </span>
-                <span>
-                  <i className="legend-dot bg-[var(--warning)]" />
-                  Late
                 </span>
                 <span>
                   <i className="legend-dot bg-[var(--danger)]" />
@@ -2159,6 +2152,24 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                         stopOpacity={0}
                       />
                     </linearGradient>
+                    <linearGradient
+                      id="absentFill"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="var(--danger)"
+                        stopOpacity={0.14}
+                      />
+                      <stop
+                        offset="100%"
+                        stopColor="var(--danger)"
+                        stopOpacity={0}
+                      />
+                    </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} stroke="var(--border)" />
                   <XAxis
@@ -2184,7 +2195,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                     }}
                     formatter={(val: number, name: string) => [
                       `${val} students`,
-                      name === "present" ? "Present" : name === "late" ? "Late" : "Absent",
+                      name === "present" ? "Present" : "Absent",
                     ]}
                   />
                   <Area
@@ -2196,17 +2207,10 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                   />
                   <Area
                     type="monotone"
-                    dataKey="late"
-                    stroke="var(--warning)"
-                    strokeWidth={1.8}
-                    fill="none"
-                  />
-                  <Area
-                    type="monotone"
                     dataKey="absent"
                     stroke="var(--danger)"
                     strokeWidth={1.8}
-                    fill="none"
+                    fill="url(#absentFill)"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -2428,6 +2432,19 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   );
 }
 
+const DEFAULT_COHORT_CLASSES = [
+  { id: "class-g6-a", label: "Grade 6 — A", grade: "Grade 6", section: "A", teacher: "Neha Kulkarni" },
+  { id: "class-g6-b", label: "Grade 6 — B", grade: "Grade 6", section: "B", teacher: "Ravi Menon" },
+  { id: "class-g7-a", label: "Grade 7 — A", grade: "Grade 7", section: "A", teacher: "Sonia Joseph" },
+  { id: "class-g7-b", label: "Grade 7 — B", grade: "Grade 7", section: "B", teacher: "Arvind Iyer" },
+  { id: "class-g8-a", label: "Grade 8 — A", grade: "Grade 8", section: "A", teacher: "Meera Shah" },
+  { id: "class-g8-b", label: "Grade 8 — B", grade: "Grade 8", section: "B", teacher: "Daniel Thomas" },
+  { id: "class-g9-a", label: "Grade 9 — A", grade: "Grade 9", section: "A", teacher: "Karthik Rao" },
+  { id: "class-g9-b", label: "Grade 9 — B", grade: "Grade 9", section: "B", teacher: "Priya Nair" },
+  { id: "class-g10-a", label: "Grade 10 — A", grade: "Grade 10", section: "A", teacher: "Rohan Mehta" },
+  { id: "class-g10-b", label: "Grade 10 — B", grade: "Grade 10", section: "B", teacher: "Ananya Sen" },
+];
+
 function AttendanceView({ onBack }: { onBack: () => void }) {
   const currentUser = useCurrentUser();
   const isFacultyOrTeacher =
@@ -2446,48 +2463,57 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
     const list: Array<{ id: string; label: string; grade: string; section: string; teacher: string }> = [];
     const seen = new Set<string>();
 
-    for (const c of classAttendance) {
-      if (!seen.has(c.label)) {
-        seen.add(c.label);
-        const parts = c.label.split("—").map(p => p.trim());
-        const grade = parts[0] || "Grade 6";
-        const section = parts[1]?.replace(/^Section\s*/i, "").trim() || "A";
-        list.push({
-          id: String(c.id),
-          label: c.label,
-          grade,
-          section,
-          teacher: c.teacher || "Faculty",
-        });
-      }
-    }
-
-    // Also extract from enrolled students
-    for (const s of enrolledStudents) {
-      if (s.grade && s.section) {
-        const lbl = `${s.grade} — ${s.section}`;
-        if (!seen.has(lbl)) {
-          seen.add(lbl);
+    if (Array.isArray(classAttendance)) {
+      for (const c of classAttendance) {
+        if (!c || !c.label) continue;
+        if (!seen.has(c.label)) {
+          seen.add(c.label);
+          const parts = String(c.label).split("—").map(p => p.trim());
+          const grade = parts[0] || "Grade 6";
+          const section = parts[1]?.replace(/^Section\s*/i, "").trim() || "A";
           list.push({
-            id: `class-${s.grade.replace(/\s+/g, "").toLowerCase()}-${s.section.toLowerCase()}`,
-            label: lbl,
-            grade: s.grade,
-            section: s.section,
-            teacher: "Faculty",
+            id: String(c.id || `cls-${c.label}`),
+            label: c.label,
+            grade,
+            section,
+            teacher: c.teacher || "Faculty",
           });
         }
       }
     }
 
-    return list;
+    // Also extract from enrolled students
+    if (Array.isArray(enrolledStudents)) {
+      for (const s of enrolledStudents) {
+        if (s && s.grade && s.section) {
+          const lbl = `${s.grade} — ${s.section}`;
+          if (!seen.has(lbl)) {
+            seen.add(lbl);
+            list.push({
+              id: `class-${s.grade.replace(/\s+/g, "").toLowerCase()}-${s.section.toLowerCase()}`,
+              label: lbl,
+              grade: s.grade,
+              section: s.section,
+              teacher: "Faculty",
+            });
+          }
+        }
+      }
+    }
+
+    return list.length > 0 ? list : DEFAULT_COHORT_CLASSES;
   }, [classAttendance, enrolledStudents]);
 
   const [selectedClassId, setSelectedClassId] = useState<string>(() => {
-    return availableClasses[0]?.id || "";
+    return availableClasses[0]?.id || "class-g6-a";
   });
 
   const currentClass = useMemo(() => {
-    return availableClasses.find(c => c.id === selectedClassId) || availableClasses[0];
+    return (
+      availableClasses.find(c => c && c.id === selectedClassId) ||
+      availableClasses[0] ||
+      DEFAULT_COHORT_CLASSES[0]
+    );
   }, [availableClasses, selectedClassId]);
 
   // Indian standard date helpers
@@ -2613,26 +2639,21 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
     toast.info(`Marked all ${classStudents.length} students as ${status.toUpperCase()}`);
   };
 
-  // Live tallies
+  // Live tallies (strictly binary: Present vs Absent)
   const counts = useMemo(() => {
     let present = 0;
     let absent = 0;
-    let late = 0;
-    let leave = 0;
 
     for (const s of classStudents) {
       const st = attendanceMap[s.id]?.status || "present";
       if (st === "present") present++;
-      else if (st === "absent") absent++;
-      else if (st === "late") late++;
-      else if (st === "leave") leave++;
+      else absent++;
     }
 
     const total = classStudents.length;
-    const attending = present + late;
-    const pct = total > 0 ? Math.round((attending / total) * 1000) / 10 : 0;
+    const pct = total > 0 ? Math.round((present / total) * 1000) / 10 : 0;
 
-    return { present, absent, late, leave, total, pct };
+    return { present, absent, total, pct };
   }, [classStudents, attendanceMap]);
 
   // Search filter inside register
@@ -2681,14 +2702,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // Overview metrics
+  // Overview metrics (strictly binary: Present vs Absent)
   const latest = dailyAttendance[dailyAttendance.length - 1];
   const latestPresent = latest?.present ?? 0;
   const latestAbsent = latest?.absent ?? 0;
-  const latestLate = latest?.late ?? 0;
-  const latestMarked = latest
-    ? latestPresent + latestAbsent + latestLate + (latest.leave ?? 0)
-    : 0;
+  const latestMarked = latest ? latestPresent + latestAbsent : 0;
   const latestPct =
     latestMarked > 0
       ? Math.round((latestPresent / latestMarked) * 1000) / 10
@@ -2698,7 +2716,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   ).length;
   const presentSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.present) : undefined;
   const absentSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.absent) : undefined;
-  const lateSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.late) : undefined;
   const classPager = usePagination(classAttendance);
   const pageClasses = classPager.pageRows;
 
@@ -2862,17 +2879,17 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                 </div>
                 <div>
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
-                    {dayOfWeek} Timetable · {currentClass.label}
+                    {dayOfWeek} Timetable · {currentClass?.label || "Grade 6 — A"}
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                     {classPeriods.length > 0 ? (
                       <>
                         Active Period: <span style={{ color: "var(--brand-strong)", fontWeight: 500 }}>
                           {classPeriods.find(p => p.period === selectedPeriod)?.subject || "Daily Roll Call"} ({classPeriods.find(p => p.period === selectedPeriod)?.time || "08:00 – 08:45"})
-                        </span> · Faculty in charge: {currentClass.teacher}
+                        </span> · Faculty in charge: {currentClass?.teacher || "Faculty"}
                       </>
                     ) : (
-                      `Cohort handled by ${currentClass.teacher}`
+                      `Cohort handled by ${currentClass?.teacher || "Faculty"}`
                     )}
                   </div>
                 </div>
@@ -2894,14 +2911,14 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* Live Metrics Grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+          {/* Live Metrics Grid (Strictly Binary: Present vs Absent) */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
             <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500 }}>Enrolled Pupils</div>
               <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0" }}>
                 {counts.total}
               </div>
-              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>{currentClass.label} cohort</div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>{currentClass?.label || "Grade 6 — A"} cohort</div>
             </div>
 
             <div className="metric-card">
@@ -2921,31 +2938,9 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                 Absent
               </div>
               <div style={{ fontSize: "26px", fontWeight: 700, color: "#ff453a", margin: "4px 0" }}>
-                {counts.absent}
+                {counts.absent} <span style={{ fontSize: "14px", fontWeight: 500, opacity: 0.85 }}>({counts.total > 0 ? Math.round((counts.absent / counts.total) * 1000) / 10 : 0}%)</span>
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Marked absent</div>
-            </div>
-
-            <div className="metric-card">
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ff9f0a" }} />
-                Late Arrival
-              </div>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "#ff9f0a", margin: "4px 0" }}>
-                {counts.late}
-              </div>
-              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Arrived with delay</div>
-            </div>
-
-            <div className="metric-card">
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#bf5af2" }} />
-                On Leave
-              </div>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "#bf5af2", margin: "4px 0" }}>
-                {counts.leave}
-              </div>
-              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Approved leave</div>
             </div>
           </div>
 
@@ -2953,7 +2948,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
           <div className="panel table-panel">
             <div className="panel-header">
               <div>
-                <h2 className="panel-title">Roll Call Register · {currentClass.label}</h2>
+                <h2 className="panel-title">Roll Call Register · {currentClass?.label || "Grade 6 — A"}</h2>
                 <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
                   Select attendance status for each pupil. Changes are saved to the school database.
                 </p>
@@ -3097,58 +3092,6 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                                 <X size={12} />
                                 Absent
                               </button>
-
-                              {/* Late */}
-                              <button
-                                type="button"
-                                onClick={() => setStudentStatus(String(student.id), "late")}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "4px",
-                                  padding: "5px 10px",
-                                  borderRadius: "8px",
-                                  fontSize: "12px",
-                                  fontWeight: curStatus === "late" ? 700 : 500,
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                  background: curStatus === "late" ? "rgba(255,159,10,0.2)" : "rgba(255,255,255,0.03)",
-                                  borderColor: curStatus === "late" ? "rgba(255,159,10,0.6)" : "var(--border)",
-                                  borderWidth: "1px",
-                                  borderStyle: "solid",
-                                  color: curStatus === "late" ? "#ff9f0a" : "var(--text-muted)",
-                                  boxShadow: curStatus === "late" ? "0 0 10px rgba(255,159,10,0.25)" : "none",
-                                }}
-                              >
-                                <Clock3 size={12} />
-                                Late
-                              </button>
-
-                              {/* Leave */}
-                              <button
-                                type="button"
-                                onClick={() => setStudentStatus(String(student.id), "leave")}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "4px",
-                                  padding: "5px 10px",
-                                  borderRadius: "8px",
-                                  fontSize: "12px",
-                                  fontWeight: curStatus === "leave" ? 700 : 500,
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                  background: curStatus === "leave" ? "rgba(175,82,222,0.2)" : "rgba(255,255,255,0.03)",
-                                  borderColor: curStatus === "leave" ? "rgba(175,82,222,0.6)" : "var(--border)",
-                                  borderWidth: "1px",
-                                  borderStyle: "solid",
-                                  color: curStatus === "leave" ? "#bf5af2" : "var(--text-muted)",
-                                  boxShadow: curStatus === "leave" ? "0 0 10px rgba(175,82,222,0.25)" : "none",
-                                }}
-                              >
-                                <CalendarDays size={12} />
-                                Leave
-                              </button>
                             </div>
                           </td>
                           <td>
@@ -3190,7 +3133,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
               }}
             >
               <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                Summary: <strong style={{ color: "#30d158" }}>{counts.present} Present</strong> · <strong style={{ color: "#ff453a" }}>{counts.absent} Absent</strong> · <strong style={{ color: "#ff9f0a" }}>{counts.late} Late</strong> · <strong style={{ color: "#bf5af2" }}>{counts.leave} Leave</strong> ({counts.pct}% attendance)
+                Summary: <strong style={{ color: "#30d158" }}>{counts.present} Present</strong> · <strong style={{ color: "#ff453a" }}>{counts.absent} Absent</strong> ({counts.pct}% attendance)
               </div>
 
               <button
@@ -3235,11 +3178,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                   positive={false}
                 />
                 <MetricBlock
-                  label="Late arrivals"
-                  value={`${latestLate}`}
-                  comparison={`${latestLate} recorded today`}
-                  icon={Clock3}
-                  spark={lateSpark}
+                  label="School Attendance"
+                  value={`${latestPct}%`}
+                  comparison={`${latestMarked > 0 ? latestPresent.toLocaleString("en-IN") : 0} of ${latestMarked.toLocaleString("en-IN")} attending`}
+                  icon={TrendingUp}
+                  spark={presentSpark}
                 />
               </>
             )}
@@ -3288,58 +3231,62 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                   {classAttendanceLoading ? (
                     <SkeletonTableRows rows={5} columns={6} />
                   ) : (
-                    pageClasses.map(row => (
-                      <tr key={row.label}>
-                        <td>
-                          <span className="font-medium text-[var(--text-primary)]">
-                            {row.label}
-                          </span>
-                        </td>
-                        <td className="muted-cell">
-                          {row.present} / {row.total}
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <span className="progress-bar">
-                              <span
-                                style={{
-                                  width: `${row.value}%`,
-                                  background:
-                                    row.value < 92
-                                      ? "var(--warning)"
-                                      : "var(--brand)",
-                                }}
-                              />
+                    pageClasses.map((row, idx) => {
+                      if (!row) return null;
+                      const rowLabel = row.label || `Class ${idx + 1}`;
+                      return (
+                        <tr key={row.id || rowLabel || idx}>
+                          <td>
+                            <span className="font-medium text-[var(--text-primary)]">
+                              {rowLabel}
                             </span>
-                            <span className="font-medium text-[var(--text-hover)]">
-                              {row.value}%
+                          </td>
+                          <td className="muted-cell">
+                            {row.present ?? 0} / {row.total ?? 0}
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <span className="progress-bar">
+                                <span
+                                  style={{
+                                    width: `${row.value ?? 0}%`,
+                                    background:
+                                      (row.value ?? 0) < 92
+                                        ? "var(--warning)"
+                                        : "var(--brand)",
+                                  }}
+                                />
+                              </span>
+                              <span className="font-medium text-[var(--text-hover)]">
+                                {row.value ?? 0}%
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${(row.value ?? 0) < 92 ? "warning" : "success"}`}
+                            >
+                              {(row.value ?? 0) < 92 ? "Follow-up" : "On track"}
                             </span>
-                          </div>
-                        </td>
-                        <td>
-                          <span
-                            className={`status-pill ${row.value < 92 ? "warning" : "success"}`}
-                          >
-                            {row.value < 92 ? "Follow-up" : "On track"}
-                          </span>
-                        </td>
-                        <td className="muted-cell">{row.teacher}</td>
-                        <td style={{ textAlign: "right" }}>
-                          <button
-                            className="secondary-button compact"
-                            style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "11.5px", padding: "4px 10px" }}
-                            onClick={() => {
-                              const found = availableClasses.find(c => c.label === row.label);
-                              if (found) setSelectedClassId(found.id);
-                              setActiveTab("register");
-                            }}
-                          >
-                            <ClipboardCheck size={12} />
-                            Take Register
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="muted-cell">{row.teacher || "Faculty"}</td>
+                          <td style={{ textAlign: "right" }}>
+                            <button
+                              className="secondary-button compact"
+                              style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "11.5px", padding: "4px 10px" }}
+                              onClick={() => {
+                                const found = availableClasses.find(c => c && c.label === rowLabel);
+                                if (found) setSelectedClassId(found.id);
+                                setActiveTab("register");
+                              }}
+                            >
+                              <ClipboardCheck size={12} />
+                              Take Register
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -3368,6 +3315,18 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
   const [paymentReference, setPaymentReference] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [viewingReceipt, setViewingReceipt] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (recordStudent) {
+      const email =
+        (recordStudent as any).email ||
+        (recordStudent as any).primary_email ||
+        `${recordStudent.name.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`;
+      setRecipientEmail(email);
+    }
+  }, [recordStudent]);
 
   const matchingStudents = useMemo(() => {
     if (!studentSearchQuery.trim()) return [];
@@ -3382,13 +3341,30 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       return invoices.find(i => i.id === selectedInvoiceId) || null;
     }
     if (recordStudent) {
-      return (
-        invoices.find(
-          i =>
-            (recordStudent.id && i.student_id === recordStudent.id) ||
-            i.student.toLowerCase() === recordStudent.name.toLowerCase()
-        ) || null
+      const found = invoices.find(
+        i =>
+          (recordStudent.id && (i.student_id === recordStudent.id || (i as any).studentId === recordStudent.id)) ||
+          i.student.toLowerCase() === recordStudent.name.toLowerCase()
       );
+      if (found) return found;
+
+      // Auto-synthesize invoice for this student using their exact grade fee policy!
+      const totalFee = getAnnualFeeForGrade(recordStudent.grade);
+      return {
+        id: `INV-2026-${String(recordStudent.id).slice(-4) || "1201"}`,
+        student_id: String(recordStudent.id),
+        studentId: String(recordStudent.id),
+        student: recordStudent.name,
+        family: `${recordStudent.name.split(" ").slice(-1)[0] || recordStudent.name} family`,
+        grade: recordStudent.grade || "Grade 6",
+        section: recordStudent.section || "A",
+        due_date: "15 Oct 2026",
+        total: totalFee,
+        paid: 0,
+        amount: totalFee,
+        outstanding: totalFee,
+        status: "Due" as const,
+      };
     }
     return null;
   }, [invoices, selectedInvoiceId, recordStudent]);
@@ -3396,7 +3372,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (selectedInvoice) {
       const balance = Number(selectedInvoice.outstanding ?? selectedInvoice.amount ?? 0);
-      setPaymentAmount(String(balance > 0 ? balance : 15000));
+      setPaymentAmount(balance > 0 ? String(balance) : "");
     }
   }, [selectedInvoice]);
 
@@ -3570,7 +3546,10 @@ function FinanceView({ onBack }: { onBack: () => void }) {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Fee mix</h2>
+              <h2 className="panel-title">Fee structure</h2>
+              <p className="panel-subtitle" style={{ margin: "2px 0 0", fontSize: "12px" }}>
+                Unified tuition fee (no separate admission or miscellaneous fees).
+              </p>
             </div>
           </div>
           <div className="fee-mix">
@@ -3628,6 +3607,10 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   </strong>
                 </div>
               ))}
+              <div style={{ marginTop: "10px", padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: "8px", fontSize: "11px", color: "var(--text-muted)" }}>
+                <div>Class 6–8: <strong className="text-[var(--text-primary)]">₹50,000 / year</strong></div>
+                <div style={{ marginTop: "2px" }}>Class 9–10: <strong className="text-[var(--text-primary)]">₹60,000 / year</strong></div>
+              </div>
             </div>
           </div>
         </section>
@@ -3756,49 +3739,69 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <th>Student</th>
                 <th>Invoice</th>
                 <th>Payment Date</th>
-                <th>Method</th>
+                <th>Method & Ref</th>
                 <th>Amount</th>
-                <th className="text-right">Verification</th>
+                <th>Emailed To</th>
+                <th className="text-right">Receipt Action</th>
               </tr>
             </thead>
             <tbody>
               {paymentsLoading ? (
-                <SkeletonTableRows rows={4} columns={7} />
+                <SkeletonTableRows rows={4} columns={8} />
               ) : payments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-xs text-[var(--text-muted)]">
+                  <td colSpan={8} className="py-6 text-center text-xs text-[var(--text-muted)]">
                     No payment receipts logged yet. Recorded payments will appear here with verified receipt numbers.
                   </td>
                 </tr>
               ) : (
-                payments.slice(0, 10).map((pay) => (
-                  <tr key={pay.id}>
-                    <td className="font-mono text-xs text-[var(--brand)] font-semibold">
-                      {String((pay as any).receipt_no || "Receipt")}
-                    </td>
-                    <td className="font-medium text-[var(--text-primary)]">
-                      {pay.student}
-                    </td>
-                    <td className="muted-cell">{pay.invoice_id || "—"}</td>
-                    <td className="muted-cell">
-                      {pay.paid_at ? new Date(pay.paid_at).toLocaleDateString("en-IN") : "—"}
-                    </td>
-                    <td>
-                      <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-                        {pay.method || "Verified"}
-                      </span>
-                    </td>
-                    <td className="font-semibold text-emerald-400">
-                      ₹{pay.amount.toLocaleString("en-IN")}
-                    </td>
-                    <td className="text-right">
-                      <span className="status-pill success text-[11px]">
-                        <Check size={11} className="mr-0.5 inline" />
-                        Verified
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                payments.slice(0, 10).map((pay) => {
+                  const targetEmail = (pay as any).recipient_email || `${pay.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`;
+                  return (
+                    <tr key={pay.id}>
+                      <td className="font-mono text-xs text-[var(--brand)] font-semibold">
+                        {String((pay as any).receipt_no || "Receipt")}
+                      </td>
+                      <td className="font-medium text-[var(--text-primary)]">
+                        {pay.student}
+                      </td>
+                      <td className="muted-cell">{pay.invoice_id || "—"}</td>
+                      <td className="muted-cell">
+                        {pay.paid_at ? new Date(pay.paid_at).toLocaleDateString("en-IN") : "—"}
+                      </td>
+                      <td>
+                        <div className="text-xs text-[var(--text-secondary)]">
+                          <span>{pay.method || "Verified"}</span>
+                          {(pay as any).reference && (
+                            <span className="block text-[11px] text-[var(--text-muted)] font-mono">
+                              {(pay as any).reference}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="font-semibold text-emerald-400">
+                        ₹{pay.amount.toLocaleString("en-IN")}
+                      </td>
+                      <td>
+                        <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-mono">
+                          <Mail size={12} className="text-indigo-400" />
+                          {targetEmail}
+                        </span>
+                      </td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          className="secondary-button compact"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "11.5px", padding: "4px 9px" }}
+                          onClick={() => setViewingReceipt(pay)}
+                        >
+                          <FileText size={12} />
+                          View Receipt
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -3877,7 +3880,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                           onClick={() => {
                             setRecordStudent(stu);
                             setStudentSearchQuery("");
-                            if (!paymentAmount) setPaymentAmount("15000");
                           }}
                           style={{
                             width: "100%",
@@ -3931,25 +3933,35 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               </div>
             )}
 
+            {/* Row 1: Amount (Left) & Payment Reference (Right next to Amount) */}
             <label>
               Amount (₹) *
               <input
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
-                placeholder="₹ 15,000"
+                placeholder={selectedInvoice ? `₹ ${selectedInvoice.amount.toLocaleString("en-IN")}` : "e.g. 50000"}
               />
               <span className="text-[11px] text-[var(--text-muted)] mt-1 block">
                 Minimum installment amount is ₹15,000.
               </span>
               {selectedInvoice && selectedInvoice.amount > 0 && (
-                <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
                   <button
                     type="button"
                     className="tiny-action"
                     onClick={() => setPaymentAmount(String(selectedInvoice.amount))}
                   >
-                    Full: ₹{selectedInvoice.amount.toLocaleString("en-IN")}
+                    Full due: ₹{selectedInvoice.amount.toLocaleString("en-IN")}
                   </button>
+                  {selectedInvoice.amount >= 20000 && (
+                    <button
+                      type="button"
+                      className="tiny-action"
+                      onClick={() => setPaymentAmount(String(Math.round(selectedInvoice.amount / 2)))}
+                    >
+                      50%: ₹{Math.round(selectedInvoice.amount / 2).toLocaleString("en-IN")}
+                    </button>
+                  )}
                   {selectedInvoice.amount > 15000 && (
                     <button
                       type="button"
@@ -3963,6 +3975,19 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               )}
             </label>
 
+            <label>
+              Payment Reference / UTR (Optional)
+              <input
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                placeholder="e.g. UTR / Transaction ID / Slip No"
+              />
+              <span className="text-[11px] text-[var(--text-muted)] mt-1.5 block">
+                Recorded on receipt & payment ledger.
+              </span>
+            </label>
+
+            {/* Row 2: Payment Method (Left) & Recipient Email (Right) */}
             <label>
               Payment Method *
               <FormSelect
@@ -3979,16 +4004,21 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             </label>
 
             <label>
-              Payment Reference / UTR (Optional)
+              Receipt Email *
               <input
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="e.g. UTR / Transaction ID / Slip No"
+                type="email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                placeholder="registered.student@example.com"
               />
+              <span className="text-[11px] text-[var(--text-muted)] mt-1.5 block">
+                Official payment receipt will be sent to this email.
+              </span>
             </label>
 
-            <label>
-              Payment Date *
+            {/* Row 3: Payment Date - Spans full width so dropdowns are spacious and visible */}
+            <label style={{ gridColumn: "span 2" }}>
+              Payment Date (DD-MM-YYYY) *
               <DateDropdowns
                 value={paymentDate}
                 onChange={setPaymentDate}
@@ -4008,6 +4038,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 setStudentSearchQuery("");
                 setPaymentAmount("");
                 setPaymentReference("");
+                setRecipientEmail("");
               }}
             >
               Cancel
@@ -4042,6 +4073,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     method: paymentMethod,
                     date: paymentDate,
                     reference: paymentReference,
+                    recipientEmail: recipientEmail.trim(),
                   });
 
                   setShowDialog(false);
@@ -4050,14 +4082,15 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   setStudentSearchQuery("");
                   setPaymentAmount("");
                   setPaymentReference("");
+                  setRecipientEmail("");
 
                   if (res.isPaidInFull) {
                     toast.success("Fees Covered in Full! 🎉", {
-                      description: `₹${numAmount.toLocaleString("en-IN")} received for ${targetName}. Receipt: ${res.receiptNo}. Account is completely settled.`,
+                      description: `₹${numAmount.toLocaleString("en-IN")} received for ${targetName}. Receipt: ${res.receiptNo} generated and emailed to ${res.recipientEmail}. Account settled.`,
                     });
                   } else {
-                    toast.success("Payment Recorded Successfully!", {
-                      description: `₹${numAmount.toLocaleString("en-IN")} logged for ${targetName}. Receipt: ${res.receiptNo}. Remaining due: ₹${res.newBalance.toLocaleString("en-IN")}.`,
+                    toast.success("Payment Recorded & Receipt Sent! ✉️", {
+                      description: `₹${numAmount.toLocaleString("en-IN")} logged for ${targetName}. Receipt: ${res.receiptNo} emailed to ${res.recipientEmail}. Remaining: ₹${res.newBalance.toLocaleString("en-IN")}.`,
                     });
                   }
                 } catch (e) {
@@ -4067,8 +4100,89 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 }
               }}
             >
-              Record payment
+              Record payment & Send Receipt
             </button>
+          </div>
+        </AppDialog>
+      )}
+
+      {viewingReceipt && (
+        <AppDialog
+          title={`Official Payment Receipt · ${viewingReceipt.receipt_no || "Receipt"}`}
+          description="Global Kids School verified collection receipt."
+          onClose={() => setViewingReceipt(null)}
+        >
+          <div style={{ padding: "4px 0", fontSize: "13px" }}>
+            <div
+              style={{
+                background: "rgba(255, 255, 255, 0.03)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "16px",
+                marginBottom: "16px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-primary)" }}>Global Kids School</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "11.5px", color: "var(--text-muted)" }}>Tumakuru Campus, Karnataka · Official ERP Ledger</p>
+                </div>
+                <span className="status-pill success text-xs font-mono font-semibold">
+                  {viewingReceipt.receipt_no}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12px", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                <div>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Student Name</span>
+                  <strong className="text-[var(--text-primary)]">{viewingReceipt.student}</strong>
+                </div>
+                <div>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Invoice Ref</span>
+                  <span className="font-mono text-[var(--text-secondary)]">{viewingReceipt.invoice_id || "INV-2026-FEE"}</span>
+                </div>
+                <div>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Date of Payment</span>
+                  <span>{viewingReceipt.paid_at ? new Date(viewingReceipt.paid_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
+                </div>
+                <div>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Payment Method</span>
+                  <span>{viewingReceipt.method || "Verified Collection"}</span>
+                </div>
+                {viewingReceipt.reference && (
+                  <div style={{ gridColumn: "span 2" }}>
+                    <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Reference / UTR</span>
+                    <span className="font-mono text-xs text-[var(--brand)]">{viewingReceipt.reference}</span>
+                  </div>
+                )}
+                <div style={{ gridColumn: "span 2" }}>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Receipt Dispatched To</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-indigo-400 font-mono">
+                    <Mail size={12} />
+                    {viewingReceipt.recipient_email || `${viewingReceipt.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16, padding: "12px 14px", background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#10b981" }}>Amount Paid & Verified:</span>
+                <strong style={{ fontSize: "20px", fontWeight: 800, color: "#10b981" }}>₹{Number(viewingReceipt.amount || 0).toLocaleString("en-IN")}</strong>
+              </div>
+            </div>
+
+            <div className="dialog-actions">
+              <button className="secondary-button" onClick={() => setViewingReceipt(null)}>
+                Close
+              </button>
+              <button
+                className="primary-button"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                onClick={() => window.print()}
+              >
+                <Printer size={14} />
+                Print / Save Receipt
+              </button>
+            </div>
           </div>
         </AppDialog>
       )}
@@ -4801,10 +4915,7 @@ function AnalyticsView({
   const latestAttendance = analyticsAttendance[analyticsAttendance.length - 1];
   const latestPresent = latestAttendance?.present ?? 0;
   const latestMarked = latestAttendance
-    ? latestAttendance.present +
-      latestAttendance.absent +
-      latestAttendance.late +
-      latestAttendance.leave
+    ? latestAttendance.present + latestAttendance.absent
     : 0;
   const attendancePct =
     latestMarked > 0

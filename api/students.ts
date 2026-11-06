@@ -687,12 +687,7 @@ function enrichWithStats(
     const entry = tally.get(id) ?? { present: 0, total: 0 };
     const status = String(row.status ?? "");
     entry.total += 1;
-    if (
-      status === "present" ||
-      status === "late" ||
-      status === "half_day" ||
-      status === "leave"
-    ) {
+    if (status === "present" || status === "leave") {
       entry.present += 1;
     }
     tally.set(id, entry);
