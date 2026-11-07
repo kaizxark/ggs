@@ -217,7 +217,7 @@ function saveLocalTimetables(timetables: ClassTimetable[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(TIMETABLES_STORAGE_KEY, JSON.stringify(timetables));
-    notifyDataChanged("timetables");
+    notifyDataChanged();
   } catch {
     // ignore
   }

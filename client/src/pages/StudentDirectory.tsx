@@ -1583,6 +1583,7 @@ function StudentDialog({
             layoutId="addStudentModalTab"
             value={activeTab}
             buttonClassName="flex-1"
+            indicatorVariant="brand"
             onChange={(val) => setActiveTab(val as typeof activeTab)}
             options={[
               {

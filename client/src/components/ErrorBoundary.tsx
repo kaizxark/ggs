@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import { AlertTriangle, RefreshCw, RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
 
 interface Props {
@@ -14,11 +14,10 @@ interface State {
 /**
  * Crash screen.
  *
- * This used to be styled with shadcn theme tokens (`bg-background`,
- * `text-destructive`, `bg-muted`) that are not defined anywhere in this
- * stylesheet, so a crash rendered as unstyled text on a white page — the worst
- * possible moment to discover the theme variables do not exist. It now uses the
- * same palette as the rest of the app.
+ * Catches runtime crashes and stale-chunk dynamic import failures gracefully.
+ * When a new deployment occurs, the browser tab may try to fetch a chunk hash
+ * that was replaced on the server. In that case, this boundary automatically
+ * triggers a page refresh to load the latest deployment bundle seamlessly.
  */
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -30,8 +29,33 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error) {
+    const msg = error.message || "";
+    const isChunkError =
+      /dynamically imported module/i.test(msg) ||
+      /failed to fetch/i.test(msg) ||
+      /importing a module script failed/i.test(msg) ||
+      /error loading dynamically imported module/i.test(msg);
+
+    if (isChunkError && typeof window !== "undefined") {
+      const key = "error_boundary_chunk_reload";
+      const last = window.sessionStorage.getItem(key);
+      const now = Date.now();
+      if (!last || now - Number(last) > 8000) {
+        window.sessionStorage.setItem(key, String(now));
+        window.location.reload();
+      }
+    }
+  }
+
   render() {
     if (this.state.hasError) {
+      const msg = this.state.error?.message || "";
+      const isChunkError =
+        /dynamically imported module/i.test(msg) ||
+        /failed to fetch/i.test(msg) ||
+        /importing a module script failed/i.test(msg);
+
       return (
         <div
           className="flex min-h-screen items-center justify-center p-8"
@@ -45,11 +69,12 @@ class ErrorBoundary extends Component<Props, State> {
               <AlertTriangle size={44} className="mb-5" style={{ color: "var(--danger)" }} />
 
               <h2 className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>
-                Something went wrong
+                {isChunkError ? "New version deployed" : "Something went wrong"}
               </h2>
               <p className="mt-2 mb-6 text-[13.5px]" style={{ color: "var(--text-muted)" }}>
-                The dashboard hit an unexpected error and stopped. Reloading
-                usually clears it.
+                {isChunkError
+                  ? "A new update to Global Kids School ERP was deployed. Reloading the page will load the latest version."
+                  : "The dashboard hit an unexpected error and stopped. Reloading usually clears it."}
               </p>
 
               {this.state.error?.message && (
@@ -67,14 +92,20 @@ class ErrorBoundary extends Component<Props, State> {
               )}
 
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.sessionStorage.removeItem("error_boundary_chunk_reload");
+                    window.sessionStorage.removeItem("page-has-been-force-refreshed");
+                    window.location.reload();
+                  }
+                }}
                 className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 font-semibold transition"
+                  "flex cursor-pointer items-center gap-2 rounded-lg px-5 py-2.5 font-semibold transition"
                 )}
                 style={{ background: "var(--brand)", color: "#ffffff" }}
               >
-                <RotateCcw size={16} />
-                Reload dashboard
+                {isChunkError ? <RefreshCw size={16} /> : <RotateCcw size={16} />}
+                {isChunkError ? "Update & Reload" : "Reload dashboard"}
               </button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { ComponentType, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "./pages/NotFound";
@@ -7,9 +7,43 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useSession } from "./lib/supabase";
 
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Login = lazy(() => import("./pages/Login"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+function lazyWithRetry<T extends ComponentType<any>>(
+  componentImport: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    const pageHasBeenForceRefreshed =
+      typeof window !== "undefined"
+        ? window.sessionStorage.getItem("page-has-been-force-refreshed")
+        : null;
+
+    try {
+      const component = await componentImport();
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem("page-has-been-force-refreshed");
+      }
+      return component;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isChunkError =
+        /dynamically imported module/i.test(message) ||
+        /failed to fetch/i.test(message) ||
+        /importing a module script failed/i.test(message) ||
+        /error loading dynamically imported module/i.test(message);
+
+      if (isChunkError && typeof window !== "undefined" && !pageHasBeenForceRefreshed) {
+        window.sessionStorage.setItem("page-has-been-force-refreshed", "true");
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+
+      throw error;
+    }
+  });
+}
+
+const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"));
+const Login = lazyWithRetry(() => import("./pages/Login"));
+const ResetPassword = lazyWithRetry(() => import("./pages/ResetPassword"));
 
 function AuthSplash() {
   return (

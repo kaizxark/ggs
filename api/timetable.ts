@@ -137,7 +137,20 @@ const STANDARD_CLASSROOMS: ClassroomRecord[] = [
   { id: "cls-10b", label: "Grade 10 — B", grade: "10", section: "B", room: "Room 302", classTeacherName: "Ananya Sen" },
 ];
 
-const STANDARD_STAFF: Json[] = [
+interface StaffRecord {
+  id: string;
+  name: string;
+  department: string;
+  designation: string;
+}
+
+interface SubjectRecord {
+  id: string;
+  name: string;
+  code: string;
+}
+
+const STANDARD_STAFF: StaffRecord[] = [
   { id: "STF-001", name: "Neha Kulkarni", department: "Science", designation: "Class Teacher" },
   { id: "STF-002", name: "Ravi Menon", department: "Physics", designation: "Senior Faculty" },
   { id: "STF-003", name: "Sonia Joseph", department: "English", designation: "Language Faculty" },
@@ -152,7 +165,7 @@ const STANDARD_STAFF: Json[] = [
   { id: "STF-012", name: "Suresh Patil", department: "Library", designation: "Librarian" },
 ];
 
-const STANDARD_SUBJECTS: Json[] = [
+const STANDARD_SUBJECTS: SubjectRecord[] = [
   { id: "SUB-001", name: "Mathematics", code: "MATH" },
   { id: "SUB-002", name: "Science", code: "SCI" },
   { id: "SUB-003", name: "English", code: "ENG" },
@@ -170,7 +183,7 @@ const STANDARD_SUBJECTS: Json[] = [
 async function loadClassrooms(orgId: string): Promise<ClassroomRecord[]> {
   try {
     const rows = await restRows<Json>("classrooms", "select=*");
-    const filtered = rows
+    const filtered: ClassroomRecord[] = rows
       .filter((row) => !row.organisation_id || String(row.organisation_id) === orgId)
       .map((row) => {
         const grade = String(row.grade ?? "").trim();
@@ -212,10 +225,10 @@ async function loadClassrooms(orgId: string): Promise<ClassroomRecord[]> {
   }
 }
 
-async function loadStaff(orgId: string): Promise<Json[]> {
+async function loadStaff(orgId: string): Promise<StaffRecord[]> {
   try {
     const rows = await restRows<Json>("staff", "select=*");
-    const filtered = rows
+    const filtered: StaffRecord[] = rows
       .filter((row) => !row.organisation_id || String(row.organisation_id) === orgId)
       .filter((row) => row.active !== false)
       .map((row) => ({
@@ -241,10 +254,10 @@ async function loadStaff(orgId: string): Promise<Json[]> {
   }
 }
 
-async function loadSubjects(orgId: string): Promise<Json[]> {
+async function loadSubjects(orgId: string): Promise<SubjectRecord[]> {
   try {
     const rows = await restRows<Json>("subjects", "select=*");
-    const filtered = rows
+    const filtered: SubjectRecord[] = rows
       .filter((row) => !row.organisation_id || String(row.organisation_id) === orgId)
       .filter((row) => row.active !== false)
       .map((row) => ({

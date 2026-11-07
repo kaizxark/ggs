@@ -1341,6 +1341,7 @@ function GradeEntryTab({
               layoutId="gradeEntrySubjectPills"
               value={activeSubject}
               onChange={setActiveSubject}
+              indicatorVariant="brand"
               options={activeExam.subjects.map((s) => ({
                 value: s.subject,
                 label: s.subject,

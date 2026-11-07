@@ -1027,8 +1027,8 @@ async function main() {
   await insert("fee_categories", feeCategories);
   const CAT = Object.fromEntries(feeCategories.map((c) => [c.name, c.id]));
 
-  // Annual tuition rises with grade, the way a private school's fee card does.
-  const TUITION = { 6: 18000, 7: 19500, 8: 21000, 9: 24000, 10: 26000 };
+  // Annual unified tuition fee: Class 6–8 is ₹50,000; Class 9–10 is ₹60,000.
+  const TUITION = { 6: 50000, 7: 50000, 8: 50000, 9: 60000, 10: 60000 };
   const transportRoutes = [
     { name: "Sira Road Route", code: "RT-01", vehicle_no: "KA-01-AB-1234", driver_name: "Suresh Kumar", driver_phone: mobile(), fee: 1800,
       stops: ["Sira Road Circle", "Vidyaranyapura", "Kalidasa Road", "Siddamanahalli Cross", "School Gate"] },
@@ -1102,25 +1102,6 @@ async function main() {
           (concession ? ` · concession ${Math.round(concession * 100)}%` : ""),
         amount: tuition,
       });
-      if (t === firstTermIndex) {
-        items.push({
-          category_id: CAT["Admission Fee"],
-          description: "Admission fee — 2026-27",
-          amount: 5000,
-        });
-      }
-      if (s.grade >= 8) {
-        items.push({ category_id: CAT["Laboratory Fee"], description: `Laboratory fee — ${term.name}`, amount: 1200 });
-      }
-      items.push({ category_id: CAT["Library Fee"], description: `Library fee — ${term.name}`, amount: 600 });
-      items.push({ category_id: CAT["Sports Fee"], description: `Sports fee — ${term.name}`, amount: 400 });
-      if (s.transport) {
-        items.push({
-          category_id: CAT["Transport Fee"],
-          description: `Transport — ${s.transport.route.name} (${s.transport.stop})`,
-          amount: s.transport.route.fee,
-        });
-      }
 
       let total = items.reduce((sum, it) => sum + it.amount, 0);
 

@@ -8,6 +8,19 @@ import App from "./App";
 import { startLogin } from "./const";
 import "./index.css";
 
+// Auto-recover from stale chunk dynamic import failures when a new version is deployed
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", () => {
+    const key = "vite_preload_error_reload";
+    const last = window.sessionStorage.getItem(key);
+    const now = Date.now();
+    if (!last || now - Number(last) > 8000) {
+      window.sessionStorage.setItem(key, String(now));
+      window.location.reload();
+    }
+  });
+}
+
 const queryClient = new QueryClient();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {

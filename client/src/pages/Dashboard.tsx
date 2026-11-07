@@ -2749,6 +2749,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
           layoutId="attendanceMainViewTabs"
           value={activeTab}
           onChange={(val) => setActiveTab(val as "register" | "overview")}
+          indicatorVariant="brand"
           style={{ marginLeft: "auto", display: "inline-flex" }}
           options={[
             {
@@ -3303,15 +3304,93 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   );
 }
 
+// Helper: Convert numeric rupee amounts to formal Indian English words
+function amountInWords(num: number): string {
+  if (!num || num <= 0) return "Zero Rupees Only";
+  const a = [
+    "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+    "Seventeen", "Eighteen", "Nineteen",
+  ];
+  const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+  function formatHundred(n: number): string {
+    let str = "";
+    if (n > 99) {
+      str += a[Math.floor(n / 100)] + " Hundred ";
+      n %= 100;
+    }
+    if (n > 19) {
+      str += b[Math.floor(n / 10)] + (n % 10 > 0 ? " " + a[n % 10] : "");
+    } else if (n > 0) {
+      str += a[n];
+    }
+    return str.trim();
+  }
+
+  let words = "";
+  const crore = Math.floor(num / 10000000);
+  num %= 10000000;
+  const lakh = Math.floor(num / 100000);
+  num %= 100000;
+  const thousand = Math.floor(num / 1000);
+  num %= 1000;
+  const remaining = num;
+
+  if (crore > 0) words += formatHundred(crore) + " Crore ";
+  if (lakh > 0) words += formatHundred(lakh) + " Lakh ";
+  if (thousand > 0) words += formatHundred(thousand) + " Thousand ";
+  if (remaining > 0) words += formatHundred(remaining);
+
+  return `${words.trim()} Rupees Only`;
+}
+
+// Helper: Download a well-formatted CSV with UTF-8 BOM
+function downloadLedgerCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const content = [
+    headers.join(","),
+    ...rows.map(row =>
+      row
+        .map(cell => {
+          const str = String(cell ?? "");
+          return str.includes(",") || str.includes('"') || str.includes("\n")
+            ? `"${str.replace(/"/g, '""')}"`
+            : str;
+        })
+        .join(",")
+    ),
+  ].join("\r\n");
+
+  const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function FinanceView({ onBack }: { onBack: () => void }) {
   const [showDialog, setShowDialog] = useState(false);
-  const { rows: revenueData, loading: financeMonthsLoading } =
-    useFinanceMonthly();
-  const { rows: feeCategories, loading: feeCategoriesLoading } =
-    useFeeCategories();
-  const { rows: invoices, loading: invoicesViewLoading } = useInvoices();
-  const { rows: payments, loading: paymentsLoading } = usePayments();
-  const { rows: enrolledStudents } = useStudents();
+  const [financeTab, setFinanceTab] = useState<"invoices" | "defaulters" | "receipts" | "cohort">("invoices");
+  
+  // Invoices & Ledger Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [sectionFilter, setSectionFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // Receipts Filters
+  const [receiptSearchQuery, setReceiptSearchQuery] = useState("");
+  const [receiptMethodFilter, setReceiptMethodFilter] = useState("all");
+
+  // Modals & Drawers
+  const [inspectingInvoice, setInspectingInvoice] = useState<Invoice | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<any | null>(null);
+
+  // Record Payment Dialog State
   const [recordStudent, setRecordStudent] = useState<Student | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [studentSearchQuery, setStudentSearchQuery] = useState("");
@@ -3320,7 +3399,12 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
   const [paymentReference, setPaymentReference] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
-  const [viewingReceipt, setViewingReceipt] = useState<any | null>(null);
+
+  const { rows: revenueData, loading: financeMonthsLoading } = useFinanceMonthly();
+  const { rows: feeCategories, loading: feeCategoriesLoading } = useFeeCategories();
+  const { rows: invoices, loading: invoicesViewLoading } = useInvoices();
+  const { rows: payments, loading: paymentsLoading } = usePayments();
+  const { rows: enrolledStudents } = useStudents();
 
   useEffect(() => {
     if (recordStudent) {
@@ -3342,7 +3426,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
 
   const selectedInvoice = useMemo(() => {
     if (selectedInvoiceId) {
-      return invoices.find(i => i.id === selectedInvoiceId) || null;
+      return invoices.find(i => String(i.id).toLowerCase() === selectedInvoiceId.toLowerCase()) || null;
     }
     if (recordStudent) {
       const found = invoices.find(
@@ -3352,7 +3436,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       );
       if (found) return found;
 
-      // Auto-synthesize invoice for this student using their exact grade fee policy!
       const totalFee = getAnnualFeeForGrade(recordStudent.grade);
       return {
         id: `INV-2026-${String(recordStudent.id).slice(-4) || "1201"}`,
@@ -3380,11 +3463,9 @@ function FinanceView({ onBack }: { onBack: () => void }) {
     }
   }, [selectedInvoice]);
 
-  const invoicesPager = usePagination(invoices);
-  const pageInvoices = invoicesPager.pageRows;
-
+  // Overall Financial Metrics
   const billed = useMemo(
-    () => invoices.reduce((s, i) => s + (i.total ?? i.amount), 0),
+    () => invoices.reduce((s, i) => s + (i.total ?? i.amount ?? 50000), 0),
     [invoices]
   );
   const collected = useMemo(
@@ -3398,15 +3479,187 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   );
   const outstanding = Math.max(0, billed - collected);
   const rate = billed > 0 ? Math.round((collected / billed) * 1000) / 10 : 0;
-  const overdueCount = useMemo(
-    () => invoices.filter(i => i.status === "Overdue").length,
+  
+  const overdueInvoices = useMemo(
+    () => invoices.filter(i => i.status === "Overdue" && (i.outstanding ?? i.amount ?? 0) > 0),
     [invoices]
   );
+  const overdueTotalAmount = useMemo(
+    () => overdueInvoices.reduce((s, i) => s + (i.outstanding ?? i.amount ?? 0), 0),
+    [overdueInvoices]
+  );
+
   const collectedSpark = revenueData.length >= 2 ? revenueData.map(r => r.collected) : undefined;
   const pendingSpark = revenueData.length >= 2 ? revenueData.map(r => r.pending) : undefined;
 
+  // Filtered Invoices for Tab 1
+  const filteredInvoices = useMemo(() => {
+    let list = invoices;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        i =>
+          i.student.toLowerCase().includes(q) ||
+          String(i.id).toLowerCase().includes(q) ||
+          String((i as any).usn || "").toLowerCase().includes(q) ||
+          i.family.toLowerCase().includes(q)
+      );
+    }
+    if (gradeFilter !== "all") {
+      list = list.filter(i => (i as any).grade === gradeFilter || ((i as any).grade && (i as any).grade.includes(gradeFilter.replace("Grade ", ""))));
+    }
+    if (sectionFilter !== "all") {
+      list = list.filter(i => (i as any).section === sectionFilter);
+    }
+    if (statusFilter !== "all") {
+      if (statusFilter === "Paid") {
+        list = list.filter(i => i.status === "Paid" || (i.outstanding ?? 0) === 0);
+      } else if (statusFilter === "Overdue") {
+        list = list.filter(i => i.status === "Overdue" && (i.outstanding ?? i.amount ?? 0) > 0);
+      } else if (statusFilter === "Partial") {
+        list = list.filter(i => i.status === "Partial");
+      } else if (statusFilter === "Due") {
+        list = list.filter(i => i.status === "Due" || i.status === "Partial");
+      }
+    }
+    return list;
+  }, [invoices, searchQuery, gradeFilter, sectionFilter, statusFilter]);
+
+  const invoicesPager = usePagination(filteredInvoices);
+  const pageInvoices = invoicesPager.pageRows;
+
+  // Filtered Receipts for Tab 3
+  const filteredReceipts = useMemo(() => {
+    let list = payments;
+    if (receiptSearchQuery.trim()) {
+      const q = receiptSearchQuery.toLowerCase().trim();
+      list = list.filter(
+        p =>
+          p.student.toLowerCase().includes(q) ||
+          String(p.receipt_no || "").toLowerCase().includes(q) ||
+          String(p.reference || "").toLowerCase().includes(q) ||
+          String(p.invoice_id || "").toLowerCase().includes(q)
+      );
+    }
+    if (receiptMethodFilter !== "all") {
+      list = list.filter(p => p.method.toLowerCase().includes(receiptMethodFilter.toLowerCase()));
+    }
+    return list;
+  }, [payments, receiptSearchQuery, receiptMethodFilter]);
+
+  const receiptsPager = usePagination(filteredReceipts);
+  const pageReceipts = receiptsPager.pageRows;
+
+  // Cohort Class-wise Breakdown Data
+  const cohortBreakdown = useMemo(() => {
+    const grades = ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
+    return grades.map(g => {
+      const gradeInvoices = invoices.filter(i => (i as any).grade === g || ((i as any).grade && (i as any).grade.includes(g.replace("Grade ", ""))));
+      const pupilCount = gradeInvoices.length;
+      const feePerPupil = g >= "Grade 9" ? 60000 : 50000;
+      const totalBilled = gradeInvoices.reduce((s, i) => s + (i.total ?? feePerPupil), 0) || (pupilCount * feePerPupil);
+      const totalPaid = gradeInvoices.reduce((s, i) => s + (i.paid ?? (i.status === "Paid" ? feePerPupil : 0)), 0);
+      const totalPending = Math.max(0, totalBilled - totalPaid);
+      const collectionPct = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 1000) / 10 : 0;
+      return {
+        grade: g,
+        pupilCount,
+        feePerPupil,
+        totalBilled,
+        totalPaid,
+        totalPending,
+        collectionPct,
+      };
+    });
+  }, [invoices]);
+
+  // CSV Export Handlers
+  const handleExportInvoicesCsv = () => {
+    const headers = [
+      "Invoice ID",
+      "Student Name",
+      "USN",
+      "Grade",
+      "Section",
+      "Guardian Family",
+      "Due Date",
+      "Total Assessed (INR)",
+      "Paid Amount (INR)",
+      "Outstanding Balance (INR)",
+      "Status",
+    ];
+    const rows = filteredInvoices.map(inv => [
+      inv.id,
+      inv.student,
+      (inv as any).usn || (inv as any).student_id || "—",
+      (inv as any).grade || "—",
+      (inv as any).section || "—",
+      inv.family,
+      inv.due_date,
+      inv.total ?? inv.amount ?? 50000,
+      inv.paid ?? 0,
+      inv.outstanding ?? inv.amount ?? 0,
+      inv.status,
+    ]);
+    downloadLedgerCsv(`GKS_Fee_Invoices_AY2026-27_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    toast.success("Invoices Ledger exported to CSV");
+  };
+
+  const handleExportDefaultersCsv = () => {
+    const headers = [
+      "Student Name",
+      "USN",
+      "Grade",
+      "Section",
+      "Guardian Family",
+      "Invoice ID",
+      "Due Date",
+      "Overdue Balance (INR)",
+      "Status",
+    ];
+    const rows = overdueInvoices.map(inv => [
+      inv.student,
+      (inv as any).usn || (inv as any).student_id || "—",
+      (inv as any).grade || "—",
+      (inv as any).section || "—",
+      inv.family,
+      inv.id,
+      inv.due_date,
+      inv.outstanding ?? inv.amount ?? 0,
+      "Overdue Defaulter",
+    ]);
+    downloadLedgerCsv(`GKS_Fee_Defaulters_AY2026-27_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    toast.success("Defaulters List exported to CSV");
+  };
+
+  const handleExportReceiptsCsv = () => {
+    const headers = [
+      "Receipt Number",
+      "Student Name",
+      "Invoice Ref",
+      "Payment Date",
+      "Payment Method",
+      "Reference / UTR",
+      "Amount (INR)",
+      "Recipient Email",
+    ];
+    const rows = filteredReceipts.map(pay => [
+      (pay as any).receipt_no || "—",
+      pay.student,
+      pay.invoice_id || "—",
+      pay.paid_at ? new Date(pay.paid_at).toLocaleString("en-IN") : "—",
+      pay.method,
+      (pay as any).reference || "—",
+      pay.amount,
+      (pay as any).recipient_email || "—",
+    ]);
+    downloadLedgerCsv(`GKS_Payment_Receipts_AY2026-27_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    toast.success("Payment Receipts exported to CSV");
+  };
+
   return (
     <div className="page-stack">
+      {/* Page Header */}
       <div className="page-intro">
         <div>
           <Breadcrumb
@@ -3416,24 +3669,44 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           />
           <h1 className="page-title">Fees & finance</h1>
           <p className="page-subtitle">
-            {invoices.length} invoice{invoices.length === 1 ? "" : "s"} ·{" "}
-            {invoices.filter(i => i.status !== "Paid").length} outstanding
+            {invoices.length} pupil account{invoices.length === 1 ? "" : "s"} ·{" "}
+            {invoices.filter(i => i.status !== "Paid").length} outstanding · ₹{(billed / 100000).toFixed(1)}L total institutional billing
           </p>
         </div>
-        <button className="primary-button" onClick={() => setShowDialog(true)}>
-          <Plus size={16} />
-          Record payment
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleExportInvoicesCsv}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+          >
+            <Download size={14} />
+            Export Ledger
+          </button>
+          <button className="primary-button" onClick={() => setShowDialog(true)}>
+            <Plus size={16} />
+            Record payment
+          </button>
+        </div>
       </div>
-      <div className="metric-grid three">
+
+      {/* Top Four Metric Cards */}
+      <div className="metric-grid">
         {invoicesViewLoading ? (
           <>
+            <SkeletonMetric />
             <SkeletonMetric />
             <SkeletonMetric />
             <SkeletonMetric />
           </>
         ) : (
           <>
+            <MetricBlock
+              label="Total Assessed Fee"
+              value={`₹${(billed / 100000).toFixed(1)}L`}
+              comparison={`${invoices.length} enrolled accounts`}
+              icon={FileText}
+            />
             <MetricBlock
               label="Collected this term"
               value={`₹${(collected / 100000).toFixed(1)}L`}
@@ -3442,9 +3715,9 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               spark={collectedSpark}
             />
             <MetricBlock
-              label="Outstanding"
+              label="Outstanding balance"
               value={`₹${(outstanding / 100000).toFixed(1)}L`}
-              comparison={`${overdueCount} overdue accounts`}
+              comparison={`${overdueInvoices.length} overdue accounts`}
               icon={Receipt}
               spark={pendingSpark}
               positive={false}
@@ -3452,17 +3725,22 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             <MetricBlock
               label="Collection rate"
               value={`${rate}%`}
-              comparison="AY 2026–27"
+              comparison="Target: 95% AY 2026–27"
               icon={Activity}
             />
           </>
         )}
       </div>
+
+      {/* Visual Analytics Row: Revenue Movement + Cohort Fee Structure */}
       <div className="dashboard-grid dashboard-grid-top">
         <section className="panel finance-chart-panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Revenue movement</h2>
+              <h2 className="panel-title">Revenue movement (12 Months)</h2>
+              <p className="panel-subtitle" style={{ margin: "2px 0 0", fontSize: "12px" }}>
+                Cumulative collections and pending fees across the academic calendar (Apr 2026 – Mar 2027).
+              </p>
             </div>
             <span className="mini-label" style={{ display: "inline-flex", alignItems: "center", gap: "14px", fontSize: "12px" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)", fontWeight: 500 }}>
@@ -3518,7 +3796,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                           }}
                         >
                           <div style={{ fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
-                            {label} 2026
+                            {label} 2026–27
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--success)", fontWeight: 600 }}>
                             <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
@@ -3547,12 +3825,13 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             )}
           </div>
         </section>
+
         <section className="panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">Fee structure</h2>
+              <h2 className="panel-title">Fee structure & cohort mix</h2>
               <p className="panel-subtitle" style={{ margin: "2px 0 0", fontSize: "12px" }}>
-                Unified tuition fee (no separate admission or miscellaneous fees).
+                Official school policy: Unified annual tuition fee.
               </p>
             </div>
           </div>
@@ -3619,207 +3898,749 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           </div>
         </section>
       </div>
-      <section className="panel table-panel">
-        <div className="panel-header">
-          <div>
-            <h2 className="panel-title">Outstanding payments</h2>
+
+      {/* Sub-Navigation Tabs */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
+        <SegmentedControl
+          value={financeTab}
+          onChange={(tab) => setFinanceTab(tab as any)}
+          options={[
+            {
+              value: "invoices",
+              label: (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Invoices & Ledger
+                  <span className="count-badge">{invoices.length}</span>
+                </span>
+              ),
+            },
+            {
+              value: "defaulters",
+              label: (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Overdue Accounts
+                  {overdueInvoices.length > 0 && (
+                    <span className="count-badge" style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>
+                      {overdueInvoices.length}
+                    </span>
+                  )}
+                </span>
+              ),
+            },
+            {
+              value: "receipts",
+              label: (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Payment Receipts
+                  <span className="count-badge">{payments.length}</span>
+                </span>
+              ),
+            },
+            {
+              value: "cohort",
+              label: "Class-wise Analysis",
+            },
+          ]}
+        />
+      </div>
+
+      {/* TAB 1: INVOICES & BILLING LEDGER */}
+      {financeTab === "invoices" && (
+        <section className="panel table-panel">
+          <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
+            <div>
+              <h2 className="panel-title">Institutional fee invoices</h2>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Complete billing register for all pupils enrolled across Class 6 to 10.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                type="button"
+                className="secondary-button compact"
+                onClick={handleExportInvoicesCsv}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
+              >
+                <Download size={13} />
+                Export CSV
+              </button>
+            </div>
           </div>
-          <button
-            className="text-button"
-            onClick={() => toast.success("Finance report exported")}
+
+          {/* Filter Bar */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(220px, 1.8fr) repeat(3, minmax(130px, 1fr)) auto",
+              gap: "10px",
+              padding: "10px 16px",
+              background: "var(--bg-raised)",
+              borderBottom: "1px solid var(--border)",
+              alignItems: "center",
+            }}
           >
-            Export report <Download size={14} />
-          </button>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Guardian</th>
-                <th>Invoice</th>
-                <th>Due date</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th className="text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoicesViewLoading ? (
-                <SkeletonTableRows rows={6} columns={7} />
-              ) : (
-                pageInvoices.map(row => (
-                  <tr key={row.id}>
-                    <td className="font-medium text-[var(--text-primary)]">
-                      {row.student}
+            <div className="search-field" style={{ height: "34px" }}>
+              <Search size={14} />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search student, USN, invoice ID..."
+                style={{ fontSize: "12px" }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="p-1 rounded text-[var(--text-muted)] hover:text-white"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            <FormSelect
+              value={gradeFilter}
+              onChange={setGradeFilter}
+              options={[
+                { value: "all", label: "All Classes" },
+                { value: "Grade 6", label: "Class 6 (₹50k)" },
+                { value: "Grade 7", label: "Class 7 (₹50k)" },
+                { value: "Grade 8", label: "Class 8 (₹50k)" },
+                { value: "Grade 9", label: "Class 9 (₹60k)" },
+                { value: "Grade 10", label: "Class 10 (₹60k)" },
+              ]}
+            />
+
+            <FormSelect
+              value={sectionFilter}
+              onChange={setSectionFilter}
+              options={[
+                { value: "all", label: "All Sections" },
+                { value: "A", label: "Section A" },
+                { value: "B", label: "Section B" },
+              ]}
+            />
+
+            <FormSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "all", label: "All Statuses" },
+                { value: "Overdue", label: "Overdue Only" },
+                { value: "Due", label: "Due / Partial" },
+                { value: "Paid", label: "Settled / Paid" },
+              ]}
+            />
+
+            {(searchQuery || gradeFilter !== "all" || sectionFilter !== "all" || statusFilter !== "all") && (
+              <button
+                type="button"
+                className="secondary-button compact"
+                onClick={() => {
+                  setSearchQuery("");
+                  setGradeFilter("all");
+                  setSectionFilter("all");
+                  setStatusFilter("all");
+                }}
+                style={{ height: "34px", padding: "0 10px", fontSize: "11.5px", whiteSpace: "nowrap" }}
+                title="Reset all filters"
+              >
+                <RotateCcw size={12} />
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Student & USN</th>
+                  <th>Class</th>
+                  <th>Guardian</th>
+                  <th>Invoice ID</th>
+                  <th>Due Date</th>
+                  <th>Annual Fee</th>
+                  <th>Paid</th>
+                  <th>Balance Due</th>
+                  <th>Status</th>
+                  <th className="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoicesViewLoading ? (
+                  <SkeletonTableRows rows={6} columns={10} />
+                ) : pageInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-xs text-[var(--text-muted)]">
+                      No invoices match the selected filters.
                     </td>
-                    <td className="muted-cell">{row.family}</td>
-                    <td className="muted-cell">{row.id}</td>
-                    <td className="muted-cell">{row.due_date}</td>
-                    <td className="font-medium text-[var(--text-hover)]">
-                      ₹{row.amount.toLocaleString("en-IN")}
-                    </td>
-                    <td>
-                      <span
-                        className={`status-pill ${row.status === "Overdue" ? "warning" : "neutral"}`}
-                      >
-                        {row.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex items-center justify-end gap-1.5">
-                        {row.amount > 0 && row.status !== "Paid" ? (
-                          <button
-                            className="tiny-action"
-                            style={{
-                              background: "var(--success-soft)",
-                              color: "var(--success)",
-                              borderColor: "var(--success-border)",
-                              fontWeight: 600,
-                            }}
-                            onClick={() => {
-                              const s = enrolledStudents.find(
-                                stu =>
-                                  stu.name.toLowerCase() === row.student.toLowerCase() ||
-                                  (row.student_id && stu.id === row.student_id)
-                              );
-                              setSelectedInvoiceId(String(row.id));
-                              if (s) {
-                                setRecordStudent(s);
-                              } else {
-                                setStudentSearchQuery(row.student);
-                              }
-                              setPaymentAmount(String(row.amount > 0 ? row.amount : (row.total ?? 0)));
-                              setShowDialog(true);
-                            }}
-                          >
-                            Collect
-                          </button>
-                        ) : (
-                          <span className="status-pill success text-[11px]">
-                            <Check size={11} className="mr-0.5 inline" />
-                            Settled
+                  </tr>
+                ) : (
+                  pageInvoices.map(row => {
+                    const annualFee = row.total ?? (row as any).amount ?? 50000;
+                    const paidAmount = row.paid ?? (row.status === "Paid" ? annualFee : 0);
+                    const outstandingBalance = row.outstanding ?? Math.max(0, annualFee - paidAmount);
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <div>
+                            <span className="font-semibold text-sm text-[var(--text-primary)] block">
+                              {row.student}
+                            </span>
+                            {(row as any).usn && (
+                              <code className="text-[11px] text-[var(--brand)] font-mono">
+                                {(row as any).usn}
+                              </code>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="grade-chip">
+                            {(row as any).grade || "Class 6"} · {(row as any).section || "A"}
                           </span>
-                        )}
-                        <button
-                          className="tiny-action"
-                          onClick={() =>
-                            toast.success("Payment reminder sent", {
-                              description: `Reminder sent to ${row.family}.`,
-                            })
-                          }
+                        </td>
+                        <td className="muted-cell">{row.family}</td>
+                        <td className="font-mono text-xs text-[var(--text-secondary)]">{row.id}</td>
+                        <td className="muted-cell">
+                          <span className={row.status === "Overdue" ? "text-rose-400 font-semibold" : ""}>
+                            {row.due_date}
+                          </span>
+                        </td>
+                        <td className="font-medium text-[var(--text-secondary)]">
+                          ₹{annualFee.toLocaleString("en-IN")}
+                        </td>
+                        <td className="font-semibold text-emerald-400">
+                          ₹{paidAmount.toLocaleString("en-IN")}
+                        </td>
+                        <td className="font-bold text-[var(--text-primary)]">
+                          {outstandingBalance > 0 ? (
+                            <span className={row.status === "Overdue" ? "text-rose-400 font-bold" : "text-amber-400 font-bold"}>
+                              ₹{outstandingBalance.toLocaleString("en-IN")}
+                            </span>
+                          ) : (
+                            <span className="text-[var(--text-muted)] font-normal">₹0</span>
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill ${
+                              row.status === "Paid"
+                                ? "success"
+                                : row.status === "Overdue"
+                                ? "warning"
+                                : row.status === "Partial"
+                                ? "neutral"
+                                : "neutral"
+                            }`}
+                          >
+                            {row.status === "Paid" && <Check size={11} className="mr-0.5 inline" />}
+                            {row.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {outstandingBalance > 0 ? (
+                              <button
+                                className="tiny-action"
+                                style={{
+                                  background: "var(--success-soft)",
+                                  color: "var(--success)",
+                                  borderColor: "var(--success-border)",
+                                  fontWeight: 600,
+                                }}
+                                onClick={() => {
+                                  const s = enrolledStudents.find(
+                                    stu =>
+                                      stu.name.toLowerCase() === row.student.toLowerCase() ||
+                                      (row.student_id && stu.id === row.student_id)
+                                  );
+                                  setSelectedInvoiceId(String(row.id));
+                                  if (s) {
+                                    setRecordStudent(s);
+                                  } else {
+                                    setStudentSearchQuery(row.student);
+                                  }
+                                  setPaymentAmount(String(outstandingBalance));
+                                  setShowDialog(true);
+                                }}
+                                title="Collect payment"
+                              >
+                                Collect
+                              </button>
+                            ) : (
+                              <span className="status-pill success text-[11px]">
+                                <Check size={11} className="mr-0.5 inline" />
+                                Settled
+                              </span>
+                            )}
+                            <button
+                              className="tiny-action"
+                              onClick={() => setInspectingInvoice(row)}
+                              title="View invoice details"
+                            >
+                              Details
+                            </button>
+                            {outstandingBalance > 0 && (
+                              <button
+                                className="tiny-action"
+                                onClick={() =>
+                                  toast.success("Payment reminder dispatched", {
+                                    description: `Reminder sent to ${row.family} for balance ₹${outstandingBalance.toLocaleString("en-IN")}.`,
+                                  })
+                                }
+                                title="Send reminder"
+                              >
+                                Remind
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pager pagination={invoicesPager} noun="invoices" />
+        </section>
+      )}
+
+      {/* TAB 2: DEFAULTERS & OVERDUE TRACKING */}
+      {financeTab === "defaulters" && (
+        <section className="panel table-panel">
+          <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: "var(--danger)", display: "inline-flex" }}>
+                  <AlertCircle size={18} />
+                </span>
+                <h2 className="panel-title">Overdue accounts & defaulters</h2>
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                {overdueInvoices.length} pupil account{overdueInvoices.length === 1 ? "" : "s"} with unsettled fee balances past due date. Total overdue: <strong className="text-rose-400">₹{(overdueTotalAmount / 100000).toFixed(2)}L</strong>
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button
+                type="button"
+                className="secondary-button compact"
+                onClick={handleExportDefaultersCsv}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
+              >
+                <Download size={13} />
+                Export Defaulters CSV
+              </button>
+              {overdueInvoices.length > 0 && (
+                <button
+                  type="button"
+                  className="primary-button compact"
+                  onClick={() => {
+                    toast.success("Bulk reminders dispatched! ✉️", {
+                      description: `Payment reminder notices sent to all ${overdueInvoices.length} overdue guardian accounts.`,
+                    });
+                  }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
+                >
+                  <Mail size={13} />
+                  Notify All Guardians
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Pupil Candidate</th>
+                  <th>Class & Section</th>
+                  <th>Guardian</th>
+                  <th>Invoice Ref</th>
+                  <th>Due Date</th>
+                  <th>Total Fee</th>
+                  <th>Amount Paid</th>
+                  <th>Overdue Balance</th>
+                  <th className="text-right">Defaulter Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overdueInvoices.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-8 text-center text-xs text-[var(--text-muted)]">
+                      🎉 No overdue accounts! All pupil ledgers are up to date.
+                    </td>
+                  </tr>
+                ) : (
+                  overdueInvoices.map(row => {
+                    const totalFee = row.total ?? (row as any).amount ?? 50000;
+                    const paid = row.paid ?? 0;
+                    const overdueAmt = row.outstanding ?? Math.max(0, totalFee - paid);
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <span className="font-semibold text-sm text-[var(--text-primary)] block">{row.student}</span>
+                          {(row as any).usn && <code className="text-xs text-[var(--brand)] font-mono">{(row as any).usn}</code>}
+                        </td>
+                        <td>
+                          <span className="grade-chip">{(row as any).grade || "Class 6"} · {(row as any).section || "A"}</span>
+                        </td>
+                        <td className="muted-cell">{row.family}</td>
+                        <td className="font-mono text-xs text-[var(--text-secondary)]">{row.id}</td>
+                        <td className="text-rose-400 font-semibold">{row.due_date}</td>
+                        <td className="muted-cell">₹{totalFee.toLocaleString("en-IN")}</td>
+                        <td className="text-emerald-400 font-semibold">₹{paid.toLocaleString("en-IN")}</td>
+                        <td className="font-bold text-rose-400 text-sm">
+                          ₹{overdueAmt.toLocaleString("en-IN")}
+                        </td>
+                        <td className="text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              className="tiny-action"
+                              style={{
+                                background: "var(--success-soft)",
+                                color: "var(--success)",
+                                borderColor: "var(--success-border)",
+                                fontWeight: 600,
+                              }}
+                              onClick={() => {
+                                const s = enrolledStudents.find(
+                                  stu =>
+                                    stu.name.toLowerCase() === row.student.toLowerCase() ||
+                                    (row.student_id && stu.id === row.student_id)
+                                );
+                                setSelectedInvoiceId(String(row.id));
+                                if (s) {
+                                  setRecordStudent(s);
+                                } else {
+                                  setStudentSearchQuery(row.student);
+                                }
+                                setPaymentAmount(String(overdueAmt));
+                                setShowDialog(true);
+                              }}
+                            >
+                              Collect Now
+                            </button>
+                            <button
+                              className="tiny-action"
+                              onClick={() =>
+                                toast.success("Overdue reminder sent", {
+                                  description: `Direct notice sent to ${row.family} for ₹${overdueAmt.toLocaleString("en-IN")}.`,
+                                })
+                              }
+                            >
+                              Send Notice
+                            </button>
+                            <button
+                              className="tiny-action"
+                              onClick={() => setInspectingInvoice(row)}
+                            >
+                              Details
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* TAB 3: PAYMENT RECEIPTS & AUDIT LOG */}
+      {financeTab === "receipts" && (
+        <section className="panel table-panel">
+          <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
+            <div>
+              <h2 className="panel-title">Official payment receipts & audit log</h2>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Verified collections and payment transactions logged across school accounts.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button
+                type="button"
+                className="secondary-button compact"
+                onClick={handleExportReceiptsCsv}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
+              >
+                <Download size={13} />
+                Export Receipts CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1.8fr 1fr auto",
+              gap: "10px",
+              padding: "10px 16px",
+              background: "var(--bg-raised)",
+              borderBottom: "1px solid var(--border)",
+              alignItems: "center",
+            }}
+          >
+            <div className="search-field" style={{ height: "34px" }}>
+              <Search size={14} />
+              <input
+                value={receiptSearchQuery}
+                onChange={(e) => setReceiptSearchQuery(e.target.value)}
+                placeholder="Search receipt no, student name, UTR..."
+                style={{ fontSize: "12px" }}
+              />
+              {receiptSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setReceiptSearchQuery("")}
+                  className="p-1 rounded text-[var(--text-muted)] hover:text-white"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            <FormSelect
+              value={receiptMethodFilter}
+              onChange={setReceiptMethodFilter}
+              options={[
+                { value: "all", label: "All Payment Modes" },
+                { value: "UPI", label: "UPI (GPay / PhonePe / Paytm)" },
+                { value: "Bank", label: "Bank Transfer (NEFT/RTGS/IMPS)" },
+                { value: "Cash", label: "Cash Counter" },
+                { value: "Card", label: "Card (POS)" },
+                { value: "Cheque", label: "Cheque / DD" },
+              ]}
+            />
+
+            {(receiptSearchQuery || receiptMethodFilter !== "all") && (
+              <button
+                type="button"
+                className="secondary-button compact"
+                onClick={() => {
+                  setReceiptSearchQuery("");
+                  setReceiptMethodFilter("all");
+                }}
+                style={{ height: "34px", padding: "0 10px", fontSize: "11.5px" }}
+              >
+                <RotateCcw size={12} />
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Receipt No</th>
+                  <th>Student</th>
+                  <th>Invoice Ref</th>
+                  <th>Payment Date & Time</th>
+                  <th>Method & UTR</th>
+                  <th>Amount Paid</th>
+                  <th>Emailed Dispatched To</th>
+                  <th className="text-right">Receipt Voucher</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentsLoading ? (
+                  <SkeletonTableRows rows={4} columns={8} />
+                ) : pageReceipts.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-xs text-[var(--text-muted)]">
+                      No payment receipts match the criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  pageReceipts.map((pay) => {
+                    const targetEmail = (pay as any).recipient_email || `${pay.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`;
+                    return (
+                      <tr key={pay.id}>
+                        <td className="font-mono text-xs text-[var(--brand)] font-semibold">
+                          {String((pay as any).receipt_no || "Receipt")}
+                        </td>
+                        <td className="font-medium text-[var(--text-primary)]">
+                          {pay.student}
+                        </td>
+                        <td className="muted-cell">{pay.invoice_id || "—"}</td>
+                        <td className="muted-cell">
+                          {pay.paid_at ? new Date(pay.paid_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—"}
+                        </td>
+                        <td>
+                          <div className="text-xs text-[var(--text-secondary)]">
+                            <span className="font-semibold">{pay.method || "Verified"}</span>
+                            {(pay as any).reference && (
+                              <span className="block text-[11px] text-[var(--text-muted)] font-mono">
+                                {(pay as any).reference}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="font-bold text-emerald-400 text-sm">
+                          ₹{pay.amount.toLocaleString("en-IN")}
+                        </td>
+                        <td>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-mono">
+                            <Mail size={12} className="text-[var(--info)]" />
+                            {targetEmail}
+                          </span>
+                        </td>
+                        <td className="text-right">
+                          <button
+                            type="button"
+                            className="secondary-button compact"
+                            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "11.5px", padding: "4px 9px" }}
+                            onClick={() => setViewingReceipt(pay)}
+                          >
+                            <FileText size={12} />
+                            View Voucher
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          <Pager pagination={receiptsPager} noun="receipts" />
+        </section>
+      )}
+
+      {/* TAB 4: CLASS-WISE COHORT ANALYSIS */}
+      {financeTab === "cohort" && (
+        <section className="panel table-panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Class-wise fee collection analysis</h2>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Institutional collection rates, assessed tuition fees, and outstanding balances per cohort.
+              </p>
+            </div>
+          </div>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Class / Cohort</th>
+                  <th>Enrolled Pupils</th>
+                  <th>Annual Fee Policy</th>
+                  <th>Total Assessed</th>
+                  <th>Collected to Date</th>
+                  <th>Outstanding Balance</th>
+                  <th style={{ width: "220px" }}>Collection Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cohortBreakdown.map(row => (
+                  <tr key={row.grade}>
+                    <td>
+                      <strong className="text-[var(--text-primary)] text-sm">{row.grade}</strong>
+                    </td>
+                    <td>{row.pupilCount} pupils</td>
+                    <td className="font-medium text-[var(--text-secondary)]">
+                      ₹{row.feePerPupil.toLocaleString("en-IN")} / pupil
+                    </td>
+                    <td className="font-semibold text-[var(--text-primary)]">
+                      ₹{(row.totalBilled / 100000).toFixed(2)}L
+                    </td>
+                    <td className="font-semibold text-emerald-400">
+                      ₹{(row.totalPaid / 100000).toFixed(2)}L
+                    </td>
+                    <td className="font-semibold text-amber-400">
+                      ₹{(row.totalPending / 100000).toFixed(2)}L
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div
+                          style={{
+                            flex: 1,
+                            height: 6,
+                            background: "var(--bg-raised)",
+                            borderRadius: 3,
+                            overflow: "hidden",
+                          }}
                         >
-                          Remind
-                        </button>
+                          <div
+                            style={{
+                              width: `${Math.min(100, row.collectionPct)}%`,
+                              height: "100%",
+                              background: row.collectionPct >= 80 ? "var(--success)" : "var(--brand)",
+                              borderRadius: 3,
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold font-mono text-[var(--text-primary)]" style={{ width: "42px", textAlign: "right" }}>
+                          {row.collectionPct}%
+                        </span>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <Pager pagination={invoicesPager} noun="invoices" />
-      </section>
-
-      {/* Recent Payments History Panel */}
-      <section className="panel table-panel">
-        <div className="panel-header">
-          <div>
-            <h2 className="panel-title">Recent verified receipts</h2>
-            <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              Verified collections and payment transactions logged across school accounts.
-            </p>
-          </div>
-          <span className="count-badge">
-            {payments.length} receipt{payments.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Receipt No</th>
-                <th>Student</th>
-                <th>Invoice</th>
-                <th>Payment Date</th>
-                <th>Method & Ref</th>
-                <th>Amount</th>
-                <th>Emailed To</th>
-                <th className="text-right">Receipt Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paymentsLoading ? (
-                <SkeletonTableRows rows={4} columns={8} />
-              ) : payments.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-6 text-center text-xs text-[var(--text-muted)]">
-                    No payment receipts logged yet. Recorded payments will appear here with verified receipt numbers.
+                ))}
+                {/* Total Row */}
+                <tr style={{ background: "var(--bg-raised)", fontWeight: 700 }}>
+                  <td>
+                    <span className="text-sm font-bold text-[var(--text-primary)]">School Total</span>
+                  </td>
+                  <td>{invoices.length} pupils</td>
+                  <td>Unified Fee</td>
+                  <td className="font-bold text-[var(--text-primary)]">
+                    ₹{(billed / 100000).toFixed(2)}L
+                  </td>
+                  <td className="font-bold text-emerald-400">
+                    ₹{(collected / 100000).toFixed(2)}L
+                  </td>
+                  <td className="font-bold text-amber-400">
+                    ₹{(outstanding / 100000).toFixed(2)}L
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div
+                        style={{
+                          flex: 1,
+                          height: 8,
+                          background: "var(--border)",
+                          borderRadius: 4,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${Math.min(100, rate)}%`,
+                            height: "100%",
+                            background: "var(--success)",
+                            borderRadius: 4,
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs font-bold font-mono text-[var(--text-primary)]" style={{ width: "42px", textAlign: "right" }}>
+                        {rate}%
+                      </span>
+                    </div>
                   </td>
                 </tr>
-              ) : (
-                payments.slice(0, 10).map((pay) => {
-                  const targetEmail = (pay as any).recipient_email || `${pay.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`;
-                  return (
-                    <tr key={pay.id}>
-                      <td className="font-mono text-xs text-[var(--brand)] font-semibold">
-                        {String((pay as any).receipt_no || "Receipt")}
-                      </td>
-                      <td className="font-medium text-[var(--text-primary)]">
-                        {pay.student}
-                      </td>
-                      <td className="muted-cell">{pay.invoice_id || "—"}</td>
-                      <td className="muted-cell">
-                        {pay.paid_at ? new Date(pay.paid_at).toLocaleDateString("en-IN") : "—"}
-                      </td>
-                      <td>
-                        <div className="text-xs text-[var(--text-secondary)]">
-                          <span>{pay.method || "Verified"}</span>
-                          {(pay as any).reference && (
-                            <span className="block text-[11px] text-[var(--text-muted)] font-mono">
-                              {(pay as any).reference}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="font-semibold text-emerald-400">
-                        ₹{pay.amount.toLocaleString("en-IN")}
-                      </td>
-                      <td>
-                        <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-mono">
-                          <Mail size={12} className="text-[var(--info)]" />
-                          {targetEmail}
-                        </span>
-                      </td>
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="secondary-button compact"
-                          style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "11.5px", padding: "4px 9px" }}
-                          onClick={() => setViewingReceipt(pay)}
-                        >
-                          <FileText size={12} />
-                          View Receipt
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* MODAL 1: RECORD PAYMENT */}
       {showDialog && (
         <AppDialog
-          title="Record payment"
+          title="Record fee collection"
           description="Log a verified fee collection against an existing pupil ledger."
           onClose={() => {
             setShowDialog(false);
             setRecordStudent(null);
             setStudentSearchQuery("");
             setPaymentAmount("");
+            setSelectedInvoiceId(null);
           }}
         >
           <div className="form-grid">
@@ -3915,29 +4736,29 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               <div
                 style={{
                   gridColumn: "span 2",
-                  padding: "10px 14px",
+                  padding: "12px 14px",
                   background: "var(--bg-raised)",
                   borderRadius: "10px",
                   border: "1px solid var(--border)",
-                  fontSize: "12px",
+                  fontSize: "12.5px",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span className="text-[var(--text-muted)]">Annual Fee ({String((selectedInvoice as any).grade || "Enrolled")}):</span>
-                  <strong className="text-[var(--text-primary)]">₹{Number(selectedInvoice.total || 0).toLocaleString("en-IN")}</strong>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span className="text-[var(--text-muted)]">Annual Tuition Fee ({String((selectedInvoice as any).grade || "Enrolled")}):</span>
+                  <strong className="text-[var(--text-primary)]">₹{Number(selectedInvoice.total || (selectedInvoice as any).grade >= "Grade 9" ? 60000 : 50000).toLocaleString("en-IN")}</strong>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span className="text-[var(--text-muted)]">Paid so far:</span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span className="text-[var(--text-muted)]">Paid to date:</span>
                   <span className="text-emerald-400 font-semibold">₹{Number(selectedInvoice.paid || 0).toLocaleString("en-IN")}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span className="text-[var(--text-muted)]">Remaining balance due:</span>
+                <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 6 }}>
+                  <span className="text-[var(--text-muted)] font-semibold">Remaining balance due:</span>
                   <span className="text-amber-400 font-bold">₹{Number(selectedInvoice.amount || 0).toLocaleString("en-IN")}</span>
                 </div>
               </div>
             )}
 
-            {/* Row 1: Amount (Left) & Payment Reference (Right next to Amount) */}
+            {/* Row 1: Amount & Reference */}
             <label>
               Amount (₹) *
               <input
@@ -3945,9 +4766,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 placeholder={selectedInvoice ? `₹ ${selectedInvoice.amount.toLocaleString("en-IN")}` : "e.g. 50000"}
               />
-              <span className="text-[11px] text-[var(--text-muted)] mt-1 block">
-                Minimum installment amount is ₹15,000.
-              </span>
               {selectedInvoice && selectedInvoice.amount > 0 && (
                 <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
                   <button
@@ -3957,7 +4775,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   >
                     Full due: ₹{selectedInvoice.amount.toLocaleString("en-IN")}
                   </button>
-                  {selectedInvoice.amount >= 20000 && (
+                  {selectedInvoice.amount >= 10000 && (
                     <button
                       type="button"
                       className="tiny-action"
@@ -3966,13 +4784,13 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                       50%: ₹{Math.round(selectedInvoice.amount / 2).toLocaleString("en-IN")}
                     </button>
                   )}
-                  {selectedInvoice.amount > 15000 && (
+                  {selectedInvoice.amount >= 20000 && (
                     <button
                       type="button"
                       className="tiny-action"
-                      onClick={() => setPaymentAmount("15000")}
+                      onClick={() => setPaymentAmount(String(Math.round(selectedInvoice.amount / 4)))}
                     >
-                      Min: ₹15,000
+                      25%: ₹{Math.round(selectedInvoice.amount / 4).toLocaleString("en-IN")}
                     </button>
                   )}
                 </div>
@@ -3991,7 +4809,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               </span>
             </label>
 
-            {/* Row 2: Payment Method (Left) & Recipient Email (Right) */}
+            {/* Row 2: Payment Method & Receipt Email */}
             <label>
               Payment Method *
               <FormSelect
@@ -4020,7 +4838,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               </span>
             </label>
 
-            {/* Row 3: Payment Date - Spans full width so dropdowns are spacious and visible */}
+            {/* Row 3: Payment Date */}
             <label style={{ gridColumn: "span 2" }}>
               Payment Date (DD-MM-YYYY) *
               <DateDropdowns
@@ -4055,15 +4873,8 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   return;
                 }
                 const numAmount = Number(String(paymentAmount || "").replace(/[^0-9.]/g, ""));
-                const outstandingDue = selectedInvoice ? selectedInvoice.amount : 50000;
                 if (!numAmount || numAmount <= 0) {
                   toast.error("Invalid amount", { description: "Please enter a valid payment amount." });
-                  return;
-                }
-                if (numAmount < 15000 && outstandingDue >= 15000) {
-                  toast.error("Minimum amount is ₹15,000", {
-                    description: "School fee payment policy requires a minimum of ₹15,000 per installment.",
-                  });
                   return;
                 }
                 const targetName = recordStudent?.name || studentSearchQuery;
@@ -4078,6 +4889,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     date: paymentDate,
                     reference: paymentReference,
                     recipientEmail: recipientEmail.trim(),
+                    grade: recordStudent?.grade || (selectedInvoice as any)?.grade,
                   });
 
                   setShowDialog(false);
@@ -4089,12 +4901,12 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   setRecipientEmail("");
 
                   if (res.isPaidInFull) {
-                    toast.success("Fees Covered in Full! 🎉", {
+                    toast.success("Fees Settled in Full! 🎉", {
                       description: `₹${numAmount.toLocaleString("en-IN")} received for ${targetName}. Receipt: ${res.receiptNo} generated and emailed to ${res.recipientEmail}. Account settled.`,
                     });
                   } else {
                     toast.success("Payment Recorded & Receipt Sent! ✉️", {
-                      description: `₹${numAmount.toLocaleString("en-IN")} logged for ${targetName}. Receipt: ${res.receiptNo} emailed to ${res.recipientEmail}. Remaining: ₹${res.newBalance.toLocaleString("en-IN")}.`,
+                      description: `₹${numAmount.toLocaleString("en-IN")} logged for ${targetName}. Receipt: ${res.receiptNo} emailed to ${res.recipientEmail}. Remaining balance: ₹${res.newBalance.toLocaleString("en-IN")}.`,
                     });
                   }
                 } catch (e) {
@@ -4110,13 +4922,15 @@ function FinanceView({ onBack }: { onBack: () => void }) {
         </AppDialog>
       )}
 
-      {viewingReceipt && (
+      {/* MODAL 2: INVOICE DETAILS DRAWER / MODAL */}
+      {inspectingInvoice && (
         <AppDialog
-          title={`Official Payment Receipt · ${viewingReceipt.receipt_no || "Receipt"}`}
-          description="Global Kids School verified collection receipt."
-          onClose={() => setViewingReceipt(null)}
+          title={`Invoice Details · ${inspectingInvoice.id}`}
+          description="Detailed fee assessment and ledger breakdown."
+          onClose={() => setInspectingInvoice(null)}
         >
-          <div style={{ padding: "4px 0", fontSize: "13px" }}>
+          <div style={{ fontSize: "13px" }}>
+            {/* Student Meta */}
             <div
               style={{
                 background: "var(--bg-raised)",
@@ -4128,39 +4942,176 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-primary)" }}>Global Kids School</h3>
-                  <p style={{ margin: "2px 0 0", fontSize: "11.5px", color: "var(--text-muted)" }}>Tumakuru Campus, Karnataka · Official ERP Ledger</p>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-primary)" }}>
+                    {inspectingInvoice.student}
+                  </h3>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: 4 }}>
+                    <span className="grade-chip">{(inspectingInvoice as any).grade || "Class 6"} · {(inspectingInvoice as any).section || "A"}</span>
+                    {(inspectingInvoice as any).usn && (
+                      <code className="text-xs text-[var(--brand)] font-mono">{(inspectingInvoice as any).usn}</code>
+                    )}
+                  </div>
                 </div>
-                <span className="status-pill success text-xs font-mono font-semibold">
-                  {viewingReceipt.receipt_no}
+                <span
+                  className={`status-pill ${
+                    inspectingInvoice.status === "Paid"
+                      ? "success"
+                      : inspectingInvoice.status === "Overdue"
+                      ? "warning"
+                      : "neutral"
+                  }`}
+                >
+                  {inspectingInvoice.status}
                 </span>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", fontSize: "12px", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
                 <div>
-                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Student Name</span>
-                  <strong className="text-[var(--text-primary)]">{viewingReceipt.student}</strong>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Guardian / Family</span>
+                  <strong className="text-[var(--text-primary)]">{inspectingInvoice.family}</strong>
                 </div>
                 <div>
-                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Invoice Ref</span>
-                  <span className="font-mono text-[var(--text-secondary)]">{viewingReceipt.invoice_id || "INV-2026-FEE"}</span>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Invoice Due Date</span>
+                  <span className={inspectingInvoice.status === "Overdue" ? "text-rose-400 font-semibold" : ""}>{inspectingInvoice.due_date}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Assessment Breakdown */}
+            <div
+              style={{
+                background: "var(--bg-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "14px",
+                marginBottom: "16px",
+              }}
+            >
+              <h4 style={{ margin: "0 0 10px", fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
+                AY 2026–27 Fee Assessment
+              </h4>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span className="text-[var(--text-secondary)]">Annual Unified Tuition Fee:</span>
+                <strong>₹{Number(inspectingInvoice.total ?? 50000).toLocaleString("en-IN")}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span className="text-[var(--text-secondary)]">Total Paid to Date:</span>
+                <span className="text-emerald-400 font-semibold">₹{Number(inspectingInvoice.paid ?? 0).toLocaleString("en-IN")}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4 }}>
+                <span className="font-semibold text-[var(--text-primary)]">Remaining Balance Due:</span>
+                <strong className={inspectingInvoice.amount > 0 ? "text-amber-400 text-base font-bold" : "text-emerald-400"}>
+                  ₹{Number(inspectingInvoice.amount ?? inspectingInvoice.outstanding ?? 0).toLocaleString("en-IN")}
+                </strong>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="dialog-actions">
+              <button className="secondary-button" onClick={() => setInspectingInvoice(null)}>
+                Close
+              </button>
+              {inspectingInvoice.amount > 0 && (
+                <>
+                  <button
+                    className="secondary-button"
+                    onClick={() => {
+                      toast.success("Payment reminder sent", {
+                        description: `Dispatched payment notice to ${inspectingInvoice.family} for balance ₹${inspectingInvoice.amount.toLocaleString("en-IN")}.`,
+                      });
+                    }}
+                  >
+                    Send Reminder
+                  </button>
+                  <button
+                    className="primary-button"
+                    onClick={() => {
+                      const s = enrolledStudents.find(
+                        stu =>
+                          stu.name.toLowerCase() === inspectingInvoice.student.toLowerCase() ||
+                          (inspectingInvoice.student_id && stu.id === inspectingInvoice.student_id)
+                      );
+                      setSelectedInvoiceId(String(inspectingInvoice.id));
+                      if (s) {
+                        setRecordStudent(s);
+                      } else {
+                        setStudentSearchQuery(inspectingInvoice.student);
+                      }
+                      setPaymentAmount(String(inspectingInvoice.amount));
+                      setInspectingInvoice(null);
+                      setShowDialog(true);
+                    }}
+                  >
+                    Collect Payment
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </AppDialog>
+      )}
+
+      {/* MODAL 3: OFFICIAL PRINTABLE RECEIPT VOUCHER */}
+      {viewingReceipt && (
+        <AppDialog
+          title={`Official Payment Receipt · ${viewingReceipt.receipt_no || "Receipt"}`}
+          description="Global Kids School verified institutional collection receipt."
+          onClose={() => setViewingReceipt(null)}
+        >
+          <div style={{ padding: "4px 0", fontSize: "13px" }}>
+            <div
+              className="receipt-voucher-printable"
+              style={{
+                background: "var(--bg-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                padding: "20px",
+                marginBottom: "16px",
+              }}
+            >
+              {/* Header Letterhead */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, borderBottom: "2px solid var(--border)", paddingBottom: 12 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+                    Global Kids School
+                  </h3>
+                  <p style={{ margin: "3px 0 0", fontSize: "12px", color: "var(--text-muted)" }}>
+                    Tumakuru Campus, Karnataka · Official ERP Ledger &amp; Fee Receipt
+                  </p>
+                  <span style={{ fontSize: "11px", color: "var(--text-faint)", marginTop: 2, display: "block" }}>
+                    Affiliated to Karnataka State Board / CBSE · AY 2026–27
+                  </span>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <span className="status-pill success text-xs font-mono font-bold" style={{ display: "inline-block" }}>
+                    {viewingReceipt.receipt_no}
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)] block mt-1">
+                    Date: {viewingReceipt.paid_at ? new Date(viewingReceipt.paid_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : new Date().toLocaleDateString("en-IN")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pupil Details */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "12.5px", marginBottom: 14 }}>
+                <div>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Received From (Student)</span>
+                  <strong className="text-[var(--text-primary)] text-sm">{viewingReceipt.student}</strong>
                 </div>
                 <div>
-                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Date of Payment</span>
-                  <span>{viewingReceipt.paid_at ? new Date(viewingReceipt.paid_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Invoice Reference</span>
+                  <span className="font-mono text-[var(--text-secondary)] font-semibold">{viewingReceipt.invoice_id || "INV-2026-FEE"}</span>
                 </div>
                 <div>
-                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Payment Method</span>
-                  <span>{viewingReceipt.method || "Verified Collection"}</span>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Payment Mode</span>
+                  <span className="font-medium text-[var(--text-primary)]">{viewingReceipt.method || "Verified Collection"}</span>
                 </div>
-                {viewingReceipt.reference && (
-                  <div style={{ gridColumn: "span 2" }}>
-                    <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Reference / UTR</span>
-                    <span className="font-mono text-xs text-[var(--brand)]">{viewingReceipt.reference}</span>
-                  </div>
-                )}
+                <div>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Transaction Ref / UTR</span>
+                  <span className="font-mono text-xs text-[var(--brand)] font-semibold">{viewingReceipt.reference || "OFFICE-VERIFIED"}</span>
+                </div>
                 <div style={{ gridColumn: "span 2" }}>
-                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Receipt Dispatched To</span>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Digital Dispatch Address</span>
                   <span className="inline-flex items-center gap-1.5 text-xs text-[var(--info)] font-mono">
                     <Mail size={12} />
                     {viewingReceipt.recipient_email || `${viewingReceipt.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`}
@@ -4168,9 +5119,27 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 </div>
               </div>
 
-              <div style={{ marginTop: 16, padding: "12px 14px", background: "var(--success-soft-2)", border: "1px solid var(--success-border)", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--success)" }}>Amount Paid & Verified:</span>
-                <strong style={{ fontSize: "20px", fontWeight: 800, color: "var(--success)" }}>₹{Number(viewingReceipt.amount || 0).toLocaleString("en-IN")}</strong>
+              {/* Amount Banner */}
+              <div style={{ padding: "14px 16px", background: "var(--success-soft-2)", border: "1px solid var(--success-border)", borderRadius: "8px", marginBottom: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--success)" }}>Amount Received &amp; Verified:</span>
+                  <strong style={{ fontSize: "22px", fontWeight: 800, color: "var(--success)" }}>₹{Number(viewingReceipt.amount || 0).toLocaleString("en-IN")}</strong>
+                </div>
+                <div style={{ marginTop: 6, fontSize: "12px", fontStyle: "italic", color: "var(--text-secondary)" }}>
+                  In words: <strong className="text-[var(--text-primary)]">{amountInWords(Number(viewingReceipt.amount || 0))}</strong>
+                </div>
+              </div>
+
+              {/* Official Seal / Signatory */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 24, paddingTop: 14, borderTop: "1px dashed var(--border)" }}>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                  <div>This is a computer-generated official receipt.</div>
+                  <div>Accounts Office, Global Kids School, Tumakuru</div>
+                </div>
+                <div style={{ textAlign: "center", minWidth: 160 }}>
+                  <div style={{ borderBottom: "1px solid var(--text-muted)", width: 140, marginBottom: 4 }} />
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)" }}>Authorized Cashier / Accounts</span>
+                </div>
               </div>
             </div>
 
@@ -6703,7 +7672,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
           layoutId="settingsNavigationTabs"
           value={activeTab}
           onChange={(val) => setActiveTab(val as typeof activeTab)}
-          indicatorVariant="glass"
+          indicatorVariant="brand"
           options={tabs.map(tab => {
             const Icon = tab.icon;
             return {
