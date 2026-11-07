@@ -5341,9 +5341,6 @@ function StaffView({
             onParentClick={onBack}
           />
           <h1 className="page-title">Staff</h1>
-          <p className="page-subtitle">
-            Every educator, coordinator and administrative officer in one directory.
-          </p>
         </div>
         <div className="intro-actions">
           <button
@@ -5636,11 +5633,6 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
             onParentClick={onBack}
           />
           <h1 className="page-title">Academics</h1>
-          <p className="page-subtitle">
-            Build each class’s weekly timetable — the shape of the day, every
-            lesson, and the teacher who takes it — then keep an eye on subject
-            load.
-          </p>
         </div>
       </div>
 

@@ -760,9 +760,6 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
           <h1 className="page-title text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
             User & Access Management
           </h1>
-          <p className="page-subtitle text-sm text-[var(--text-muted)] max-w-2xl leading-relaxed">
-            Manage faculty logins for <strong>Teachers</strong> and <strong>Administrators</strong>, assign teaching classes & modules, and monitor student portal credentials.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

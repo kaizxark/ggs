@@ -310,9 +310,6 @@ export function ReportsView({ onBack }: ReportsViewProps) {
             <span className="text-[var(--text-primary)] font-semibold">Reports</span>
           </div>
           <h1 className="page-title">Reports & Data Exports</h1>
-          <p className="page-subtitle">
-            Export institutional ledgers, board compliance audits, fee defaulter summaries, and staff rosters.
-          </p>
         </div>
         <button
           type="button"

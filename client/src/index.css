@@ -4500,7 +4500,9 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
 
 /* ---------------------------------------------------------------- responsive */
 @media (max-width: 1210px) {
-  .main-area { margin-left: 0; }
+  /* The sidebar stays a fixed rail until 946px (where it becomes a drawer).
+     Dropping this margin here put the whole main column underneath the rail
+     for every viewport between those two widths. */
   .content-area { padding: 24px 20px 48px; }
   .topbar { padding: 0 20px; }
   .page-title { font-size: 27px; }

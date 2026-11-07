@@ -435,10 +435,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <div>
           <p className="eyebrow">Academic Operations · Assessment Registry</p>
           <h1 className="page-title">Examinations & Official Grading</h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">
-            Record conducted exams, enter marks from physical answer sheets, monitor grading
-            completion, and distribute verified report cards.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
