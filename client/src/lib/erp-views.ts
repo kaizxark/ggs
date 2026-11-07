@@ -53,6 +53,11 @@ import {
   mockClassAttendance,
   mockFeeCategories,
 } from "./school-data";
+import {
+  getStoredInvoices,
+  getStoredPayments,
+  getStudentFeeOverrides,
+} from "./fee-store";
 
 // The report screens import these shapes from the view layer rather than
 // reaching past it into `school-data`, so the view module is the one public

@@ -71,7 +71,7 @@ class ErrorBoundary extends Component<Props, State> {
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2.5 font-semibold transition"
                 )}
-                style={{ background: "var(--brand)", color: "var(--text-primary)" }}
+                style={{ background: "var(--brand)", color: "#ffffff" }}
               >
                 <RotateCcw size={16} />
                 Reload dashboard

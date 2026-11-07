@@ -41,35 +41,38 @@ export function SegmentedControl<T extends string = string>({
 }: SegmentedControlProps<T>) {
   const autoId = useId();
   const activeLayoutId = layoutId || `segmented-pill-${autoId}`;
+  const isBrand = indicatorVariant === "brand";
 
   return (
     <div
-      className={`segmented-control ${className}`}
+      className={`segmented-control ${isBrand ? "variant-brand" : "variant-glass"} ${className}`.trim()}
       role="group"
       aria-label={ariaLabel}
       style={style}
     >
       {options.map((opt) => {
         const isActive = opt.value === value;
+        const isBrandActive = isActive && isBrand;
         return (
           <button
             key={opt.value}
             type="button"
             disabled={opt.disabled}
             onClick={() => onChange(opt.value)}
-            className={`${isActive ? "active" : ""} ${buttonClassName}`.trim()}
+            className={`${isActive ? "active" : ""} ${isBrandActive ? "active-brand" : ""} ${buttonClassName}`.trim()}
             style={{
               position: "relative",
               zIndex: 1,
               background: "transparent",
               boxShadow: "none",
+              color: isBrandActive ? "#ffffff" : undefined,
             }}
           >
             {isActive && (
               <motion.div
                 layoutId={activeLayoutId}
                 className={`segmented-indicator ${
-                  indicatorVariant === "brand" ? "segmented-indicator-brand" : ""
+                  isBrand ? "segmented-indicator-brand" : ""
                 } ${indicatorClassName}`.trim()}
                 transition={{
                   type: "spring",
@@ -88,12 +91,22 @@ export function SegmentedControl<T extends string = string>({
                 justifyContent: "center",
                 gap: "6px",
                 width: "100%",
+                color: isBrandActive ? "#ffffff" : undefined,
+                fontWeight: isActive ? 600 : 500,
               }}
             >
               {opt.icon}
               {opt.label}
               {opt.count !== undefined && (
-                <span className="count-badge" style={{ marginLeft: 4 }}>
+                <span
+                  className="count-badge"
+                  style={{
+                    marginLeft: 4,
+                    background: isBrandActive ? "rgba(255, 255, 255, 0.22)" : undefined,
+                    color: isBrandActive ? "#ffffff" : undefined,
+                    borderColor: isBrandActive ? "rgba(255, 255, 255, 0.35)" : undefined,
+                  }}
+                >
                   {opt.count}
                 </span>
               )}
