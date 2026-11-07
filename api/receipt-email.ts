@@ -9,6 +9,7 @@
 export const config = { runtime: "nodejs" };
 
 import nodemailer from "nodemailer";
+import { escapeHtml, guardEmailRoute, isUsableEmail } from "../shared/email-guard.js";
 
 export interface ReceiptEmailPayload {
   receiptNo: string;
@@ -44,6 +45,18 @@ export function buildReceiptHtml(p: ReceiptEmailPayload): string {
   const statusColor = isPaidInFull ? "#10b981" : "#f59e0b";
   const statusLabel = isPaidInFull ? "PAID IN FULL" : "PARTIAL PAYMENT (BALANCE DUE)";
 
+  // Every value below came from a request body, so it is escaped here rather
+  // than trusted. The school's own brand text is the only literal HTML.
+  const receiptNo = escapeHtml(p.receiptNo);
+  const dateText = escapeHtml(formatDateIn(p.date));
+  const studentName = escapeHtml(p.studentName);
+  const grade = escapeHtml(p.grade || "Enrolled Pupil");
+  const gradeLabel = escapeHtml(p.grade || "Academic Year 2026–27");
+  const invoiceId = escapeHtml(p.invoiceId || "INV-2026-FEE");
+  const reference = p.reference ? escapeHtml(p.reference) : "";
+  const method = escapeHtml(p.method || "Electronic Transfer");
+  const recipient = escapeHtml(p.studentEmail);
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -76,11 +89,11 @@ export function buildReceiptHtml(p: ReceiptEmailPayload): string {
       <div class="receipt-id-box">
         <div>
           <div style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase;">Receipt Number</div>
-          <div style="font-size: 16px; font-weight: 700; font-family: monospace; color: #4338ca;">${p.receiptNo}</div>
+          <div style="font-size: 16px; font-weight: 700; font-family: monospace; color: #4338ca;">${receiptNo}</div>
         </div>
         <div style="text-align: right;">
           <div style="font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase;">Date of Payment</div>
-          <div style="font-size: 13px; font-weight: 600; color: #334155;">${formatDateIn(p.date)}</div>
+          <div style="font-size: 13px; font-weight: 600; color: #334155;">${dateText}</div>
         </div>
       </div>
 
@@ -91,12 +104,12 @@ export function buildReceiptHtml(p: ReceiptEmailPayload): string {
         </tr>
         <tr>
           <td>
-            <strong>${p.studentName}</strong>
-            <div style="font-size: 12px; color: #64748b;">${p.grade || "Enrolled Pupil"}</div>
+            <strong>${studentName}</strong>
+            <div style="font-size: 12px; color: #64748b;">${grade}</div>
           </td>
           <td style="text-align: right;">
-            <div>Invoice: <code>${p.invoiceId || "INV-2026-FEE"}</code></div>
-            ${p.reference ? `<div style="font-size: 11px; color: #64748b;">Ref/UTR: ${p.reference}</div>` : ""}
+            <div>Invoice: <code>${invoiceId}</code></div>
+            ${reference ? `<div style="font-size: 11px; color: #64748b;">Ref/UTR: ${reference}</div>` : ""}
           </td>
         </tr>
       </table>
@@ -107,12 +120,12 @@ export function buildReceiptHtml(p: ReceiptEmailPayload): string {
           <th style="text-align: right;">Amount</th>
         </tr>
         <tr>
-          <td>Annual Tuition Fee (${p.grade || "Academic Year 2026–27"})</td>
+          <td>Annual Tuition Fee (${gradeLabel})</td>
           <td style="text-align: right;">${formatInr(p.totalFee || 50000)}</td>
         </tr>
         <tr>
           <td>Payment Method</td>
-          <td style="text-align: right;">${p.method || "Electronic Transfer"}</td>
+          <td style="text-align: right;">${method}</td>
         </tr>
         <tr style="border-top: 2px solid #cbd5e1;">
           <td style="padding-top: 14px;"><strong>Amount Paid Now</strong></td>
@@ -127,7 +140,7 @@ export function buildReceiptHtml(p: ReceiptEmailPayload): string {
       </table>
 
       <div style="background: #eef2ff; border-radius: 8px; padding: 12px 16px; font-size: 12px; color: #3730a3; margin-top: 20px;">
-        This receipt has been recorded in the Global Kids School Finance Ledger and dispatched to the pupil's registered email address (<strong>${p.studentEmail}</strong>).
+        This receipt has been recorded in the Global Kids School Finance Ledger and dispatched to the pupil's registered email address (<strong>${recipient}</strong>).
       </div>
     </div>
     <div class="footer">
@@ -143,6 +156,14 @@ export default async function handler(req: Request): Promise<Response> {
     return Response.json({ error: "method_not_allowed", message: "POST required" }, { status: 405 });
   }
 
+  /*
+   * Sending school-branded mail is a privileged action. A receipt is an
+   * official document and the transport is the school's own SMTP reputation,
+   * so only the finance desk (or an administrator) may trigger one.
+   */
+  const guard = await guardEmailRoute(req, ["admin", "principal", "accountant"], "receipt-email");
+  if (!guard.ok) return guard.response;
+
   let payload: ReceiptEmailPayload;
   try {
     payload = (await req.json()) as ReceiptEmailPayload;
@@ -157,8 +178,19 @@ export default async function handler(req: Request): Promise<Response> {
     );
   }
 
-  const recipient = payload.studentEmail?.trim() || `${payload.studentName.toLowerCase().replace(/\s+/g, ".")}@example.com`;
-  const subject = `Fee Payment Receipt [${payload.receiptNo}] · Global Kids School`;
+  const recipient = String(payload.studentEmail ?? "").trim();
+  if (!isUsableEmail(recipient)) {
+    return Response.json(
+      {
+        error: "invalid_recipient",
+        message: "A valid recipient email address is required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const receiptNo = String(payload.receiptNo).replace(/[\r\n]+/g, " ").slice(0, 80);
+  const subject = `Fee Payment Receipt [${receiptNo}] · Global Kids School`;
   const html = buildReceiptHtml({ ...payload, studentEmail: recipient });
 
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
@@ -192,10 +224,12 @@ export default async function handler(req: Request): Promise<Response> {
 
   return Response.json({
     ok: true,
-    sent: true,
+    sent: sentViaSmtp,
     mode: sentViaSmtp ? "smtp" : "recorded",
-    receiptNo: payload.receiptNo,
+    receiptNo,
     recipient,
-    message: `Receipt ${payload.receiptNo} generated and dispatched to ${recipient}`,
+    message: sentViaSmtp
+      ? `Receipt ${receiptNo} sent to ${recipient}`
+      : `Receipt ${receiptNo} recorded; mail transport is not configured, so nothing was sent.`,
   });
 }

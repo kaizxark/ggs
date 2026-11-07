@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET, PATCH, POST } from "./portal-admin";
 import { SUPER_ADMIN_ID } from "../shared/super-admin";
+import { PASSWORD_NOT_STORED } from "../shared/portal-accounts";
 
 /**
  * The two owner actions this school runs on.
@@ -407,7 +408,7 @@ describe("POST /api/portal-admin?action=reset-pupil-passwords", () => {
       request("/api/portal-admin?action=reset-pupil-passwords", "POST")
     );
     expect(store.credentialWrites).toHaveLength(2);
-    expect(store.credentialWrites[0].body.password).toBe("290805");
+    expect(store.credentialWrites[0].body.password).toBe(PASSWORD_NOT_STORED);
   });
 
   it("leaves a pupil with no date of birth alone, and says so", async () => {

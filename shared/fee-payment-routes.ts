@@ -14,7 +14,7 @@ import {
   handleFeeOrderRequest,
   handleFeeWebhookRequest,
 } from "./fee-gateway.js";
-import { fail, recordVerifiedUpiPayment } from "./fee-payments.js";
+import { fail, recordManualPayment, recordVerifiedUpiPayment } from "./fee-payments.js";
 
 /** Create a Razorpay order and return the public Checkout parameters. */
 export const handleFeePaymentRequest = handleFeeOrderRequest;
@@ -34,6 +34,31 @@ export async function handleFeeRecordRequest(req: Request): Promise<Response> {
   }
 
   const result = await recordVerifiedUpiPayment(req, body);
+  if (!result.ok) return result.response;
+  return Response.json(
+    {
+      recorded: true,
+      duplicate: result.duplicate,
+      paymentId: result.paymentId,
+      receiptNo: result.receiptNo,
+      status: result.status,
+    },
+    { status: result.duplicate ? 200 : 201, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+/** A collection the office took as cash, cheque, card or a bank transfer. */
+export async function handleFeeManualRequest(req: Request): Promise<Response> {
+  if (req.method !== "POST") return fail("Method not allowed.", 405, "method_not_allowed");
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    return fail("Send the invoice, method, reference and amount.", 400, "invalid_body");
+  }
+
+  const result = await recordManualPayment(req, body);
   if (!result.ok) return result.response;
   return Response.json(
     {

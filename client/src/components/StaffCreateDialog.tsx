@@ -260,11 +260,11 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          background: "rgba(20, 21, 26, 0.95)",
+          background: "var(--bg-panel)",
           backdropFilter: "blur(36px) saturate(190%)",
           WebkitBackdropFilter: "blur(36px) saturate(190%)",
           border: "1px solid var(--border-strong)",
-          boxShadow: "0 28px 72px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+          boxShadow: "var(--shadow-dialog)",
         }}
       >
         {/* Header */}
@@ -276,7 +276,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            background: "rgba(24, 25, 32, 0.88)",
+            background: "var(--bg-panel)",
             borderBottom: "1px solid var(--border)",
           }}
         >
@@ -304,8 +304,8 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
             <div className="space-y-5 animate-in fade-in duration-200" style={{ padding: "10px 4px" }}>
               <div
                 style={{
-                  background: "rgba(16, 185, 129, 0.08)",
-                  border: "1px solid rgba(16, 185, 129, 0.25)",
+                  background: "var(--success-soft-2)",
+                  border: "1px solid var(--success-border)",
                   borderRadius: 14,
                   padding: "16px 20px",
                   display: "flex",
@@ -318,8 +318,8 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
                     width: 40,
                     height: 40,
                     borderRadius: "50%",
-                    background: "rgba(16, 185, 129, 0.2)",
-                    color: "#10b981",
+                    background: "var(--success-soft)",
+                    color: "var(--success)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -329,7 +329,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
                   <UserCheck size={22} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#ffffff", margin: 0 }}>
+                  <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
                     Profile Created & Password Generated
                   </h3>
                   <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "3px 0 0" }}>
@@ -342,7 +342,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
               <div
                 style={{
                   borderRadius: 14,
-                  background: "rgba(255, 255, 255, 0.03)",
+                  background: "var(--bg-raised)",
                   border: "1px solid var(--border)",
                   padding: "20px",
                   display: "grid",
@@ -396,13 +396,13 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
                       alignItems: "center",
                       justifyContent: "space-between",
                       marginTop: 4,
-                      background: "rgba(0,0,0,0.3)",
+                      background: "var(--bg-raised)",
                       padding: "8px 12px",
                       borderRadius: 10,
                       border: "1px solid var(--border)",
                     }}
                   >
-                    <code style={{ fontSize: "14px", fontWeight: 700, color: "#10b981", letterSpacing: "0.06em" }}>
+                    <code style={{ fontSize: "14px", fontWeight: 700, color: "var(--success)", letterSpacing: "0.06em" }}>
                       {issuedSlip.password}
                     </code>
                     <button
@@ -533,7 +533,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
                   marginTop: 18,
                   padding: "16px 18px",
                   borderRadius: 14,
-                  background: "rgba(255, 255, 255, 0.02)",
+                  background: "var(--bg-panel)",
                   border: "1px solid var(--border)",
                 }}
               >
@@ -650,7 +650,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
             borderTop: "1px solid var(--border)",
             padding: "14px 22px",
             flexShrink: 0,
-            background: "rgba(24, 25, 32, 0.88)",
+            background: "var(--bg-panel)",
             display: "flex",
             justifyContent: "flex-end",
             gap: 10,

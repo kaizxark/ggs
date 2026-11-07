@@ -86,6 +86,7 @@ import {
 import { toast } from "@/lib/toast";
 import { notifyDataChanged } from "../lib/live-data";
 import { useLocation } from "wouter";
+import { TimetableView } from "@/components/TimetableView";
 import {
   changePortalCredentials,
   requestSignInCode,
@@ -180,7 +181,8 @@ import {
 import { StudentDirectory } from "./StudentDirectory";
 import { StaffDrawer } from "../components/StaffDrawer";
 import { StaffCreateDialog } from "../components/StaffCreateDialog";
-import { recordFeePayment } from "../lib/fee-store";
+import { recordManualPayment } from "../lib/fee-payments";
+import { authHeaders } from "../lib/supabase";
 import { ReportsView } from "../components/ReportsView";
 import { ExaminationsView } from "../components/ExaminationsView";
 import { FormSelect } from "../components/FormSelect";
@@ -196,6 +198,7 @@ import {
 } from "@shared/super-admin";
 import { screenLabelByName, screensForRole } from "@shared/ai-access";
 import { USERNAME_PATTERN } from "@/lib/username";
+import { recordFeePayment } from "@/lib/fee-store";
 
 /** Initials for the signed-in user, e.g. "Ehtesham" -> "EH". */
 function initialsFor(name: string): string {
@@ -2191,7 +2194,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                       border: "1px solid var(--border-strong)",
                       background: "var(--bg-panel)",
                       color: "var(--text-secondary)",
-                      boxShadow: "0 12px 30px rgba(0,0,0,.5)",
+                      boxShadow: "var(--shadow-popover)",
                       fontSize: 12,
                     }}
                     formatter={(val: number, name: string) => [
@@ -2202,7 +2205,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                   <Area
                     type="monotone"
                     dataKey="present"
-                    stroke="var(--brand)"
+                    stroke="var(--success)"
                     strokeWidth={2.4}
                     fill="url(#presentFill)"
                   />
@@ -2854,7 +2857,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                 marginTop: "16px",
                 padding: "12px 16px",
                 borderRadius: "10px",
-                background: "rgba(255,255,255,0.03)",
+                background: "var(--bg-raised)",
                 border: "1px solid var(--border)",
                 display: "flex",
                 alignItems: "center",
@@ -2869,7 +2872,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                     width: "32px",
                     height: "32px",
                     borderRadius: "8px",
-                    background: "rgba(99,102,241,0.14)",
+                    background: "var(--violet-soft)",
                     color: "var(--brand-strong)",
                     display: "flex",
                     alignItems: "center",
@@ -2924,10 +2927,10 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
 
             <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#30d158" }} />
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--success)" }} />
                 Present Today
               </div>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "#30d158", margin: "4px 0" }}>
+              <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--success)", margin: "4px 0" }}>
                 {counts.present} <span style={{ fontSize: "14px", fontWeight: 500, opacity: 0.85 }}>({counts.pct}%)</span>
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Attending roll call</div>
@@ -2935,10 +2938,10 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
 
             <div className="metric-card">
               <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ff453a" }} />
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)" }} />
                 Absent
               </div>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "#ff453a", margin: "4px 0" }}>
+              <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--danger)", margin: "4px 0" }}>
                 {counts.absent} <span style={{ fontSize: "14px", fontWeight: 500, opacity: 0.85 }}>({counts.total > 0 ? Math.round((counts.absent / counts.total) * 1000) / 10 : 0}%)</span>
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Marked absent</div>
@@ -3056,12 +3059,12 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                                   fontWeight: curStatus === "present" ? 700 : 500,
                                   cursor: "pointer",
                                   transition: "all 0.15s ease",
-                                  background: curStatus === "present" ? "rgba(48,209,88,0.2)" : "rgba(255,255,255,0.03)",
-                                  borderColor: curStatus === "present" ? "rgba(48,209,88,0.6)" : "var(--border)",
+                                  background: curStatus === "present" ? "var(--success-soft)" : "var(--bg-raised)",
+                                  borderColor: curStatus === "present" ? "var(--success-border)" : "var(--border)",
                                   borderWidth: "1px",
                                   borderStyle: "solid",
-                                  color: curStatus === "present" ? "#30d158" : "var(--text-muted)",
-                                  boxShadow: curStatus === "present" ? "0 0 10px rgba(48,209,88,0.25)" : "none",
+                                  color: curStatus === "present" ? "var(--success)" : "var(--text-muted)",
+                                  boxShadow: curStatus === "present" ? "0 0 10px var(--success-soft)" : "none",
                                 }}
                               >
                                 <Check size={12} />
@@ -3082,12 +3085,12 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                                   fontWeight: curStatus === "absent" ? 700 : 500,
                                   cursor: "pointer",
                                   transition: "all 0.15s ease",
-                                  background: curStatus === "absent" ? "rgba(255,69,58,0.2)" : "rgba(255,255,255,0.03)",
-                                  borderColor: curStatus === "absent" ? "rgba(255,69,58,0.6)" : "var(--border)",
+                                  background: curStatus === "absent" ? "var(--danger-soft)" : "var(--bg-raised)",
+                                  borderColor: curStatus === "absent" ? "var(--danger-border)" : "var(--border)",
                                   borderWidth: "1px",
                                   borderStyle: "solid",
-                                  color: curStatus === "absent" ? "#ff453a" : "var(--text-muted)",
-                                  boxShadow: curStatus === "absent" ? "0 0 10px rgba(255,69,58,0.25)" : "none",
+                                  color: curStatus === "absent" ? "var(--danger)" : "var(--text-muted)",
+                                  boxShadow: curStatus === "absent" ? "0 0 10px var(--danger-soft)" : "none",
                                 }}
                               >
                                 <X size={12} />
@@ -3107,7 +3110,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                                 maxWidth: "220px",
                                 padding: "4px 8px",
                                 fontSize: "12px",
-                                background: "rgba(255,255,255,0.03)",
+                                background: "var(--bg-raised)",
                                 border: "1px solid var(--border)",
                                 borderRadius: "6px",
                                 color: "var(--text-primary)",
@@ -3130,11 +3133,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                 alignItems: "center",
                 justifyContent: "space-between",
                 borderTop: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.01)",
+                background: "transparent",
               }}
             >
               <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                Summary: <strong style={{ color: "#30d158" }}>{counts.present} Present</strong> · <strong style={{ color: "#ff453a" }}>{counts.absent} Absent</strong> ({counts.pct}% attendance)
+                Summary: <strong style={{ color: "var(--success)" }}>{counts.present} Present</strong> · <strong style={{ color: "var(--danger)" }}>{counts.absent} Absent</strong> ({counts.pct}% attendance)
               </div>
 
               <button
@@ -3463,11 +3466,11 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             </div>
             <span className="mini-label" style={{ display: "inline-flex", alignItems: "center", gap: "14px", fontSize: "12px" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)", fontWeight: 500 }}>
-                <i className="legend-dot" style={{ background: "#10b981" }} />
+                <i className="legend-dot" style={{ background: "var(--success)" }} />
                 Collected
               </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)", fontWeight: 500 }}>
-                <i className="legend-dot" style={{ background: "#f59e0b" }} />
+                <i className="legend-dot" style={{ background: "var(--warning)" }} />
                 Pending
               </span>
             </span>
@@ -3497,7 +3500,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     tickFormatter={value => `₹${value}L`}
                   />
                   <Tooltip
-                    cursor={{ fill: "rgba(255, 255, 255, 0.04)", radius: 6 }}
+                    cursor={{ fill: "var(--bg-hover)", radius: 6 }}
                     content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null;
                       const collectedVal = payload.find(p => p.dataKey === "collected")?.value;
@@ -3505,24 +3508,24 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                       return (
                         <div
                           style={{
-                            background: "rgba(18, 20, 26, 0.96)",
+                            background: "var(--bg-panel)",
                             backdropFilter: "blur(16px)",
                             border: "1px solid var(--border-strong)",
                             borderRadius: "12px",
                             padding: "10px 14px",
-                            boxShadow: "0 14px 36px rgba(0,0,0,0.6)",
+                            boxShadow: "var(--shadow-popover)",
                             fontSize: "12px",
                           }}
                         >
-                          <div style={{ fontWeight: 700, color: "#ffffff", marginBottom: 6 }}>
+                          <div style={{ fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
                             {label} 2026
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#10b981", fontWeight: 600 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981" }} />
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--success)", fontWeight: 600 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} />
                             <span>Collected: ₹{collectedVal}L</span>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#f59e0b", fontWeight: 600, marginTop: 4 }}>
-                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--warning)", fontWeight: 600, marginTop: 4 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--warning)" }} />
                             <span>Pending: ₹{pendingVal}L</span>
                           </div>
                         </div>
@@ -3531,12 +3534,12 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   />
                   <Bar
                     dataKey="collected"
-                    fill="#10b981"
+                    fill="var(--success)"
                     radius={[5, 5, 0, 0]}
                   />
                   <Bar
                     dataKey="pending"
-                    fill="#f59e0b"
+                    fill="var(--warning)"
                     radius={[5, 5, 0, 0]}
                   />
                 </BarChart>
@@ -3608,7 +3611,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   </strong>
                 </div>
               ))}
-              <div style={{ marginTop: "10px", padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: "8px", fontSize: "11px", color: "var(--text-muted)" }}>
+              <div style={{ marginTop: "10px", padding: "8px 10px", background: "var(--bg-raised)", borderRadius: "8px", fontSize: "11px", color: "var(--text-muted)" }}>
                 <div>Class 6–8: <strong className="text-[var(--text-primary)]">₹50,000 / year</strong></div>
                 <div style={{ marginTop: "2px" }}>Class 9–10: <strong className="text-[var(--text-primary)]">₹60,000 / year</strong></div>
               </div>
@@ -3669,9 +3672,9 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                           <button
                             className="tiny-action"
                             style={{
-                              background: "rgba(16, 185, 129, 0.12)",
-                              color: "#10b981",
-                              borderColor: "rgba(16, 185, 129, 0.25)",
+                              background: "var(--success-soft)",
+                              color: "var(--success)",
+                              borderColor: "var(--success-border)",
                               fontWeight: 600,
                             }}
                             onClick={() => {
@@ -3785,7 +3788,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                       </td>
                       <td>
                         <span className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-mono">
-                          <Mail size={12} className="text-indigo-400" />
+                          <Mail size={12} className="text-[var(--info)]" />
                           {targetEmail}
                         </span>
                       </td>
@@ -3867,10 +3870,10 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                         right: 0,
                         zIndex: 50,
                         marginTop: 4,
-                        background: "#181a22",
+                        background: "var(--bg-panel)",
                         border: "1px solid var(--border-strong)",
                         borderRadius: 10,
-                        boxShadow: "0 14px 36px rgba(0,0,0,0.75)",
+                        boxShadow: "var(--shadow-popover)",
                         overflow: "hidden",
                       }}
                     >
@@ -3889,7 +3892,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "space-between",
-                            borderBottom: "1px solid rgba(255,255,255,0.05)",
+                            borderBottom: "1px solid var(--bg-hover)",
                             background: "transparent",
                             cursor: "pointer",
                           }}
@@ -3913,7 +3916,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 style={{
                   gridColumn: "span 2",
                   padding: "10px 14px",
-                  background: "rgba(255,255,255,0.03)",
+                  background: "var(--bg-raised)",
                   borderRadius: "10px",
                   border: "1px solid var(--border)",
                   fontSize: "12px",
@@ -4116,7 +4119,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           <div style={{ padding: "4px 0", fontSize: "13px" }}>
             <div
               style={{
-                background: "rgba(255, 255, 255, 0.03)",
+                background: "var(--bg-raised)",
                 border: "1px solid var(--border)",
                 borderRadius: "10px",
                 padding: "16px",
@@ -4158,16 +4161,16 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 )}
                 <div style={{ gridColumn: "span 2" }}>
                   <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Receipt Dispatched To</span>
-                  <span className="inline-flex items-center gap-1.5 text-xs text-indigo-400 font-mono">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[var(--info)] font-mono">
                     <Mail size={12} />
                     {viewingReceipt.recipient_email || `${viewingReceipt.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`}
                   </span>
                 </div>
               </div>
 
-              <div style={{ marginTop: 16, padding: "12px 14px", background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#10b981" }}>Amount Paid & Verified:</span>
-                <strong style={{ fontSize: "20px", fontWeight: 800, color: "#10b981" }}>₹{Number(viewingReceipt.amount || 0).toLocaleString("en-IN")}</strong>
+              <div style={{ marginTop: 16, padding: "12px 14px", background: "var(--success-soft-2)", border: "1px solid var(--success-border)", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--success)" }}>Amount Paid & Verified:</span>
+                <strong style={{ fontSize: "20px", fontWeight: 800, color: "var(--success)" }}>₹{Number(viewingReceipt.amount || 0).toLocaleString("en-IN")}</strong>
               </div>
             </div>
 
@@ -4638,30 +4641,21 @@ function StaffView({
 }
 
 function AcademicsView({ onBack }: { onBack: () => void }) {
-  const days = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ];
-  const [dayIndex, setDayIndex] = useState(0);
-  const { rows: week, loading: weekLoading } = useTimetable(days[dayIndex]);
-  const weekPager = usePagination(week);
-  const pageWeek = weekPager.pageRows;
   const { rows: subjects } = useSubjects();
   const { rows: staffMembers } = useStaff();
   const { rows: exams } = useExams();
-  const teachersCount = useMemo(() => {
-    return staffMembers.filter(
-      s =>
-        /teacher|faculty|instructor/i.test(s.role) ||
-        /languages|science|mathematics|english|social|sports|computer/i.test(
-          s.department
-        )
-    ).length;
-  }, [staffMembers]);
+  const teachersCount = useMemo(
+    () =>
+      staffMembers.filter(
+        (member) =>
+          /teacher|faculty|instructor/i.test(member.role) ||
+          /languages|science|mathematics|english|social|sports|computer/i.test(
+            member.department
+          )
+      ).length,
+    [staffMembers]
+  );
+
   return (
     <div className="page-stack">
       <div className="page-intro">
@@ -4673,34 +4667,19 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
           />
           <h1 className="page-title">Academics</h1>
           <p className="page-subtitle">
-            Timetable, subject load and syllabus progress across the school.
+            Build each class’s weekly timetable — the shape of the day, every
+            lesson, and the teacher who takes it — then keep an eye on subject
+            load.
           </p>
         </div>
-        <button
-          className="primary-button"
-          onClick={() =>
-            toast.success("Timetable published", {
-              description:
-                "The updated schedule is now visible to all classes.",
-            })
-          }
-        >
-          <CalendarDays size={16} />
-          Publish timetable
-        </button>
       </div>
+
       <div className="metric-grid">
         <MetricBlock
           label="Subjects offered"
           value={String(subjects.length)}
           comparison={`${subjects.length} active curriculum areas`}
           icon={BookOpen}
-        />
-        <MetricBlock
-          label="Periods scheduled"
-          value={String(week.length)}
-          comparison={week.length > 0 ? `For ${days[dayIndex]}` : "No periods scheduled"}
-          icon={Clock3}
         />
         <MetricBlock
           label="Teaching staff"
@@ -4711,64 +4690,18 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
         <MetricBlock
           label="Examinations"
           value={String(exams.length)}
-          comparison={exams.length > 0 ? `${exams.filter(e => e.status === "Published").length} published` : "No exams scheduled"}
+          comparison={
+            exams.length > 0
+              ? `${exams.filter(e => e.status === "Published").length} published`
+              : "No exams scheduled"
+          }
           icon={GraduationCap}
         />
       </div>
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2 className="panel-title">{days[dayIndex]} · Grades 6 to 10</h2>
-          </div>
-          <SegmentedControl
-            ariaLabel="Select timetable day"
-            layoutId="academicsDayTabs"
-            value={String(dayIndex)}
-            onChange={(val) => setDayIndex(Number(val))}
-            options={days.map((day, index) => ({
-              value: String(index),
-              label: day.slice(0, 3),
-            }))}
-          />
-        </div>
-        <div className="table-scroll">
-          <table className="data-table" style={{ minWidth: 720 }}>
-            <thead>
-              <tr>
-                <th>Period</th>
-                <th>Time</th>
-                <th>Grade 6</th>
-                <th>Grade 7</th>
-                <th>Grade 8</th>
-                <th>Grade 9</th>
-                <th>Grade 10</th>
-              </tr>
-            </thead>
-            <tbody>
-              {weekLoading ? (
-                <SkeletonTableRows rows={6} columns={7} />
-              ) : (
-                pageWeek.map(row => (
-                  <tr key={`${row.day}-${row.period}`}>
-                    <td className="font-medium text-[var(--text-primary)]">
-                      {row.period}
-                    </td>
-                    <td className="muted-cell">{row.time}</td>
-                    {[row.grade_6, row.grade_7, row.grade_8, row.grade_9, row.grade_10 || "Study Hall"].map(
-                      (subject, gradeIndex) => (
-                        <td key={gradeIndex}>
-                          <span className="grade-chip">{subject}</span>
-                        </td>
-                      )
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <Pager pagination={weekPager} noun="timetable rows" />
-      </section>
+
+      {/* The timetable builder owns its own data, permissions and validation. */}
+      <TimetableView />
+
       <section className="panel table-panel">
         <div className="panel-header">
           <div>
@@ -4837,7 +4770,6 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
     </div>
   );
 }
-
 
 
 /**
@@ -6134,7 +6066,7 @@ function AnalyticsView({
                         border: "1px solid var(--border-strong)",
                         background: "var(--bg-panel)",
                         color: "var(--text-secondary)",
-                        boxShadow: "0 12px 30px rgba(0,0,0,.5)",
+                        boxShadow: "var(--shadow-popover)",
                         fontSize: 12,
                       }}
                     />

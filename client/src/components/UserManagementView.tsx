@@ -57,6 +57,14 @@ export interface PortalAccountRow {
   detail: string;
   username: string;
   password: string;
+  /**
+   * True when the owner has chosen their own password.
+   *
+   * The server cannot send that password — Auth stores a hash and the old
+   * plaintext mirror is gone — so the screen shows "Set by the owner" rather
+   * than a value that would be a lie.
+   */
+  passwordSet?: boolean;
   derived: boolean;
   email: string;
   issuedAt: string;
@@ -412,7 +420,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       `Student Name: ${row.name}`,
       `Grade & Class: ${gradeDisplay}`,
       `Username (USN): ${row.username}`,
-      `Initial Password: ${row.password}`,
+      `Initial Password: ${
+        row.passwordSet
+          ? "already changed by the student"
+          : row.password || "not issued"
+      }`,
       `Portal Login URL: https://ggs-erp.vercel.app/login`,
       `======================================`,
       `Use your USN and password to sign in. Please change your password after initial sign-in.`,
@@ -423,7 +435,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
   const copyStaffSlip = (person: PeopleRow, staffAcc?: PortalAccountRow) => {
     const username = staffAcc?.username || person.username;
-    const password = staffAcc?.password || "Demo@123456";
+    const password = staffAcc?.password || "";
     const isPrincipal =
       (/principal/i.test(person.designation ?? "") && !/vice/i.test(person.designation ?? "")) ||
       person.role === "admin";
@@ -451,7 +463,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       `Assigned Scope: ${scope}`,
       `Portal Login URL: https://ggs-erp.vercel.app/login`,
       `Username / USN: ${username}`,
-      `Password: ${password}`,
+      `Password: ${
+        staffAcc?.passwordSet
+          ? "already set by the staff member"
+          : password || "not issued"
+      }`,
       `======================================`,
       `Sign in with your username or email at the portal to access your dashboard.`,
     ].join("\n");
@@ -1006,8 +1022,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                       staffAccountsMap.get(person.username.toLowerCase());
 
                     const username = staffAcc?.username || person.username;
-                    const password = staffAcc?.password || "Demo@123456";
-                    const hasPassword = Boolean(password && password !== "••••••••");
+                    // Never invent a password. If the owner has set one, the
+                    // server knows that but not the secret, so the cell says so.
+                    const passwordSet = Boolean(staffAcc?.passwordSet);
+                    const password = staffAcc?.password || "";
+                    const hasPassword = Boolean(password);
 
                     const scopeText =
                       person.designation ||
@@ -1101,9 +1120,15 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         <td className="py-4.5 px-6">
                           <div className="flex items-center gap-2">
                             <code className="text-xs font-mono font-medium text-emerald-400 bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
-                              {revealed ? password : "••••••••"}
+                              {passwordSet
+                                ? "Set by owner"
+                                : hasPassword
+                                  ? revealed
+                                    ? password
+                                    : "••••••••"
+                                  : "—"}
                             </code>
-                            {hasPassword && (
+                            {hasPassword && !passwordSet && (
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1312,9 +1337,15 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         <td className="py-4.5 px-6">
                           <div className="flex items-center gap-2">
                             <code className="text-xs font-mono font-medium text-emerald-400 bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
-                              {revealed ? row.password : "••••••••"}
+                              {row.passwordSet
+                                ? "Set by owner"
+                                : row.password
+                                  ? revealed
+                                    ? row.password
+                                    : "••••••••"
+                                  : "—"}
                             </code>
-                            {revealed && (
+                            {revealed && row.password && !row.passwordSet && (
                               <button
                                 type="button"
                                 onClick={() => {

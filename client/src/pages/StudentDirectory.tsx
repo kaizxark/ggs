@@ -648,7 +648,12 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
             </tbody>
           </table>
 
-          {!loading && rows.length === 0 && (
+          {/*
+            Only a successful, genuinely empty answer may claim the school has
+            no pupils. A failed request shows the error banner above instead —
+            otherwise a refused or expired session reads as an empty roll call.
+          */}
+          {!loading && !error && rows.length === 0 && (
             <div className="empty-state">
               <Users size={22} className="text-[var(--text-muted)]" />
               <p className="panel-title" style={{ fontSize: 15, marginTop: 6 }}>
@@ -1540,11 +1545,11 @@ function StudentDialog({
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          background: "rgba(20, 21, 26, 0.94)",
+          background: "var(--bg-panel)",
           backdropFilter: "blur(36px) saturate(190%)",
           WebkitBackdropFilter: "blur(36px) saturate(190%)",
           border: "1px solid var(--border-strong)",
-          boxShadow: "0 28px 72px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+          boxShadow: "var(--shadow-dialog)",
         }}
       >
         <div
@@ -1552,7 +1557,7 @@ function StudentDialog({
           style={{
             padding: "16px 22px 12px",
             flexShrink: 0,
-            background: "rgba(24, 25, 32, 0.88)",
+            background: "var(--bg-panel)",
             borderBottom: "1px solid var(--border)",
           }}
         >
@@ -1572,7 +1577,7 @@ function StudentDialog({
         </div>
 
         {/* Apple Segmented Section Tabs with horizontal sliding motion */}
-        <div style={{ padding: "0 22px 14px", background: "rgba(24, 25, 32, 0.88)", flexShrink: 0 }}>
+        <div style={{ padding: "0 22px 14px", background: "var(--bg-panel)", flexShrink: 0 }}>
           <SegmentedControl
             style={{ width: "100%", height: 34 }}
             layoutId="addStudentModalTab"
@@ -1584,14 +1589,14 @@ function StudentDialog({
                 value: "academic",
                 label: "Academic",
                 badge: hasAcademicError ? (
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 4, display: "inline-block" }} />
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger)", marginLeft: 4, display: "inline-block" }} />
                 ) : undefined,
               },
               {
                 value: "guardian",
                 label: "Guardian",
                 badge: hasGuardianError ? (
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger, #ff453a)", marginLeft: 4, display: "inline-block" }} />
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--danger)", marginLeft: 4, display: "inline-block" }} />
                 ) : undefined,
               },
               {
@@ -1712,7 +1717,7 @@ function StudentDialog({
                     gridColumn: "span 2",
                     padding: "12px 14px",
                     borderRadius: "10px",
-                    background: "rgba(255, 255, 255, 0.03)",
+                    background: "var(--bg-raised)",
                     border: "1px solid var(--border)",
                     display: "flex",
                     flexDirection: "column",
@@ -1852,7 +1857,7 @@ function StudentDialog({
             borderTop: "1px solid var(--border)",
             padding: "14px 22px",
             flexShrink: 0,
-            background: "rgba(24, 25, 32, 0.88)",
+            background: "var(--bg-panel)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",

@@ -379,3 +379,20 @@ export type PortalSubject = "student" | "staff";
 
 /** How long an issued password can stand before it should be replaced. */
 export const PASSWORD_MAX_AGE_DAYS = 180;
+
+/**
+ * The value written to a credential row's `password` column.
+ *
+ * Supabase Auth is the only place a usable password is held, and it stores a
+ * hash. The `student_credentials` / `staff_credentials` rows used to mirror the
+ * plaintext so the owner's screen could read it back — which meant a database
+ * leak handed over every child's password, and any administrator could read one.
+ *
+ * That column now carries this marker instead. It is not a valid password
+ * (the rules below require at least eight characters, a letter and a digit), so
+ * a dump of the table discloses nothing. Whether an account still uses its
+ * derived first password is recorded by `last_rotated_at`, which is a fact
+ * about the account rather than a copy of the secret.
+ */
+export const PASSWORD_NOT_STORED = "*";
+

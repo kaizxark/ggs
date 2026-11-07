@@ -542,11 +542,11 @@ export function ReportsView({ onBack }: ReportsViewProps) {
               flexDirection: "column",
               borderRadius: 18,
               overflow: "hidden",
-              background: "rgba(20, 21, 26, 0.96)",
+              background: "var(--bg-panel)",
               backdropFilter: "blur(36px) saturate(190%)",
               WebkitBackdropFilter: "blur(36px) saturate(190%)",
               border: "1px solid var(--border-strong)",
-              boxShadow: "0 28px 72px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+              boxShadow: "var(--shadow-dialog)",
             }}
           >
             {/* Header */}
@@ -558,7 +558,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                background: "rgba(24, 25, 32, 0.88)",
+                background: "var(--bg-panel)",
                 borderBottom: "1px solid var(--border)",
               }}
             >
@@ -690,15 +690,15 @@ export function ReportsView({ onBack }: ReportsViewProps) {
             <div className="modal-body overflow-y-auto p-0 flex-1">
               {activePreview === "fees" && (
                 <table className="data-table w-full text-left">
-                  <thead className="sticky top-0 z-10 bg-[#161820]">
-                    <tr className="bg-[#161820]">
-                      <th className="bg-[#161820]">Pupil USN</th>
-                      <th className="bg-[#161820]">Student Name</th>
-                      <th className="bg-[#161820]">Class</th>
-                      <th className="bg-[#161820]">Assessed</th>
-                      <th className="bg-[#161820]">Paid</th>
-                      <th className="bg-[#161820]">Outstanding</th>
-                      <th className="bg-[#161820]">Fee Status</th>
+                  <thead className="sticky top-0 z-10 bg-[var(--bg-raised)]">
+                    <tr className="bg-[var(--bg-raised)]">
+                      <th className="bg-[var(--bg-raised)]">Pupil USN</th>
+                      <th className="bg-[var(--bg-raised)]">Student Name</th>
+                      <th className="bg-[var(--bg-raised)]">Class</th>
+                      <th className="bg-[var(--bg-raised)]">Assessed</th>
+                      <th className="bg-[var(--bg-raised)]">Paid</th>
+                      <th className="bg-[var(--bg-raised)]">Outstanding</th>
+                      <th className="bg-[var(--bg-raised)]">Fee Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -750,14 +750,14 @@ export function ReportsView({ onBack }: ReportsViewProps) {
 
               {activePreview === "attendance" && (
                 <table className="data-table w-full text-left">
-                  <thead className="sticky top-0 z-10 bg-[#161820]">
-                    <tr className="bg-[#161820]">
-                      <th className="bg-[#161820]">Pupil USN</th>
-                      <th className="bg-[#161820]">Student Name</th>
-                      <th className="bg-[#161820]">Class</th>
-                      <th className="bg-[#161820]">Attendance</th>
-                      <th className="bg-[#161820]">Statutory Compliance</th>
-                      <th className="bg-[#161820]">Marked Sessions</th>
+                  <thead className="sticky top-0 z-10 bg-[var(--bg-raised)]">
+                    <tr className="bg-[var(--bg-raised)]">
+                      <th className="bg-[var(--bg-raised)]">Pupil USN</th>
+                      <th className="bg-[var(--bg-raised)]">Student Name</th>
+                      <th className="bg-[var(--bg-raised)]">Class</th>
+                      <th className="bg-[var(--bg-raised)]">Attendance</th>
+                      <th className="bg-[var(--bg-raised)]">Statutory Compliance</th>
+                      <th className="bg-[var(--bg-raised)]">Marked Sessions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -813,15 +813,15 @@ export function ReportsView({ onBack }: ReportsViewProps) {
 
               {activePreview === "students" && (
                 <table className="data-table w-full text-left">
-                  <thead className="sticky top-0 z-10 bg-[#161820]">
-                    <tr className="bg-[#161820]">
-                      <th className="bg-[#161820]">Pupil USN</th>
-                      <th className="bg-[#161820]">Student Name</th>
-                      <th className="bg-[#161820]">Enrolled Class</th>
-                      <th className="bg-[#161820]">Section</th>
-                      <th className="bg-[#161820]">Status</th>
-                      <th className="bg-[#161820]">Attendance</th>
-                      <th className="bg-[#161820]">Fee Status</th>
+                  <thead className="sticky top-0 z-10 bg-[var(--bg-raised)]">
+                    <tr className="bg-[var(--bg-raised)]">
+                      <th className="bg-[var(--bg-raised)]">Pupil USN</th>
+                      <th className="bg-[var(--bg-raised)]">Student Name</th>
+                      <th className="bg-[var(--bg-raised)]">Enrolled Class</th>
+                      <th className="bg-[var(--bg-raised)]">Section</th>
+                      <th className="bg-[var(--bg-raised)]">Status</th>
+                      <th className="bg-[var(--bg-raised)]">Attendance</th>
+                      <th className="bg-[var(--bg-raised)]">Fee Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -867,14 +867,14 @@ export function ReportsView({ onBack }: ReportsViewProps) {
 
               {activePreview === "staff" && (
                 <table className="data-table w-full text-left">
-                  <thead className="sticky top-0 z-10 bg-[#161820]">
-                    <tr className="bg-[#161820]">
-                      <th className="bg-[#161820]">Staff USN</th>
-                      <th className="bg-[#161820]">Faculty Name</th>
-                      <th className="bg-[#161820]">Designation</th>
-                      <th className="bg-[#161820]">Department</th>
-                      <th className="bg-[#161820]">Official Email</th>
-                      <th className="bg-[#161820]">Campus Status</th>
+                  <thead className="sticky top-0 z-10 bg-[var(--bg-raised)]">
+                    <tr className="bg-[var(--bg-raised)]">
+                      <th className="bg-[var(--bg-raised)]">Staff USN</th>
+                      <th className="bg-[var(--bg-raised)]">Faculty Name</th>
+                      <th className="bg-[var(--bg-raised)]">Designation</th>
+                      <th className="bg-[var(--bg-raised)]">Department</th>
+                      <th className="bg-[var(--bg-raised)]">Official Email</th>
+                      <th className="bg-[var(--bg-raised)]">Campus Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -918,7 +918,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                 borderTop: "1px solid var(--border)",
                 padding: "14px 22px",
                 flexShrink: 0,
-                background: "rgba(24, 25, 32, 0.88)",
+                background: "var(--bg-panel)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
@@ -967,18 +967,18 @@ export function ReportsView({ onBack }: ReportsViewProps) {
             style={{
               width: "min(560px, 94vw)",
               borderRadius: 18,
-              background: "rgba(20, 21, 26, 0.96)",
+              background: "var(--bg-panel)",
               backdropFilter: "blur(36px) saturate(190%)",
               WebkitBackdropFilter: "blur(36px) saturate(190%)",
               border: "1px solid var(--border-strong)",
-              boxShadow: "0 28px 72px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+              boxShadow: "var(--shadow-dialog)",
             }}
           >
             <div
               className="modal-header"
               style={{
                 padding: "16px 22px",
-                background: "rgba(24, 25, 32, 0.88)",
+                background: "var(--bg-panel)",
                 borderBottom: "1px solid var(--border)",
               }}
             >
@@ -1063,7 +1063,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
               style={{
                 borderTop: "1px solid var(--border)",
                 padding: "14px 22px",
-                background: "rgba(24, 25, 32, 0.88)",
+                background: "var(--bg-panel)",
                 display: "flex",
                 justifyContent: "flex-end",
                 gap: 10,

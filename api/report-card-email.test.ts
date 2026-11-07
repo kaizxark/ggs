@@ -1,4 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const resolveCaller = vi.fn();
+vi.mock("../shared/ai-auth.js", () => ({
+  resolveCaller: (req: Request) => resolveCaller(req),
+}));
+
 import handler, { buildReportCardHtml, type ReportCardPayload } from "./report-card-email";
 
 const sampleReportCard: ReportCardPayload = {
@@ -23,6 +29,16 @@ const sampleReportCard: ReportCardPayload = {
 };
 
 describe("api/report-card-email", () => {
+  beforeEach(() => {
+    resolveCaller.mockReset();
+    resolveCaller.mockResolvedValue({
+      id: "teacher-1",
+      email: "teacher@example.com",
+      role: "teacher",
+      superAdmin: false,
+    });
+  });
+
   it("rejects non-POST methods", async () => {
     const req = new Request("http://localhost/api/report-card-email", { method: "GET" });
     const res = await handler(req);

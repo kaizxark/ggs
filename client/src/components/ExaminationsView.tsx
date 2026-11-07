@@ -28,6 +28,7 @@ import {
 
 import { Breadcrumb } from "./Breadcrumb";
 import { MetricBlock } from "./MetricBlock";
+import { SegmentedControl } from "./SegmentedControl";
 import { Pager, usePagination } from "./ErpPagination";
 import { DrawerBackdrop } from "./DrawerBackdrop";
 import { FormSelect, type FormSelectOption } from "./FormSelect";
@@ -40,12 +41,13 @@ import {
   type Student,
 } from "@/lib/erp-views";
 import { isSuperAdminId } from "@shared/super-admin";
+import { authHeaders } from "@/lib/supabase";
 
 export interface ExaminationsViewProps {
   onBack: () => void;
 }
 
-export type ExamTabKey = "exams" | "marks" | "status" | "report-cards";
+export type ExamTabKey = "exams" | "marks" | "report-cards";
 
 export type ExamType =
   | "Midterm"
@@ -492,48 +494,38 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         />
       </div>
 
-      {/* Modern Navigation Tabs */}
-      <div className="segmented-control" style={{ maxWidth: 660 }}>
-        <button
-          type="button"
-          className={activeTab === "exams" ? "active" : ""}
-          onClick={() => setActiveTab("exams")}
-        >
-          <BookOpen size={14} />
-          <span>1. Exams Registry</span>
-        </button>
-
-        <button
-          type="button"
-          className={activeTab === "marks" ? "active" : ""}
-          onClick={() => setActiveTab("marks")}
-        >
-          <ClipboardList size={14} />
-          <span>2. Grade Entry</span>
-        </button>
-
-        <button
-          type="button"
-          className={activeTab === "status" ? "active" : ""}
-          onClick={() => setActiveTab("status")}
-        >
-          <BarChart3 size={14} />
-          <span>3. Grading Status</span>
-          {globalMetrics.totalPendingStudents > 0 && (
-            <span className="count-pill warning" style={{ marginLeft: 4 }}>
-              {globalMetrics.totalPendingStudents}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          className={activeTab === "report-cards" ? "active" : ""}
-          onClick={() => setActiveTab("report-cards")}
-        >
-          <Award size={14} />
-          <span>4. Report Cards</span>
-        </button>
+      {/* Modern Navigation Tabs with Horizontal Sliding Indicator */}
+      <div className="flex items-center gap-3 border-b border-[var(--border)] pb-3 overflow-x-auto no-scrollbar">
+        <SegmentedControl
+          ariaLabel="Examinations section navigation"
+          layoutId="examinationsMainTabs"
+          value={activeTab}
+          onChange={(val) => setActiveTab(val as ExamTabKey)}
+          indicatorVariant="brand"
+          options={[
+            {
+              value: "exams",
+              label: "1. Exams Registry",
+              icon: <BookOpen size={14} />,
+            },
+            {
+              value: "marks",
+              label: "2. Grade Entry",
+              icon: <ClipboardList size={14} />,
+              badge:
+                globalMetrics.totalPendingStudents > 0 ? (
+                  <span className="count-pill warning" style={{ marginLeft: 4 }}>
+                    {globalMetrics.totalPendingStudents}
+                  </span>
+                ) : undefined,
+            },
+            {
+              value: "report-cards",
+              label: "3. Report Cards",
+              icon: <Award size={14} />,
+            },
+          ]}
+        />
       </div>
 
       {/* =========================================================================
@@ -589,27 +581,7 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
       )}
 
       {/* =========================================================================
-          TAB 3: GRADING STATUS & AUDIT (PRINCIPAL'S COMPLETION REGISTER)
-         ========================================================================= */}
-      {activeTab === "status" && (
-        <GradingStatusTab
-          exams={exams}
-          completionMap={examCompletionMap}
-          evaluationsStore={evaluationsStore}
-          allStudents={allStudents}
-          onEnterGrades={(examId) => {
-            setSelectedExamId(examId);
-            setActiveTab("marks");
-          }}
-          onDistributeReportCards={(examId) => {
-            setSelectedExamId(examId);
-            setActiveTab("report-cards");
-          }}
-        />
-      )}
-
-      {/* =========================================================================
-          TAB 4: OFFICIAL REPORT CARDS (STUDENT DIRECTORY & EMAIL SHARING)
+          TAB 3: OFFICIAL REPORT CARDS (STUDENT DIRECTORY & EMAIL SHARING)
          ========================================================================= */}
       {activeTab === "report-cards" && activeExam && (
         <ReportCardsTab
@@ -734,24 +706,24 @@ function ConductedExamsTab({
           />
         </div>
 
-        <div className="toolbar-actions">
-          <div style={{ width: 160 }}>
-            <FormSelect
-              options={[
-                { value: "all", label: "All Classes" },
-                { value: "Grade 6", label: "Grade 6" },
-                { value: "Grade 7", label: "Grade 7" },
-                { value: "Grade 8", label: "Grade 8" },
-                { value: "Grade 9", label: "Grade 9" },
-                { value: "Grade 10", label: "Grade 10" },
-              ]}
-              value={gradeFilter}
-              onChange={setGradeFilter}
-            />
-          </div>
+        <div className="toolbar-actions flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <SegmentedControl
+            ariaLabel="Filter exams by grade"
+            layoutId="conductedExamsGradeTabs"
+            value={gradeFilter}
+            onChange={setGradeFilter}
+            options={[
+              { value: "all", label: "All" },
+              { value: "Grade 6", label: "Grade 6" },
+              { value: "Grade 7", label: "Grade 7" },
+              { value: "Grade 8", label: "Grade 8" },
+              { value: "Grade 9", label: "Grade 9" },
+              { value: "Grade 10", label: "Grade 10" },
+            ]}
+          />
 
           {isAdminOrPrincipal && (
-            <button type="button" className="primary-button compact" onClick={onAddExam}>
+            <button type="button" className="primary-button compact flex-shrink-0" onClick={onAddExam}>
               <Plus size={14} />
               <span>Add Exam</span>
             </button>
@@ -991,11 +963,11 @@ function AddExamModal({
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
-          background: "rgba(20, 21, 26, 0.96)",
+          background: "var(--bg-panel)",
           backdropFilter: "blur(36px) saturate(190%)",
           WebkitBackdropFilter: "blur(36px) saturate(190%)",
           border: "1px solid var(--border-strong)",
-          boxShadow: "0 28px 72px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+          boxShadow: "var(--shadow-dialog)",
         }}
       >
         {/* Header */}
@@ -1357,6 +1329,26 @@ function GradeEntryTab({
             <span>View Report Cards</span>
           </button>
         </div>
+
+        {/* Horizontal Sliding Subject Selector */}
+        {activeExam.subjects.length > 0 && (
+          <div className="w-full pt-3 border-t border-[var(--border)] flex items-center gap-2.5 overflow-x-auto no-scrollbar">
+            <span className="text-xs text-[var(--text-muted)] font-semibold flex-shrink-0">
+              Evaluation Subject:
+            </span>
+            <SegmentedControl
+              ariaLabel="Select active evaluation subject"
+              layoutId="gradeEntrySubjectPills"
+              value={activeSubject}
+              onChange={setActiveSubject}
+              options={activeExam.subjects.map((s) => ({
+                value: s.subject,
+                label: s.subject,
+                count: `${s.maxMarks}m`,
+              }))}
+            />
+          </div>
+        )}
       </div>
 
       {/* Notice Banner Explaining Physical Grading Workflow */}
@@ -1590,216 +1582,7 @@ function GradeEntryTab({
 }
 
 /* =============================================================================
-   SUB-COMPONENT: TAB 3 - GRADING STATUS & AUDIT (PRINCIPAL'S COMPLETION REGISTER)
-   ============================================================================= */
-function GradingStatusTab({
-  exams,
-  completionMap,
-  evaluationsStore,
-  allStudents,
-  onEnterGrades,
-  onDistributeReportCards,
-}: {
-  exams: ConductedExam[];
-  completionMap: Map<string, { isComplete: boolean; completionPct: number; pendingCount: number; totalCandidates: number; fullyGradedCount: number; absentCount: number }>;
-  evaluationsStore: Record<string, StudentExamRecord>;
-  allStudents: Student[];
-  onEnterGrades: (examId: string) => void;
-  onDistributeReportCards: (examId: string) => void;
-}) {
-  return (
-    <div className="space-y-6">
-      {/* Principal's Directive Banner */}
-      <div className="p-4 rounded-xl border border-[var(--brand-border)] bg-[var(--brand-soft)]/25 flex items-start gap-3.5">
-        <ShieldNoticeIcon />
-        <div className="text-xs space-y-1">
-          <strong className="text-sm font-bold text-[var(--text-primary)] block">
-            Principal's Assessment Evaluation Register & Enforcement Gate
-          </strong>
-          <p className="text-[var(--text-secondary)] leading-relaxed">
-            Per school statutory compliance, <strong>all students must be fully graded</strong> (or
-            explicitly marked as <em>Not Attended</em>) before official Report Cards can be released
-            or emailed to parents. Track grading progress across departments and identify any
-            teachers who have pending evaluations below.
-          </p>
-        </div>
-      </div>
-
-      {/* Exam-by-Exam Completion Cards */}
-      <div className="space-y-4">
-        {exams.map((exam) => {
-          const stats = completionMap.get(exam.id);
-          const isComplete = stats?.isComplete ?? false;
-          const pct = stats?.completionPct ?? 0;
-          const pending = stats?.pendingCount ?? 0;
-          const total = stats?.totalCandidates ?? 0;
-          const graded = stats?.fullyGradedCount ?? 0;
-          const absent = stats?.absentCount ?? 0;
-
-          // Find pending students
-          const targetGradeNum = exam.grade.replace(/[^0-9]/g, "");
-          const candidates = allStudents.filter((s) => {
-            const stuGradeNum = String(s.grade).replace(/[^0-9]/g, "");
-            return stuGradeNum === targetGradeNum;
-          });
-          const candidateList = candidates.length > 0 ? candidates : allStudents.slice(0, 16);
-
-          const pendingStudents = candidateList.filter((stu) => {
-            const key = `${exam.id}__${stu.id}`;
-            const rec = evaluationsStore[key];
-            if (!rec) return true;
-            return !exam.subjects.every((sub) => {
-              const entry = rec.subjectScores[sub.subject];
-              return entry && (entry.isAbsent || (entry.marks !== null && entry.marks >= 0));
-            });
-          });
-
-          return (
-            <div key={exam.id} className="panel p-5 space-y-4">
-              {/* Head */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-[var(--text-primary)]">
-                      {exam.title}
-                    </h3>
-                    <span className="status-pill brand">{exam.grade}</span>
-                    <span className="status-pill neutral">{exam.examType}</span>
-                  </div>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                    Conducted on {exam.conductedDate} · {exam.subjects.length} Subjects Evaluated ·
-                    Term: {exam.term}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                  {isComplete ? (
-                    <span className="status-pill success flex items-center gap-1.5 px-3 py-1">
-                      <CheckCircle2 size={14} />
-                      <span>Ready for Report Cards</span>
-                    </span>
-                  ) : (
-                    <span className="status-pill warning flex items-center gap-1.5 px-3 py-1">
-                      <Lock size={13} />
-                      <span>Distribution Locked ({pending} Pending)</span>
-                    </span>
-                  )}
-
-                  <button
-                    type="button"
-                    className="secondary-button compact text-xs"
-                    onClick={() => onEnterGrades(exam.id)}
-                  >
-                    <ClipboardList size={13} />
-                    <span>Open Grade Entry</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={`compact text-xs flex items-center gap-1.5 ${
-                      isComplete ? "primary-button" : "secondary-button opacity-60"
-                    }`}
-                    onClick={() => onDistributeReportCards(exam.id)}
-                  >
-                    <Award size={13} />
-                    <span>Report Cards</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress bar and breakdown */}
-              <div className="p-4 rounded-xl bg-[var(--bg-raised)] border border-[var(--border-subtle)] space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-4">
-                    <span className="text-[var(--text-primary)] font-semibold">
-                      Candidate Evaluation Progress
-                    </span>
-                    <span className="text-[var(--text-muted)] font-mono">
-                      {total - pending} of {total} evaluated ({graded} graded · {absent} not attended)
-                    </span>
-                  </div>
-                  <strong className={isComplete ? "text-[var(--success)]" : "text-[var(--warning)]"}>
-                    {pct}% Complete
-                  </strong>
-                </div>
-
-                <div className="w-full h-2 rounded-full bg-[var(--bg-input)] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      isComplete ? "bg-[var(--success)]" : "bg-[var(--warning)]"
-                    }`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-
-                {/* Subject-Wise Evaluator Allocation */}
-                <div className="pt-2 border-t border-[var(--border-subtle)] grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                  {exam.subjects.map((sub) => (
-                    <div
-                      key={sub.id}
-                      className="p-2 rounded-lg bg-[var(--bg-panel)] border border-[var(--border)] text-center text-xs"
-                    >
-                      <span className="font-bold text-[var(--text-primary)] block truncate">
-                        {sub.subject}
-                      </span>
-                      <span className="text-[10.5px] text-[var(--text-muted)] block truncate mt-0.5">
-                        {sub.assignedTeacher || "Faculty"}
-                      </span>
-                      <span className="text-[10px] font-mono text-[var(--brand)] font-semibold mt-1 inline-block">
-                        Max {sub.maxMarks}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Incomplete warning & list of pending candidates */}
-              {!isComplete && pendingStudents.length > 0 && (
-                <div className="p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-amber-300 font-semibold">
-                      <AlertTriangle size={15} />
-                      <span>{pendingStudents.length} Candidate(s) Awaiting Final Grade Entry:</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="text-xs text-[var(--brand)] hover:underline font-semibold"
-                      onClick={() => onEnterGrades(exam.id)}
-                    >
-                      Grade Now →
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {pendingStudents.map((stu) => (
-                      <span
-                        key={stu.id}
-                        className="px-2.5 py-1 rounded bg-[var(--bg-panel)] border border-amber-500/30 text-amber-200 text-xs font-medium"
-                      >
-                        {stu.name} ({stu.usn ?? `GGS-${stu.id}`})
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ShieldNoticeIcon() {
-  return (
-    <div className="w-8 h-8 rounded-lg bg-[var(--brand-soft)] text-[var(--brand)] flex items-center justify-center flex-shrink-0">
-      <Users size={17} />
-    </div>
-  );
-}
-
-/* =============================================================================
-   SUB-COMPONENT: TAB 4 - REPORT CARDS TABLE & DISTRIBUTION
+   SUB-COMPONENT: TAB 3 - REPORT CARDS TABLE & DISTRIBUTION
    ============================================================================= */
 function ReportCardsTab({
   exams,
@@ -1948,7 +1731,7 @@ function ReportCardsTab({
     try {
       const payloadCards = reportCardList.map((item) => ({
         studentName: item.student.name,
-        studentEmail: item.record.email || `${item.student.name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+        studentEmail: item.record.email || "",
         usn: item.record.usn,
         grade: item.student.grade,
         section: item.student.section,
@@ -1965,7 +1748,7 @@ function ReportCardsTab({
 
       const res = await fetch("/api/report-card-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           mode: "batch",
           reportCards: payloadCards,
@@ -2015,19 +1798,21 @@ function ReportCardsTab({
             />
           </div>
 
-          <div style={{ width: 170 }}>
+          <div className="overflow-x-auto no-scrollbar">
             <label className="text-[10.5px] uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">
               Filter Result
             </label>
-            <FormSelect
-              options={[
-                { value: "all", label: "All Candidates" },
-                { value: "passed", label: "Promoted Only" },
-                { value: "absent", label: "Not Attended" },
-                { value: "emailed", label: "Emailed Records" },
-              ]}
+            <SegmentedControl
+              ariaLabel="Filter report cards"
+              layoutId="reportCardsResultTabs"
               value={resultFilter}
               onChange={setResultFilter}
+              options={[
+                { value: "all", label: "All" },
+                { value: "passed", label: "Promoted" },
+                { value: "absent", label: "Not Attended" },
+                { value: "emailed", label: "Emailed" },
+              ]}
             />
           </div>
         </div>
@@ -2306,8 +2091,9 @@ function ReportCardDrawer({
   else if (percentage >= 75) resultStatus = "Promoted with Distinction";
   else resultStatus = "Promoted to Next Term";
 
-  const recipientEmail =
-    record.email || `${record.studentName.toLowerCase().replace(/\s+/g, ".")}@example.com`;
+  // No invented address: a report card is confidential and must go only to a
+  // mailbox the school actually holds. The route skips a blank recipient.
+  const recipientEmail = record.email || "";
 
   // Handle single student report card email dispatch
   const handleSendEmail = async () => {
@@ -2317,7 +2103,7 @@ function ReportCardDrawer({
     try {
       const res = await fetch("/api/report-card-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           mode: "single",
           reportCard: {
@@ -2363,12 +2149,12 @@ function ReportCardDrawer({
       <aside
         className="profile-drawer pupil-drawer"
         style={{
-          width: "min(680px, calc(100vw / var(--ui-zoom)))",
+          width: "min(680px, 100vw)",
           zIndex: 50,
-          background: "rgba(18, 19, 24, 0.98)",
+          background: "var(--bg-panel)",
           backdropFilter: "blur(36px) saturate(190%)",
           WebkitBackdropFilter: "blur(36px) saturate(190%)",
-          boxShadow: "-16px 0 48px rgba(0, 0, 0, 0.75)",
+          boxShadow: "var(--shadow-dialog)",
         }}
         role="dialog"
         aria-modal="true"
@@ -2424,7 +2210,7 @@ function ReportCardDrawer({
               padding: "24px 28px",
               borderRadius: "14px",
               border: "1px solid var(--border-strong)",
-              background: "rgba(255, 255, 255, 0.02)",
+              background: "var(--bg-panel)",
             }}
           >
             {/* School Crest & Institutional Header */}

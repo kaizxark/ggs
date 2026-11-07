@@ -1,17 +1,32 @@
 export const config = { runtime: "edge" };
 
+import { resolveCaller } from "../shared/ai-auth.js";
+
 const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL || "https://fmlwzxmjrecbtvgraqqm.supabase.co";
+
+/*
+ * The storage key is read from the environment only.
+ *
+ * This file used to carry a live `sb_secret_…` fallback, which meant the
+ * service-role credential — the one that bypasses every row-level security
+ * policy — was published in the repository and its history. A secret in source
+ * is not a fallback, it is a leak; a missing key must fail loudly instead.
+ */
 const SERVICE_KEY =
-  process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_SERVICE_KEY ||
-  "REDACTED-SUPABASE-SECRET-KEY";
-const ANON_KEY =
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  "sb_publishable_Y1oStHbYHErfX2FD6xyKeg_PXuVcQ1w";
+  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_KEY || "";
 
 export const BUCKET = "school-assets";
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * The only file types a profile photo may be.
+ *
+ * The route writes to a public bucket, so the content type is an allow-list
+ * rather than whatever the uploader claims. SVG is deliberately absent: it can
+ * carry script and the bucket serves it inline.
+ */
+const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 function fail(message: string, status = 400, code = "error") {
   return Response.json({ error: code, message }, { status });
@@ -32,10 +47,11 @@ function decodeBase64(value: string): ArrayBuffer | null {
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") {
+    // Same-origin only: no Access-Control-Allow-Origin is sent, so a foreign
+    // page cannot use a signed-in visitor's browser as an upload proxy.
     return new Response(null, {
       status: 204,
       headers: {
-        "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
       },
@@ -46,15 +62,19 @@ export default async function handler(req: Request): Promise<Response> {
     return fail("Method not allowed", 405, "method_not_allowed");
   }
 
-  // Authentication check - optional bearer validation
-  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (token) {
-    const authRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: ANON_KEY, Authorization: `Bearer ${token}` },
-    });
-    if (!authRes.ok) {
-      return fail("Session expired. Please sign in again.", 401, "unauthenticated");
-    }
+  if (!SERVICE_KEY) {
+    return fail(
+      "Uploads are not configured on this deployment.",
+      503,
+      "not_configured"
+    );
+  }
+
+  // A session is required. The route writes to a public bucket with the
+  // service key, so an anonymous caller must never reach the storage call.
+  const caller = await resolveCaller(req);
+  if (!caller) {
+    return fail("Sign in to upload a photo.", 401, "unauthenticated");
   }
 
   let bytes: ArrayBuffer | null = null;
@@ -102,8 +122,23 @@ export default async function handler(req: Request): Promise<Response> {
     return fail("File exceeds 5 MB limit", 400, "file_too_large");
   }
 
-  const ext = fileName.includes(".") ? `.${fileName.split(".").pop()}` : ".jpg";
-  const safeFolder = folder.replace(/[^a-zA-Z0-9_-]/g, "") || "avatars";
+  if (!ALLOWED_TYPES.has(contentType.toLowerCase())) {
+    return fail("Only PNG, JPEG and WebP images are accepted", 400, "invalid_type");
+  }
+
+  const ext =
+    contentType === "image/png" ? ".png" : contentType === "image/webp" ? ".webp" : ".jpg";
+  // Folder segments are limited to safe characters; `student-avatars/<id>` is
+  // two segments and anything deeper or stranger collapses to `avatars`.
+  const segments = String(folder ?? "")
+    .split("/")
+    .map(segment => segment.replace(/[^a-zA-Z0-9_-]/g, ""))
+    .filter(Boolean)
+    .slice(0, 2);
+  const safeFolder =
+    segments.length && /^(avatars|staff-avatars|student-avatars|photos)$/.test(segments[0])
+      ? segments.join("/")
+      : "avatars";
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const path = `${safeFolder}/${stamp}${ext}`;
 

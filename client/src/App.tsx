@@ -77,7 +77,7 @@ function Router() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark" switchable={false}>
+      <ThemeProvider defaultTheme="light" switchable={false}>
         <TooltipProvider>
           <Toaster position="bottom-right" />
           <Router />

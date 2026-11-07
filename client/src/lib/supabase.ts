@@ -480,6 +480,22 @@ export async function signOut() {
   return error;
 }
 
+/**
+ * Authorization header for a call to one of this app's own `/api/*` routes.
+ *
+ * Several routes now require the caller's session (mail dispatch, uploads).
+ * Returning an empty object when there is no session keeps a `fetch` call
+ * well-formed; the route answers 401, which the caller surfaces as an error,
+ * instead of the request dying on an `undefined` token.
+ */
+export async function authHeaders(): Promise<Record<string, string>> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token ?? "";
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 /* ------------------------------------------------------------------------ *
  * Portal sign-in: the emailed code, and the account that follows it
  *
@@ -645,7 +661,7 @@ export interface PortalAccount {
   role: string;
 }
 
-function authHeaders(): Record<string, string> {
+function jsonHeaders(): Record<string, string> {
   return { "Content-Type": "application/json" };
 }
 
@@ -662,7 +678,7 @@ export async function readPortalAccount(): Promise<PortalAccount | null> {
   try {
     const res = await fetch("/api/portal-admin", {
       headers: {
-        ...authHeaders(),
+        ...jsonHeaders(),
         Authorization: `Bearer ${data.session.access_token}`,
       },
     });
@@ -712,7 +728,7 @@ async function saveAccount(
     const res = await fetch(path, {
       method,
       headers: {
-        ...authHeaders(),
+        ...jsonHeaders(),
         Authorization: `Bearer ${data.session.access_token}`,
       },
       body: JSON.stringify(body),

@@ -19,7 +19,6 @@
 
 import { supabase } from "./supabase";
 import { notifyDataChanged, registerDataInvalidator } from "./live-data";
-import { getStudentFeeOverrides, getPupilFeeSummary } from "./fee-store";
 import { ALL_STUDENT_SECTIONS, SECTION_LABELS } from "@shared/student-access";
 
 export class ApiError extends Error {
@@ -200,18 +199,6 @@ export function clearDirectoryCache() {
 
 registerDataInvalidator(clearDirectoryCache);
 
-function getDirectoryFallback(filters: DirectoryFilters = {}): DirectoryPage {
-  return {
-    students: [],
-    total: 0,
-    page: filters.page || 1,
-    pageSize: filters.pageSize || 25,
-    pageCount: 1,
-    scanned: 0,
-    truncated: false,
-  };
-}
-
 function getCountsFallback(): StudentCounts {
   return {
     total: 0,
@@ -233,35 +220,35 @@ export async function fetchDirectory(
     return cached.data;
   }
 
-  try {
-    const data = await apiFetch<DirectoryPage>(url, { signal });
-    if (!data || !Array.isArray(data.students) || data.students.length === 0) {
-      return getDirectoryFallback(filters);
-    }
-    // Overlay local fee overrides so real-time recorded payments reflect immediately
-    const overrides = getStudentFeeOverrides();
-    data.students = data.students.map((row: DirectoryStudent) => {
-      const override = overrides[row.id] || overrides[row.name.toLowerCase()];
-      if (override) {
-        return {
-          ...row,
-          fees: override.fees,
-          outstanding_fees: override.outstanding_fees,
-          total_fees: override.total_fees,
-        };
-      }
-      return row;
-    });
-
-    directoryCache.set(url, { expires: Date.now() + CACHE_TTL_MS, data });
-    if (directoryCache.size > 100) {
-      const oldestKey = directoryCache.keys().next().value;
-      if (oldestKey) directoryCache.delete(oldestKey);
-    }
-    return data;
-  } catch {
-    return getDirectoryFallback(filters);
+  /*
+   * A failure is thrown, never drawn as an empty roll call.
+   *
+   * This used to `catch { return getDirectoryFallback() }`, which rendered an
+   * expired session, a refusal or a dead network exactly the way the directory
+   * renders a school with no pupils: "No students have been registered yet".
+   * The list looked empty while the database held a hundred children, and the
+   * error banner the screen already has could never appear because nothing ever
+   * reached it. `ApiError` carries the route's own wording, so the person reads
+   * what actually happened and can retry.
+   */
+  const data = await apiFetch<DirectoryPage>(url, { signal });
+  if (!data || !Array.isArray(data.students)) {
+    throw new ApiError(
+      0,
+      "bad_response",
+      "The server sent an unexpected response. Try again."
+    );
   }
+  if (data.students.length === 0) {
+    return data;
+  }
+
+  directoryCache.set(url, { expires: Date.now() + CACHE_TTL_MS, data });
+  if (directoryCache.size > 100) {
+    const oldestKey = directoryCache.keys().next().value;
+    if (oldestKey) directoryCache.delete(oldestKey);
+  }
+  return data;
 }
 
 /** School-wide counts, unaffected by the directory's current search or filters. */
@@ -663,36 +650,6 @@ export async function fetchStudentProfile(studentId: string, signal?: AbortSigna
   if (!payload || !payload.student) {
     throw new ApiError(404, "NOT_FOUND", "Student record could not be loaded");
   }
-  // Overlay live fee summary so recorded payments reflect immediately
-  const liveFeeSummary = getPupilFeeSummary(studentId);
-  payload.fees = {
-    ...payload.fees,
-    summary: liveFeeSummary.summary,
-    accounts: liveFeeSummary.accounts,
-    installments: liveFeeSummary.installments.map((inst) => ({
-      ...inst,
-      paid_on: null,
-      invoice_id: null,
-    })),
-    upcoming: liveFeeSummary.upcoming.map((u) => ({
-      ...u,
-      paid_amount: 0,
-      status: "due",
-    })),
-    invoices: liveFeeSummary.invoices.map((inv) => ({
-      ...inv,
-      due_on: inv.due_on ?? null,
-      items: [{ description: `Tuition & Term Fee`, amount: inv.total }],
-      payments: inv.payments.map((p) => ({
-        id: p.id,
-        receipt_no: p.receipt_no,
-        amount: p.amount,
-        method: p.method,
-        paid_at: p.paid_at,
-        reference: p.reference ?? null,
-      })),
-    })),
-  };
   return payload;
 }
 

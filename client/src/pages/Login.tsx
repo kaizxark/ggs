@@ -163,25 +163,28 @@ export default function Login() {
 
   return (
     <div
-      className="min-h-screen bg-[var(--bg-page)] relative flex items-center justify-center px-4 overflow-hidden"
-      style={{ fontFamily: "system-ui, sans-serif" }}
+      className="auth-page min-h-screen relative flex items-center justify-center px-4 overflow-hidden"
     >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-[var(--brand)]/[0.07] blur-[120px]" />
         <div className="absolute bottom-[-200px] right-[-120px] h-[380px] w-[380px] rounded-full bg-[var(--violet)]/[0.05] blur-[100px]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
+        <div className="auth-grid absolute inset-0" />
       </div>
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full max-w-[420px]">
         <div className="flex flex-col items-center mb-8">
           <img
             src="/global-kids-logo.svg"
             alt="Global Kids School"
             className="h-20 w-20 rounded-full"
           />
+          <p className="mt-4 text-[13px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+            Global Kids School
+          </p>
+          <p className="mt-1 text-[11.5px] text-[var(--text-faint)]">Tumakuru, Karnataka</p>
         </div>
 
-        <div className="bg-[#121419]/90 border border-[#232830] rounded-2xl p-8 shadow-2xl shadow-black/50 backdrop-blur">
+        <div className="auth-card relative">
           <h2
             className={`text-lg font-bold text-[var(--text-primary)] ${
               heading[mode].blurb ? "mb-1" : "mb-6"
@@ -287,7 +290,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[var(--brand)] hover:bg-[#0071e3] active:scale-[0.98] disabled:opacity-70 text-white font-semibold py-2.5 rounded-lg transition shadow-[0_1px_2px_rgba(0,0,0,.35),inset_0_1px_0_rgba(255,255,255,.22)] flex items-center justify-center gap-2 cursor-pointer"
+              className="auth-submit w-full active:scale-[0.99] disabled:opacity-60 font-semibold py-2.5 transition flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
                 <>

@@ -287,20 +287,24 @@ begin
     'subject_averages','grade_outcomes','report_exports','settings'
   ] loop
     execute format('alter table public.%I enable row level security', tbl);
-
-    execute format(
-      'drop policy if exists "authenticated read" on public.%I', tbl);
-    execute format(
-      'create policy "authenticated read" on public.%I for select to authenticated using (true)', tbl);
-
-    execute format(
-      'drop policy if exists "authenticated write" on public.%I', tbl);
-    execute format(
-      'create policy "authenticated write" on public.%I for all to authenticated using (true) with check (true)', tbl);
   end loop;
 end $$;
 
--- Explicit privileges so the roles can reach the tables at all.
+-- No policies are created here on purpose.
+--
+-- This file used to grant every signed-in user read and write on every one of
+-- these tables. Because the browser talks to Postgres directly, that included
+-- pupils and parents: any of them could read invoices, marks and medical notes,
+-- and could write to them, from the console. Row level security was enabled and
+-- then immediately defeated.
+--
+-- RLS with no policy denies everything, which is the correct default. Real
+-- policies are installed by `supabase/migrations/016_rls_hardening.sql`; run
+-- that after this file. The API routes use the service key and are unaffected
+-- in the meantime.
+
+-- Explicit privileges so the roles can reach the tables at all. Privileges are
+-- only the outer gate; the row-level policy decides which rows are visible.
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 
@@ -634,16 +638,21 @@ on conflict (key) do nothing;
 commit;
 
 -- ============================================================================
--- AFTER RUNNING THIS FILE — the super admin is already seeded above
--- (kaizxark@gmail.com / Aliza@015) and the login page will accept it.
+-- AFTER RUNNING THIS FILE
 --
--- To add or change admins later, edit the table directly:
---   insert into public.super_admins (email, password)
---   values ('new-admin@example.com', 'their-password')
---   on conflict (email) do update set password = excluded.password;
+-- There is no seeded password in this file, and there must never be one.
+-- An earlier revision documented a live super-admin address and password here;
+-- both were committed to history and must be treated as compromised. Change
+-- that password in Supabase Auth and revoke its sessions before this project
+-- holds real data.
 --
--- NOTE: passwords are stored in plain text for now (kept simple, per request).
--- For a stronger setup later, store a hash and compare crypt() / bcrypt,
--- or move back to Supabase Auth and call signInWithPassword.
+-- Accounts are created through Supabase Auth (`/api/invite`, provisioning) and
+-- never by inserting a password into a table. To promote the school owner, run
+-- the guarded UPDATE in `supabase/migrations/001_roles_invites.sql`, which is
+-- anchored on the immutable user id rather than an email address.
+--
+-- Finish with `supabase/migrations/016_rls_hardening.sql`: it removes the
+-- allow-all policies this file used to create and replaces them with
+-- record-level ones.
 -- ============================================================================
 -- ============================================================================

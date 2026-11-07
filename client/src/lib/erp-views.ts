@@ -53,15 +53,6 @@ import {
   mockClassAttendance,
   mockFeeCategories,
 } from "./school-data";
-import {
-  getStoredInvoices,
-  getStoredPayments,
-  getStudentFeeOverrides,
-} from "./fee-store";
-
-export function getStudentsWithFeeOverrides(): Student[] {
-  return [];
-}
 
 // The report screens import these shapes from the view layer rather than
 // reaching past it into `school-data`, so the view module is the one public
@@ -322,7 +313,7 @@ function useErpView<T extends { id: string | number }>(
 async function loadStudents(): Promise<Student[]> {
   const [students, enrollments, classrooms, attendance, results, invoices] =
     await Promise.all([
-      fetchAll("students", "id,first_name,last_name,status,usn"),
+      fetchAll("students", "id,first_name,last_name,status,usn,email"),
       fetchAll("enrollments", "student_id,classroom_id,active"),
       fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
       fetchAll("attendance", "id,student_id,classroom_id,attendance_date,status", "attendance_date", 1000),
@@ -334,7 +325,6 @@ async function loadStudents(): Promise<Student[]> {
     return [];
   }
 
-  const overrides = getStudentFeeOverrides();
   const classroomById = new Map(classrooms.map((c) => [String(c.id), c]));
 
   // grade / section from the active enrollment
@@ -415,6 +405,8 @@ async function loadStudents(): Promise<Student[]> {
       tone: toneFor(id),
       // the human-facing USN, e.g. adm26270041
       usn: String(s.usn ?? id),
+      // Carried so a finance desk can prefill a receipt address it already holds.
+      email: s.email ? String(s.email) : null,
     } as unknown as Student;
   });
 }
@@ -636,10 +628,6 @@ async function loadInvoices(): Promise<Invoice[]> {
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
     fetchAll("students", "id,first_name,last_name,status,usn,grade,section"),
   ]);
-  const local = getStoredInvoices();
-  if (!invoices || invoices.length === 0) {
-    return local as unknown as Invoice[];
-  }
   const byId = new Map(students.map((s) => [String(s.id), s]));
   const dbMapped: Invoice[] = invoices.map((i) => {
     const s = byId.get(String(i.student_id));
@@ -662,29 +650,19 @@ async function loadInvoices(): Promise<Invoice[]> {
       status: status === "overdue" ? "Overdue" : outstanding > 0 ? "Partial" : "Paid",
     };
   });
-  const seenIds = new Set(dbMapped.map((i) => String(i.id).toLowerCase()));
-  for (const li of local) {
-    if (!seenIds.has(String(li.id).toLowerCase())) {
-      dbMapped.push(li as unknown as Invoice);
-    }
-  }
   return dbMapped.sort((a, b) => b.amount - a.amount);
 }
 
 export function useInvoicesView(enabled = true) {
-  return useErpView<Invoice>("invoices", loadInvoices, getStoredInvoices() as unknown as Invoice[], [], enabled);
+  return useErpView<Invoice>("invoices", loadInvoices, [], [], enabled);
 }
 
 async function loadPayments(): Promise<Payment[]> {
   const [payments, invoices, students] = await Promise.all([
-    fetchAll("payments", "id,invoice_id,amount,method,paid_at"),
+    fetchAll("payments", "id,invoice_id,receipt_no,amount,method,paid_at,reference"),
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status"),
-    fetchAll("students", "id,first_name,last_name,status,usn"),
+    fetchAll("students", "id,first_name,last_name,status,usn,email"),
   ]);
-  const local = getStoredPayments();
-  if (!payments || payments.length === 0) {
-    return local as unknown as Payment[];
-  }
   const invById = new Map(invoices.map((i) => [String(i.id), i]));
   const stuById = new Map(students.map((s) => [String(s.id), s]));
   const dbMapped: Payment[] = payments.map((p) => {
@@ -697,19 +675,16 @@ async function loadPayments(): Promise<Payment[]> {
       amount: num(p.amount),
       method: String(p.method ?? ""),
       paid_at: String(p.paid_at ?? ""),
+      receipt_no: String(p.receipt_no ?? ""),
+      reference: p.reference ? String(p.reference) : null,
+      recipient_email: s?.email ? String(s.email) : null,
     };
   });
-  const seenIds = new Set(dbMapped.map((p) => p.id));
-  for (const lp of local) {
-    if (!seenIds.has(lp.id)) {
-      dbMapped.push(lp as unknown as Payment);
-    }
-  }
   return dbMapped.sort((a, b) => b.paid_at.localeCompare(a.paid_at));
 }
 
 export function usePaymentsView() {
-  return useErpView<Payment>("payments", loadPayments, getStoredPayments() as unknown as Payment[]);
+  return useErpView<Payment>("payments", loadPayments, []);
 }
 
 const ACADEMIC_YEAR_MONTHS: Array<{ id: string; month: string }> = [
@@ -734,37 +709,31 @@ async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
     fetchAll("students", "id,grade,status"),
   ]);
 
-  const localPayments = getStoredPayments();
-  const localInvoices = getStoredInvoices();
-
-  // Aggregate all unique payments by id
+  // Aggregate the ledger that actually exists. Nothing is seeded or inferred
+  // from a "typical" roll number: an empty ledger produces an empty chart, which
+  // is the truth, rather than a plausible-looking one.
   const paymentMap = new Map<string, { amount: number; paid_at: string }>();
-  for (const lp of localPayments) {
-    paymentMap.set(String(lp.id), { amount: Number(lp.amount) || 0, paid_at: String(lp.paid_at || "") });
-  }
   for (const dp of dbPayments) {
     if (dp.id && dp.amount) {
-      paymentMap.set(String(dp.id), { amount: Number(dp.amount) || 0, paid_at: String(dp.paid_at || "") });
+      paymentMap.set(String(dp.id), {
+        amount: Number(dp.amount) || 0,
+        paid_at: String(dp.paid_at || ""),
+      });
     }
   }
 
-  // Calculate total school annual billing
-  // 100 students: Grades 6-8 is ₹50k/yr, Grades 9-10 is ₹60k/yr (~₹54.0L)
-  let totalBilled = 0;
-  if (dbStudents && dbStudents.length > 0) {
+  // Annual billing comes from the invoice ledger. Only when no invoice has been
+  // raised yet do we fall back to the published fee policy, so a brand-new
+  // school still sees its expected billing instead of zero.
+  let totalBilled = dbInvoices.reduce((sum, invoice) => sum + num(invoice.total), 0);
+  if (totalBilled === 0) {
     for (const s of dbStudents) {
       if (s.status === "active" || s.status === "graduated" || !s.status) {
-        totalBilled += getAnnualFeeForGrade(s.grade as string | number | null | undefined);
+        totalBilled += getAnnualFeeForGrade(
+          s.grade as string | number | null | undefined
+        );
       }
     }
-  }
-  if (totalBilled < 5000000) {
-    // Fallback: sum of all invoices or standard school roll
-    const invoiceBilled = Math.max(
-      localInvoices.reduce((s, i) => s + (i.total || 0), 0),
-      dbInvoices.reduce((s, i) => s + (num(i.total) || 0), 0)
-    );
-    totalBilled = Math.max(invoiceBilled, 5400000);
   }
 
   // Group payments by month (YYYY-MM)

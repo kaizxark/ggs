@@ -133,15 +133,14 @@ export default function ResetPassword() {
 
   return (
     <div
-      className="min-h-screen bg-[var(--bg-page)] relative flex items-center justify-center px-4 overflow-hidden"
-      style={{ fontFamily: "system-ui, sans-serif" }}
+      className="auth-page min-h-screen relative flex items-center justify-center px-4 overflow-hidden"
     >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-40 left-1/2 h-[480px] w-[720px] -translate-x-1/2 rounded-full bg-[var(--brand)]/[0.07] blur-[120px]" />
         <div className="absolute bottom-[-200px] right-[-120px] h-[380px] w-[380px] rounded-full bg-[var(--violet)]/[0.05] blur-[100px]" />
       </div>
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative w-full max-w-[420px]">
         <div className="flex flex-col items-center mb-8">
           <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-20 w-20 rounded-full" />
           <p className="mt-4 text-[12.5px] font-semibold text-[var(--text-muted)] tracking-[0.14em] uppercase">
@@ -149,7 +148,7 @@ export default function ResetPassword() {
           </p>
         </div>
 
-        <div className="bg-[#121419]/90 border border-[#232830] rounded-2xl p-8 shadow-2xl shadow-black/50 backdrop-blur">
+        <div className="auth-card relative">
           {phase === "checking" && (
             <div className="flex flex-col items-center py-6 text-center">
               <Loader2 size={22} className="animate-spin text-[var(--brand)]" />
@@ -175,7 +174,7 @@ export default function ResetPassword() {
               <button
                 type="button"
                 onClick={() => setLocation("/login")}
-                className="w-full bg-[var(--brand)] hover:bg-[#0071e3] active:scale-[0.98] text-white font-semibold py-2.5 rounded-lg transition shadow-[0_1px_2px_rgba(0,0,0,.35),inset_0_1px_0_rgba(255,255,255,.22)] cursor-pointer"
+                className="w-full bg-[var(--brand)] hover:bg-[var(--brand-strong)] active:scale-[0.98] text-white font-semibold py-2.5 rounded-lg transition shadow-[var(--shadow-xs)] cursor-pointer"
               >
                 Request a new link
               </button>
@@ -286,7 +285,7 @@ export default function ResetPassword() {
                       className={`w-full bg-[var(--bg-input)] border rounded-lg py-2.5 pl-9 pr-10 text-sm text-[var(--text-primary)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-2 transition ${
                         confirm.length > 0 && confirm !== password
                           ? "border-[var(--danger)] focus:border-[var(--danger)] focus:ring-[var(--danger)]/20"
-                          : "border-[#2a2e36] focus:border-[var(--brand)] focus:ring-[var(--brand)]/20"
+                          : "border-[var(--border)] focus:border-[var(--brand)] focus:ring-[var(--brand)]/20"
                       }`}
                     />
                   </div>
@@ -307,7 +306,7 @@ export default function ResetPassword() {
                 <button
                   type="submit"
                   disabled={submitting || !canSubmit}
-                  className="w-full bg-[var(--brand)] hover:bg-[#0071e3] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition shadow-[0_1px_2px_rgba(0,0,0,.35),inset_0_1px_0_rgba(255,255,255,.22)] flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full bg-[var(--brand)] hover:bg-[var(--brand-strong)] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition shadow-[var(--shadow-xs)] flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {submitting ? (
                     <>

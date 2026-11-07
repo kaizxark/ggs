@@ -21,7 +21,6 @@ import {
   SkeletonText,
 } from "./ErpSkeleton";
 import { useDataRevision } from "../lib/live-data";
-import { getPupilFeeSummary } from "../lib/fee-store";
 
 type TrendPoint = {
   month: string;
@@ -458,8 +457,6 @@ export function usePupilProfile() {
           setError("Pupil record not found.");
           return;
         }
-        // Always attach live fee summary to ensure real-time reflection of fee payments
-        json.fees = getPupilFeeSummary(json.student.id || json.student.name);
         setProfile(json);
         hasLoadedProfileRef.current = true;
       } catch (err: unknown) {
@@ -938,7 +935,7 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
           >
             <div
               style={{
-                background: "rgba(255, 255, 255, 0.03)",
+                background: "var(--bg-raised)",
                 border: "1px solid var(--border)",
                 borderRadius: "10px",
                 padding: "12px 16px",
@@ -951,8 +948,8 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
             </div>
             <div
               style={{
-                background: "rgba(16, 185, 129, 0.06)",
-                border: "1px solid rgba(16, 185, 129, 0.2)",
+                background: "var(--success-soft-2)",
+                border: "1px solid var(--success-border)",
                 borderRadius: "10px",
                 padding: "12px 16px",
               }}
@@ -966,12 +963,12 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
               style={{
                 background:
                   (profile?.fees?.summary?.outstanding ?? 0) === 0
-                    ? "rgba(16, 185, 129, 0.06)"
-                    : "rgba(245, 158, 11, 0.06)",
+                    ? "var(--success-soft-2)"
+                    : "var(--warning-soft-2)",
                 border:
                   (profile?.fees?.summary?.outstanding ?? 0) === 0
-                    ? "1px solid rgba(16, 185, 129, 0.2)"
-                    : "1px solid rgba(245, 158, 11, 0.2)",
+                    ? "1px solid var(--success-border)"
+                    : "1px solid var(--warning-border)",
                 borderRadius: "10px",
                 padding: "12px 16px",
               }}

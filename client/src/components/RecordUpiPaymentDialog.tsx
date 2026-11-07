@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FeePaymentError, recordUpiPayment } from "@/lib/fee-payments";
-import { recordFeePayment } from "@/lib/fee-store";
 
 interface RecordUpiPaymentDialogProps {
   open: boolean;
@@ -69,13 +68,6 @@ export function RecordUpiPaymentDialog({
     setError("");
     try {
       const result = await recordUpiPayment({ invoiceId, utr: cleaned, amount: value });
-      void recordFeePayment({
-        invoiceId,
-        studentName: "",
-        amount: value,
-        method: "UPI (Bank Statement)",
-        reference: cleaned,
-      });
       toast.success(result.duplicate ? "Payment was already recorded" : "UPI payment recorded", {
         description: result.duplicate
           ? `Receipt ${result.receiptNo} was already posted for this UTR.`
@@ -83,20 +75,17 @@ export function RecordUpiPaymentDialog({
       });
       await onRecorded();
       onOpenChange(false);
-    } catch {
-      // Fallback: record in local persistent store if server route is unavailable
-      const localRes = await recordFeePayment({
-        invoiceId,
-        studentName: "",
-        amount: value,
-        method: "UPI (Bank Statement)",
-        reference: cleaned,
-      });
-      toast.success("UPI payment recorded", {
-        description: `${rupees(value)} posted to ${invoiceNo} · Receipt ${localRes.receiptNo}.`,
-      });
-      await onRecorded();
-      onOpenChange(false);
+    } catch (err) {
+      /*
+       * The ledger belongs to the server. Writing the payment locally when the
+       * route refused made the screen agree with the operator and disagree with
+       * the school's accounts, which is worse than an error.
+       */
+      setError(
+        err instanceof FeePaymentError
+          ? err.message
+          : "The payment could not be recorded. Check the connection and try again."
+      );
     } finally {
       setSaving(false);
     }

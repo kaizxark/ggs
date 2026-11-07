@@ -44,6 +44,17 @@ async function startServer() {
       createContext,
     })
   );
+  /*
+   * Local development has no Vercel function runtime, so the Web-standard
+   * handlers in api/ are bridged onto Express here. Without this the Vite SPA
+   * fallback answers /api/* with HTML and sign-in reports "Cannot reach the
+   * server" even though the route is deployed and healthy.
+   */
+  if (process.env.NODE_ENV === "development") {
+    const { mountDevApi } = await import("./devApi");
+    await mountDevApi(app);
+  }
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);

@@ -44,34 +44,17 @@ export function FormSelect({
 
   const updateCoords = useCallback(() => {
     if (!triggerRef.current) return;
-    /*
-     * The app scales `html` with `zoom: var(--ui-zoom)`. That scales the used
-     * value of `top`/`left` on a fixed child, while `getBoundingClientRect()`
-     * already returns visual (post-zoom) coordinates — so feeding the rect
-     * straight into the portal placed it 10% further out than the trigger.
-     * Work in the unzoomed layout space here; the zoom multiplies it back when
-     * the popover paints.
-     */
-    const zoomValue = Number.parseFloat(
-      getComputedStyle(document.documentElement).zoom
-    );
-    const zoom = Number.isFinite(zoomValue) && zoomValue > 0 ? zoomValue : 1;
-    const raw = triggerRef.current.getBoundingClientRect();
-    const rect = {
-      top: raw.top / zoom,
-      bottom: raw.bottom / zoom,
-      left: raw.left / zoom,
-      width: raw.width / zoom,
-      height: raw.height / zoom,
-    };
+    /* The UI zoom is gone, so the viewport and the measured rect share one
+       coordinate space; the popover can use them directly. */
+    const rect = triggerRef.current.getBoundingClientRect();
 
     if (rect.width === 0 && rect.height === 0) {
       setOpen(false);
       return;
     }
 
-    const vh = window.innerHeight / zoom;
-    const vw = window.innerWidth / zoom;
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
     const margin = 8;
     const spaceBelow = vh - rect.bottom - margin;
     const spaceAbove = rect.top - margin;
@@ -195,16 +178,16 @@ export function FormSelect({
           borderRadius: 10,
           background: "var(--bg-input)",
           border: error
-            ? "1px solid var(--danger, #ff453a)"
+            ? "1px solid var(--danger)"
             : open
-            ? "1px solid var(--brand, #0a84ff)"
+            ? "1px solid var(--brand)"
             : "1px solid var(--border-strong)",
           boxShadow: open
-            ? "0 0 0 3px var(--brand-soft, rgba(10, 132, 255, 0.15))"
+            ? "0 0 0 3px var(--brand-soft, var(--brand-soft))"
             : "none",
           color: hasValue
-            ? "var(--text-primary, #ffffff)"
-            : "var(--text-muted, rgba(255, 255, 255, 0.45))",
+            ? "var(--text-primary)"
+            : "var(--text-muted)",
           fontSize: 13,
           fontWeight: 400,
           cursor: disabled ? "not-allowed" : "pointer",
@@ -270,12 +253,12 @@ export function FormSelect({
                   overscrollBehavior: "contain",
                   padding: 5,
                   borderRadius: 12,
-                  background: "rgba(20, 21, 26, 0.96)",
+                  background: "var(--bg-panel)",
                   backdropFilter: "blur(32px) saturate(190%)",
                   WebkitBackdropFilter: "blur(32px) saturate(190%)",
-                  border: "1px solid rgba(255, 255, 255, 0.14)",
+                  border: "1px solid var(--border-strong)",
                   boxShadow:
-                    "0 24px 64px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+                    "var(--shadow-popover)",
                   transformOrigin:
                     placement === "top" ? "bottom center" : "top center",
                 }}
@@ -300,11 +283,11 @@ export function FormSelect({
                         padding: "8px 10px",
                         borderRadius: 8,
                         background: active
-                          ? "rgba(255, 255, 255, 0.1)"
+                          ? "var(--bg-hover)"
                           : "transparent",
                         color: active
-                          ? "var(--text-primary, #ffffff)"
-                          : "var(--text-secondary, rgba(255, 255, 255, 0.8))",
+                          ? "var(--text-primary)"
+                          : "var(--text-secondary)",
                         fontSize: 13,
                         border: "none",
                         cursor: "pointer",
@@ -315,7 +298,7 @@ export function FormSelect({
                       onMouseEnter={(e) => {
                         if (!active)
                           e.currentTarget.style.background =
-                            "rgba(255, 255, 255, 0.05)";
+                            "var(--bg-raised)";
                       }}
                       onMouseLeave={(e) => {
                         if (!active)
@@ -346,7 +329,7 @@ export function FormSelect({
                         <Check
                           size={14}
                           style={{
-                            color: "var(--brand, #0a84ff)",
+                            color: "var(--brand)",
                             flexShrink: 0,
                             marginLeft: 8,
                           }}

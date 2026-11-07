@@ -24,19 +24,26 @@
  *   node scripts/seed-erp.mjs          # refuses if students already exist
  *   FORCE=1 node scripts/seed-erp.mjs  # wipes the org first, then reseeds
  *
- * Every seeded account gets the password Demo@123456 (email pre-confirmed).
+ * Every seeded account gets the password in SEED_PASSWORD (email pre-confirmed).
  */
 
 import crypto from "node:crypto";
 
 // ------------------------------------------------------------------ config --
 const SUPABASE_URL = "https://fmlwzxmjrecbtvgraqqm.supabase.co";
-const SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_KEY ??
-  "REDACTED-SUPABASE-SECRET-KEY";
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SECRET_KEY;
+if (!SERVICE_KEY) {
+  console.error(
+    "SUPABASE_SERVICE_KEY is not set. Export it before running this script; " +
+      "a service key is never kept in the repository."
+  );
+  process.exit(1);
+}
 const ORG_ID = "2f6cbae9-ed79-45e3-819c-a8c80eee7a0f"; // "My School"
 const ADMIN_ID = "60ff6003-c0a4-438f-85df-2048b0e7b6c8"; // kaizxark@gmail.com
-const DEFAULT_PASSWORD = "Demo@123456";
+// No credential is baked into the repository. Set SEED_PASSWORD in the
+// environment when running this against a project that needs auth users.
+const DEFAULT_PASSWORD = process.env.SEED_PASSWORD ?? "";
 
 // The two profiles that existed before seeding and must never be touched.
 const KEEP_PROFILE_IDS = new Set([
@@ -440,6 +447,9 @@ async function createAuthUsers(jobs) {
   async function worker() {
     while (idx < jobs.length) {
       const i = idx++;
+      if (!DEFAULT_PASSWORD) {
+        throw new Error("Set SEED_PASSWORD before seeding auth users.");
+      }
       const res = await req("POST", "/auth/v1/admin/users", {
         body: {
           email: jobs[i].email,
@@ -1485,7 +1495,7 @@ async function main() {
   console.log(`  distinct fee totals: ${new Set(invoices.map((i) => i.total)).size} across ${invoices.length} invoices`);
   console.log(`  school days marked: ${days.length} (holidays excluded)`);
 
-  console.log("\nDone! Demo credentials (password for all: Demo@123456):");
+  console.log("\nDone! Seeded accounts (password: from SEED_PASSWORD):");
   console.log("  Admin   : kaizxark@gmail.com (existing account, untouched)");
   console.log(`  Staff   : ${staffJobs[0].email} … ${staffJobs[9].email}`);
   console.log(`  Guardian : ${families[0].guardianEmail} … ${families[families.length - 1].guardianEmail}`);

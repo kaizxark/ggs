@@ -225,7 +225,7 @@ export function StudentDocumentsPanel({
   if (loadError) {
     return (
       <div className="doc-empty">
-        <AlertCircle size={18} className="text-[#f0866f]" />
+        <AlertCircle size={18} className="text-[var(--danger)]" />
         <strong>Documents unavailable</strong>
         <span>{loadError}</span>
       </div>

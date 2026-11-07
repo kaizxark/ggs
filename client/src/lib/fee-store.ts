@@ -1,6 +1,6 @@
 import { notifyDataChanged } from "./live-data";
 import { getAnnualFeeForGrade, MIN_INSTALLMENT_AMOUNT } from "./school-data";
-import { supabase } from "./supabase";
+import { authHeaders, supabase } from "./supabase";
 
 export interface InvoiceRecord {
   id: string;
@@ -504,11 +504,9 @@ export async function recordFeePayment({
   const receiptNo = `RCP/${receiptYear}/${String(receiptCount).padStart(4, "0")}`;
   const effectiveDate = date ? new Date(date).toISOString() : new Date().toISOString();
 
-  // Resolve recipient email
-  const targetEmail = (
-    recipientEmail?.trim() ||
-    `${targetInvoice.student.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`
-  ).toLowerCase();
+  // Only a real address the school holds is used. A guessed mailbox is not a
+  // delivery: the receipt route refuses anything that is not an address.
+  const targetEmail = (recipientEmail?.trim() || "").toLowerCase();
 
   const newPayment: PaymentRecord = {
     id: `PAY-${Date.now()}`,
@@ -521,7 +519,7 @@ export async function recordFeePayment({
     receipt_no: receiptNo,
     reference: reference || `VERIFIED-${Math.floor(100000 + Math.random() * 900000)}`,
     recipient_email: targetEmail,
-    email_sent: true,
+    email_sent: false,
   };
 
   payments.unshift(newPayment);
@@ -548,9 +546,10 @@ export async function recordFeePayment({
   // Send official receipt email via API (non-blocking background dispatch)
   void (async () => {
     try {
+      if (!targetEmail || !targetEmail.includes("@")) return;
       await fetch("/api/receipt-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           receiptNo,
           studentName: targetInvoice.student,

@@ -10,6 +10,7 @@
 export const config = { runtime: "nodejs" };
 
 import nodemailer from "nodemailer";
+import { escapeHtml, guardEmailRoute, isUsableEmail } from "../shared/email-guard.js";
 
 export interface ReportCardSubjectEntry {
   subject: string;
@@ -58,25 +59,35 @@ export function buildReportCardHtml(p: ReportCardPayload): string {
   const rowsHtml = p.subjects
     .map((s) => {
       const isAbsent = s.isAbsent || s.marks === null;
-      const scoreDisplay = isAbsent ? '<span style="color:#ef4444;font-weight:700;">ABS (Not Attended)</span>' : `${s.marks} / ${s.maxMarks}`;
+      const scoreDisplay = isAbsent ? '<span style="color:#ef4444;font-weight:700;">ABS (Not Attended)</span>' : `${escapeHtml(s.marks)} / ${escapeHtml(s.maxMarks)}`;
       const pctDisplay = isAbsent ? "—" : `${Math.round(((s.marks ?? 0) / s.maxMarks) * 100)}%`;
       return `
         <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px 14px; font-weight: 600; color: #1e293b;">${s.subject}</td>
-          <td style="padding: 10px 14px; text-align: center; color: #64748b;">${s.maxMarks}</td>
-          <td style="padding: 10px 14px; text-align: center; color: #64748b;">${s.passMarks}</td>
+          <td style="padding: 10px 14px; font-weight: 600; color: #1e293b;">${escapeHtml(s.subject)}</td>
+          <td style="padding: 10px 14px; text-align: center; color: #64748b;">${escapeHtml(s.maxMarks)}</td>
+          <td style="padding: 10px 14px; text-align: center; color: #64748b;">${escapeHtml(s.passMarks)}</td>
           <td style="padding: 10px 14px; text-align: center; font-family: monospace; font-weight: 600;">${scoreDisplay}</td>
           <td style="padding: 10px 14px; text-align: center; color: #475569;">${pctDisplay}</td>
           <td style="padding: 10px 14px; text-align: center;">
             <span style="display:inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #e0e7ff; color: #3730a3;">
-              ${isAbsent ? "ABS" : s.grade}
+              ${isAbsent ? "ABS" : escapeHtml(s.grade)}
             </span>
           </td>
-          <td style="padding: 10px 14px; font-size: 12px; color: #64748b;">${s.remarks || "—"}</td>
+          <td style="padding: 10px 14px; font-size: 12px; color: #64748b;">${s.remarks ? escapeHtml(s.remarks) : "—"}</td>
         </tr>
       `;
     })
     .join("");
+
+  // Header/dossier fields come from the request too, so they are escaped as
+  // well. Only the school's own brand text stays as literal markup.
+  const examTitle = escapeHtml(p.examTitle);
+  const academicTerm = escapeHtml(p.academicTerm);
+  const studentName = escapeHtml(p.studentName);
+  const usn = escapeHtml(p.usn || "—");
+  const grade = escapeHtml(p.grade);
+  const section = p.section ? escapeHtml(p.section) : "";
+  const attendancePct = escapeHtml(p.attendancePct ?? 94);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -106,25 +117,25 @@ export function buildReportCardHtml(p: ReportCardPayload): string {
     <div class="header">
       <h1 class="brand">GLOBAL KIDS SCHOOL</h1>
       <p class="subtitle">Affiliated to CBSE, New Delhi · Affiliation No. 830491</p>
-      <div class="term-pill">${p.examTitle} · ${p.academicTerm}</div>
+      <div class="term-pill">${examTitle} · ${academicTerm}</div>
     </div>
     <div class="body">
       <div class="student-dossier">
         <div>
           <span class="dossier-label">Student Name</span>
-          <span class="dossier-val">${p.studentName}</span>
+          <span class="dossier-val">${studentName}</span>
         </div>
         <div>
           <span class="dossier-label">USN / Admission No.</span>
-          <span class="dossier-val" style="font-family: monospace;">${p.usn || "—"}</span>
+          <span class="dossier-val" style="font-family: monospace;">${usn}</span>
         </div>
         <div>
           <span class="dossier-label">Class & Section</span>
-          <span class="dossier-val">${p.grade}${p.section ? ` · Section ${p.section}` : ""}</span>
+          <span class="dossier-val">${grade}${section ? ` · Section ${section}` : ""}</span>
         </div>
         <div>
           <span class="dossier-label">Term Attendance</span>
-          <span class="dossier-val" style="color: #059669;">${p.attendancePct ?? 94}% Present</span>
+          <span class="dossier-val" style="color: #059669;">${attendancePct}% Present</span>
         </div>
       </div>
 
@@ -148,19 +159,19 @@ export function buildReportCardHtml(p: ReportCardPayload): string {
       <div class="summary-box">
         <div>
           <span class="dossier-label">Grand Total</span>
-          <span class="summary-num">${p.grandTotal} / ${p.totalMaxMarks}</span>
+          <span class="summary-num">${escapeHtml(p.grandTotal)} / ${escapeHtml(p.totalMaxMarks)}</span>
         </div>
         <div>
           <span class="dossier-label">Percentage</span>
-          <span class="summary-num" style="color: ${statusColor};">${p.percentage}%</span>
+          <span class="summary-num" style="color: ${statusColor};">${escapeHtml(p.percentage)}%</span>
         </div>
         <div>
           <span class="dossier-label">Overall Grade</span>
-          <span class="summary-num">${p.overallGrade}</span>
+          <span class="summary-num">${escapeHtml(p.overallGrade)}</span>
         </div>
         <div>
           <span class="dossier-label">Result Status</span>
-          <span class="summary-num" style="font-size: 14px; color: ${statusColor};">${p.resultStatus}</span>
+          <span class="summary-num" style="font-size: 14px; color: ${statusColor};">${escapeHtml(p.resultStatus)}</span>
         </div>
       </div>
 
@@ -192,6 +203,18 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
+  /*
+   * A report card is an official academic document. The examination desk, the
+   * principal and an administrator may send one; nobody else may use the
+   * school's SMTP identity to mail an arbitrary address.
+   */
+  const guard = await guardEmailRoute(
+    req,
+    ["admin", "principal", "teacher"],
+    "report-card-email"
+  );
+  if (!guard.ok) return guard.response;
+
   let body: ReportCardEmailRequest;
   try {
     body = (await req.json()) as ReportCardEmailRequest;
@@ -209,6 +232,17 @@ export default async function handler(req: Request): Promise<Response> {
   if (items.length === 0) {
     return Response.json(
       { error: "missing_fields", message: "At least one report card payload is required" },
+      { status: 400 }
+    );
+  }
+
+  // A batch is a class at a time, not an unbounded mailing list.
+  if (items.length > 200) {
+    return Response.json(
+      {
+        error: "batch_too_large",
+        message: "A batch may contain at most 200 report cards.",
+      },
       { status: 400 }
     );
   }
@@ -233,12 +267,23 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const results: Array<{ studentName: string; recipient: string; sent: boolean }> = [];
+  const skipped: Array<{ studentName: string; reason: string }> = [];
 
   for (const card of items) {
-    const recipient =
-      card.studentEmail?.trim() ||
-      `${card.studentName.toLowerCase().replace(/\s+/g, ".")}@example.com`;
-    const subject = `Official Academic Progress Report Card · ${card.studentName} · ${card.examTitle}`;
+    const recipient = String(card.studentEmail ?? "").trim();
+    if (!isUsableEmail(recipient)) {
+      // Do not invent an address for a record that has none: a report card
+      // sent to a guessed mailbox is a data leak, not a delivery.
+      skipped.push({
+        studentName: String(card.studentName ?? ""),
+        reason: "no_valid_recipient",
+      });
+      continue;
+    }
+
+    const safeName = String(card.studentName ?? "").replace(/[\r\n]+/g, " ").slice(0, 120);
+    const safeExam = String(card.examTitle ?? "").replace(/[\r\n]+/g, " ").slice(0, 120);
+    const subject = `Official Academic Progress Report Card · ${safeName} · ${safeExam}`;
     const html = buildReportCardHtml({ ...card, studentEmail: recipient });
     const text = `Global Kids School - Academic Progress Report Card\n\nStudent: ${card.studentName}\nClass: ${card.grade}\nExam: ${card.examTitle}\nGrand Total: ${card.grandTotal} / ${card.totalMaxMarks} (${card.percentage}%)\nOverall Grade: ${card.overallGrade}\nResult: ${card.resultStatus}\n\nThis is an official confidential document from Global Kids School.`;
 
@@ -261,17 +306,24 @@ export default async function handler(req: Request): Promise<Response> {
     results.push({
       studentName: card.studentName,
       recipient,
-      sent: sent || true, // recorded delivery
+      sent,
     });
   }
 
+  const delivered = results.filter((r) => r.sent).length;
+
   return Response.json({
     ok: true,
-    sent: true,
+    sent: transport ? delivered > 0 && delivered === results.length : results.length > 0,
+    delivered,
+    failed: results.length - delivered,
+    skipped,
     mode: transport ? "smtp" : "recorded",
     count: results.length,
     recipients: results.map((r) => r.recipient),
-    message: `Dispatched ${results.length} report card(s) to registered emails`,
+    message: transport
+      ? `Sent ${delivered} of ${results.length} report card(s) to registered emails`
+      : `Recorded ${results.length} report card(s); mail transport is not configured, so nothing was sent.`,
     timestamp: new Date().toISOString(),
   });
 }

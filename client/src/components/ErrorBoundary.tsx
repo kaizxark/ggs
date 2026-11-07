@@ -55,7 +55,7 @@ class ErrorBoundary extends Component<Props, State> {
               {this.state.error?.message && (
                 <div
                   className="mb-6 w-full overflow-auto rounded-lg border p-4 text-left"
-                  style={{ borderColor: "#3a2020", background: "#2a1a18" }}
+                  style={{ borderColor: "var(--danger-border)", background: "var(--danger-soft-2)" }}
                 >
                   <pre
                     className="text-[12.5px] whitespace-break-spaces"

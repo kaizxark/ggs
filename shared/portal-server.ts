@@ -43,6 +43,7 @@ import {
   normaliseEmail,
   passwordProblem,
   PASSWORD_MIN_LENGTH,
+  PASSWORD_NOT_STORED,
   PLACEHOLDER_EMAIL_DOMAIN,
   placeholderEmail,
   type PortalSubject,
@@ -454,7 +455,9 @@ async function recordStudentCredential(
       await patch(
         "student_credentials",
         input.recordId,
-        { password: derived, email },
+        // The auth password is written by the provisioning path; this row
+        // records only that the account is back on its derived first password.
+        { password: PASSWORD_NOT_STORED, email, last_rotated_at: null },
         keyColumn("student_credentials")
       );
     } else {
@@ -479,7 +482,10 @@ async function recordStudentCredential(
      * record where it belongs.
      */
     email,
-    password: derived ?? generateSecret(24),
+    // Never the plaintext: Auth owns the hash, and this column is only a
+    // marker that the account still uses its derived first password.
+    password: PASSWORD_NOT_STORED,
+    last_rotated_at: null,
     issued_by: input.actorId ?? null,
   });
 }
@@ -821,7 +827,10 @@ export async function changePortalCredentials(
    */
   if (input.studentId && (password !== null || username !== null)) {
     const fields: Json = { email };
-    if (password !== null) fields.password = password;
+    if (password !== null) {
+      fields.password = PASSWORD_NOT_STORED;
+      fields.last_rotated_at = new Date().toISOString();
+    }
     if (username !== null && username !== shared) {
       /*
        * The pupil has claimed a name of their own. The shared name does not
@@ -847,7 +856,11 @@ export async function changePortalCredentials(
    * it in preference to the derived value.
    */
   if (input.staffId && password !== null) {
-    const fields: Json = { email, password };
+    const fields: Json = {
+      email,
+      password: PASSWORD_NOT_STORED,
+      last_rotated_at: new Date().toISOString(),
+    };
     if (username !== null && username !== shared) {
       fields.username_chosen_at = new Date().toISOString();
     }
@@ -874,7 +887,8 @@ export async function changePortalCredentials(
         organisation_id: input.organisationId ?? null,
         username: username ?? email,
         email,
-        password,
+        password: PASSWORD_NOT_STORED,
+        last_rotated_at: new Date().toISOString(),
         issued_at: new Date().toISOString(),
       });
     }
@@ -968,7 +982,8 @@ export async function resetPupilPasswords(
         "student_credentials",
         studentId,
         {
-          password: secret,
+          password: PASSWORD_NOT_STORED,
+          last_rotated_at: null,
           email,
           issued_at: new Date().toISOString(),
         },
@@ -980,7 +995,8 @@ export async function resetPupilPasswords(
         organisation_id: organisationId,
         username: email,
         email,
-        password: secret,
+        password: PASSWORD_NOT_STORED,
+        last_rotated_at: null,
         issued_by: null,
       });
     }

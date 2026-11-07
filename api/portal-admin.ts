@@ -37,6 +37,7 @@ import {
   isUsableEmail,
   normaliseEmail,
   passwordProblem,
+  PASSWORD_NOT_STORED,
 } from "../shared/portal-accounts.js";
 import {
   changePortalCredentials,
@@ -68,6 +69,33 @@ const TEST_ADDRESSES = [
 
 /** How many rows one backfill will touch. A guard against a wrong org filter. */
 const MAX_ROWS = 5000;
+
+/**
+ * What the owner's screen may show for a credential row.
+ *
+ * The stored column is no longer a password: new rows carry
+ * `PASSWORD_NOT_STORED`, and Auth holds only a hash. For a legacy row the
+ * stored value is compared — server-side, never returned — against the derived
+ * one to decide whether the owner had already chosen their own.
+ *
+ * `last_rotated_at` is the authoritative "the owner has set this" marker once a
+ * password has been changed through this application.
+ */
+function passwordWasSet(
+  cred: Json | undefined,
+  derived: string | null
+): boolean {
+  if (!cred) return false;
+  if (cred.last_rotated_at) return true;
+  const stored = String(cred.password ?? "");
+  return stored !== "" && stored !== PASSWORD_NOT_STORED && stored !== (derived ?? "");
+}
+
+/** The value to send a browser: the derived first password, or nothing. */
+function passwordFor(cred: Json | undefined, derived: string | null): string {
+  if (passwordWasSet(cred, derived)) return "";
+  return derived ?? "";
+}
 
 function fail(message: string, status: number, code = "error") {
   return Response.json({ error: code, message }, { status });
@@ -250,11 +278,16 @@ async function allAccounts(req: Request): Promise<Response> {
   if (!caller) return fail("You must be signed in.", 401, "unauthenticated");
 
   const isSuper = isSuperAdminId(caller.id) || caller.superAdmin;
+  /*
+   * Access is derived from the role alone.
+   *
+   * This used to also grant the screen to any address matching `/meera/i`,
+   * which meant an account could be given access to every pupil's credentials
+   * merely by being named "meera" — a privilege escalation reachable through
+   * the invite and backfill flows. It is gone.
+   */
   const isPrincipal =
-    !isSuper &&
-    (caller.role === "admin" ||
-      caller.role === "principal" ||
-      /meera/i.test(caller.email));
+    !isSuper && (caller.role === "admin" || caller.role === "principal");
   const isStaff = !isSuper && !isPrincipal && caller.role === "staff";
 
   if (!isSuper && !isPrincipal && !isStaff) {
@@ -287,7 +320,7 @@ async function allAccounts(req: Request): Promise<Response> {
     await Promise.all([
       readJson<Json>(
         await rest(
-          `student_credentials?select=student_id,username,password,issued_at&organisation_id=eq.${org}`
+          `student_credentials?select=student_id,username,password,issued_at,last_rotated_at&organisation_id=eq.${org}`
         )
       ),
       /*
@@ -297,7 +330,7 @@ async function allAccounts(req: Request): Promise<Response> {
        */
       readJson<Json>(
         await rest(
-          `staff_credentials?select=staff_id,username,password,issued_at&organisation_id=eq.${org}`
+          `staff_credentials?select=staff_id,username,password,issued_at,last_rotated_at&organisation_id=eq.${org}`
         )
       ),
       readJson<Json>(
@@ -348,10 +381,14 @@ async function allAccounts(req: Request): Promise<Response> {
       username: String(
         profile?.username ?? cred?.username ?? pupil.email ?? ""
       ).trim(),
-      // Read from the row when there is one, so a password the pupil has since
-      // changed is reported accurately rather than being recomputed from a date
-      // they have moved on from.
-      password: String(cred?.password ?? ddmmDate(pupil.date_of_birth) ?? ""),
+      /*
+       * Only the derived first password is ever sent to a browser. Once the
+       * owner chooses their own, the server knows that fact (`last_rotated_at`,
+       * or a legacy stored value that differs from the derived one) but not
+       * the secret itself — Auth holds a hash and nothing else.
+       */
+      password: passwordFor(cred, ddmmDate(pupil.date_of_birth)),
+      passwordSet: passwordWasSet(cred, ddmmDate(pupil.date_of_birth)),
       derived: !cred,
       email: normaliseEmail(pupil.email),
       issuedAt: String(cred?.issued_at ?? ""),
@@ -371,12 +408,11 @@ async function allAccounts(req: Request): Promise<Response> {
       recordId: id,
       name: String(person.name ?? ""),
       detail: String(person.usn ?? person.designation ?? ""),
-      // A recorded password wins over the derived one, so a member of staff who
-      // has chosen their own is reported as they actually are.
       username: String(
         profile?.username ?? cred?.username ?? person.email ?? ""
       ).trim(),
-      password: String(cred?.password ?? ddmmDate(person.joined_on) ?? ""),
+      password: passwordFor(cred, ddmmDate(person.joined_on)),
+      passwordSet: passwordWasSet(cred, ddmmDate(person.joined_on)),
       derived: !cred,
       email: normaliseEmail(person.email),
       issuedAt: String(cred?.issued_at ?? ""),
@@ -430,7 +466,8 @@ async function allAccounts(req: Request): Promise<Response> {
     summary: {
       pupils: pupilAccounts.length,
       staff: staffAccounts.length,
-      withAccount: rows.filter(row => Boolean(row.password)).length,
+      withAccount: rows.filter(row => Boolean(row.password) || row.passwordSet)
+        .length,
       /*
        * A record with no address, and a record with a generated placeholder,
        * are the same problem: there is no mailbox to reach. The placeholder

@@ -123,9 +123,9 @@ export function DateDropdowns({
     width: "100%",
     height: "38px",
     borderRadius: "9px",
-    background: "rgba(255, 255, 255, 0.04)",
-    border: error ? "1px solid var(--danger, #ff453a)" : "1px solid var(--border)",
-    color: "var(--text-primary, #ffffff)",
+    background: "var(--bg-input)",
+    border: error ? "1px solid var(--danger)" : "1px solid var(--border)",
+    color: "var(--text-primary)",
     fontSize: "13px",
     fontWeight: 500,
     padding: "0 28px 0 12px",
@@ -149,11 +149,11 @@ export function DateDropdowns({
             className="hover:border-[var(--brand)] focus:border-[var(--brand)]"
             aria-label="Day"
           >
-            <option value="" disabled style={{ background: "#181a20", color: "#888" }}>
+            <option value="" disabled style={{ background: "var(--bg-panel)", color: "var(--text-muted)" }}>
               Day
             </option>
             {daysList.map((d) => (
-              <option key={d} value={d} style={{ background: "#181a20", color: "#f0f2f5" }}>
+              <option key={d} value={d} style={{ background: "var(--bg-panel)", color: "var(--text-primary)" }}>
                 {parseInt(d, 10)}
               </option>
             ))}
@@ -181,11 +181,11 @@ export function DateDropdowns({
             className="hover:border-[var(--brand)] focus:border-[var(--brand)]"
             aria-label="Month"
           >
-            <option value="" disabled style={{ background: "#181a20", color: "#888" }}>
+            <option value="" disabled style={{ background: "var(--bg-panel)", color: "var(--text-muted)" }}>
               Month
             </option>
             {MONTH_NAMES.map((m) => (
-              <option key={m.value} value={m.value} style={{ background: "#181a20", color: "#f0f2f5" }}>
+              <option key={m.value} value={m.value} style={{ background: "var(--bg-panel)", color: "var(--text-primary)" }}>
                 {m.full}
               </option>
             ))}
@@ -213,11 +213,11 @@ export function DateDropdowns({
             className="hover:border-[var(--brand)] focus:border-[var(--brand)]"
             aria-label="Year"
           >
-            <option value="" disabled style={{ background: "#181a20", color: "#888" }}>
+            <option value="" disabled style={{ background: "var(--bg-panel)", color: "var(--text-muted)" }}>
               Year
             </option>
             {yearsList.map((y) => (
-              <option key={y} value={y} style={{ background: "#181a20", color: "#f0f2f5" }}>
+              <option key={y} value={y} style={{ background: "var(--bg-panel)", color: "var(--text-primary)" }}>
                 {y}
               </option>
             ))}
@@ -253,7 +253,7 @@ export function DateDropdowns({
       )}
 
       {error && (
-        <span className="field-error" style={{ display: "block", marginTop: "4px", fontSize: "11px", color: "var(--danger, #ff453a)" }}>
+        <span className="field-error" style={{ display: "block", marginTop: "4px", fontSize: "11px", color: "var(--danger)" }}>
           {error}
         </span>
       )}

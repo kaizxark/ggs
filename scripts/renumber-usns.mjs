@@ -25,9 +25,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 const SUPABASE_URL = "https://fmlwzxmjrecbtvgraqqm.supabase.co";
-const SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_KEY ??
-  "REDACTED-SUPABASE-SECRET-KEY";
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY ?? process.env.SUPABASE_SECRET_KEY;
+if (!SERVICE_KEY) {
+  console.error(
+    "SUPABASE_SERVICE_KEY is not set. Export it before running this script; " +
+      "a service key is never kept in the repository."
+  );
+  process.exit(1);
+}
 const ORG_ID = "2f6cbae9-ed79-45e3-819c-a8c80eee7a0f";
 const PREFIX = "GGS";
 const FIRST_NUMBER = 1001;

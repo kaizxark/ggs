@@ -155,6 +155,44 @@ export async function recordUpiPayment(input: {
   };
 }
 
+/**
+ * Finance office: record a collection taken outside the gateway.
+ *
+ * Cash, cheque, POS and a bank transfer all post through here. The reference is
+ * the idempotency key, so it is required rather than optional — a second submit
+ * of the same entry resolves to the payment already recorded instead of
+ * crediting the invoice twice.
+ */
+export async function recordManualPayment(input: {
+  invoiceId: string;
+  amount: number;
+  method: string;
+  reference: string;
+  paidOn?: string;
+}): Promise<{ receiptNo: string; duplicate: boolean; status: string }> {
+  const token = await authToken();
+  const res = await fetch("/api/student-profile?__fee=manual", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await readError(res);
+  const body = (await res.json()) as {
+    receiptNo?: string;
+    duplicate?: boolean;
+    status?: string;
+  };
+  notifyDataChanged();
+  return {
+    receiptNo: String(body.receiptNo ?? ""),
+    duplicate: body.duplicate === true,
+    status: String(body.status ?? "RECORDED"),
+  };
+}
+
 let checkoutScript: Promise<boolean> | null = null;
 
 /** Load Razorpay's hosted Checkout once. */

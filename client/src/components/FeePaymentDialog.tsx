@@ -19,7 +19,6 @@ import {
   startFeePayment,
   type RazorpaySuccess,
 } from "@/lib/fee-payments";
-import { recordFeePayment } from "@/lib/fee-store";
 
 interface FeePaymentDialogProps {
   open: boolean;
@@ -70,13 +69,6 @@ export function FeePaymentDialog({
     setError("");
     try {
       const receipt = await confirmFeePayment(result);
-      void recordFeePayment({
-        invoiceId: invoiceId ?? undefined,
-        studentName: "",
-        amount: effectiveAmount,
-        method: "UPI (Razorpay)",
-        reference: result.razorpay_payment_id,
-      });
       setDone(true);
       toast.success(receipt.duplicate ? "Payment already recorded" : "Payment successful", {
         description: receipt.receiptNo
@@ -85,21 +77,18 @@ export function FeePaymentDialog({
       });
       await onPaid();
       window.setTimeout(() => onOpenChange(false), 900);
-    } catch {
-      // Fallback: record locally if server confirmation fails
-      const localRes = await recordFeePayment({
-        invoiceId: invoiceId ?? undefined,
-        studentName: "",
-        amount: effectiveAmount,
-        method: "UPI (Razorpay)",
-        reference: result.razorpay_payment_id,
-      });
-      setDone(true);
-      toast.success("Payment successful", {
-        description: `${invoiceNo} has been updated · Receipt ${localRes.receiptNo}.`,
-      });
-      await onPaid();
-      window.setTimeout(() => onOpenChange(false), 900);
+    } catch (err) {
+      /*
+       * No local fallback. The old code wrote the payment into the browser's
+       * own store when the server refused, marked the invoice paid on screen
+       * and told the family it had succeeded — while the school ledger held
+       * nothing. A failed confirmation has to read as a failure.
+       */
+      setError(
+        err instanceof FeePaymentError
+          ? err.message
+          : "The payment could not be confirmed. Do not pay again; contact the school office with your payment reference."
+      );
     } finally {
       setConfirming(false);
       setPaying(false);

@@ -294,7 +294,7 @@ export const mockSettings: SettingRow[] = [
 /* Row types — column names mirror the UI field names                  */
 /* ------------------------------------------------------------------ */
 
-export interface Student extends BaseRow { usn?: string; name: string; initials: string; grade: string; section: string; attendance: number; /** How many attendance rows back `attendance`. 0 means unmarked, not 0%. */ attendance_records: number; average: number; scored_papers: number; fees: string; status: string; tone: string; }
+export interface Student extends BaseRow { usn?: string; email?: string | null; name: string; initials: string; grade: string; section: string; attendance: number; /** How many attendance rows back `attendance`. 0 means unmarked, not 0%. */ attendance_records: number; average: number; scored_papers: number; fees: string; status: string; tone: string; }
 export interface StaffMember extends BaseRow { usn: string; name: string; initials: string; role: string; department: string; email: string; attendance: number; status: string; tone: string; photo_url?: string | null; }
 export interface AttendanceDaily extends BaseRow { day: string; date?: string; label?: string; present: number; absent: number; late?: number; leave?: number; }
 export interface ClassAttendanceRow extends BaseRow { label: string; value: number; present: number; total: number; teacher: string; }
@@ -304,7 +304,7 @@ export interface HealthMetric extends BaseRow { label: string; value: string; ch
 export interface FinanceMonth extends BaseRow { month: string; collected: number; pending: number; }
 export interface FeeCategory extends BaseRow { name: string; value: number; color: string; }
 export interface Invoice extends BaseRow { student_id?: string; family: string; student: string; due_date: string; amount: number; total?: number; paid?: number; outstanding?: number; status: string; }
-export interface Payment extends BaseRow { invoice_id: string | null; student: string; amount: number; method: string; paid_at: string; }
+export interface Payment extends BaseRow { invoice_id: string | null; student: string; amount: number; method: string; paid_at: string; receipt_no?: string; reference?: string | null; recipient_email?: string | null; }
 export interface Announcement extends BaseRow { title: string; audience: string; date: string; status: string; color: string; image_url: string | null; body: string | null; }
 export interface ParentMessage extends BaseRow { initials: string; name: string; subject: string; time: string; unread: boolean; }
 export interface NotificationItem extends BaseRow { title: string; detail: string; time: string; unread: boolean; tone: string; icon: string; kind: string; }

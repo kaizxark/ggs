@@ -275,16 +275,20 @@ async function resolveGatewayInvoice(
  */
 async function recordSettlement(
   invoice: FeeInvoice,
-  input: { amount: number; method: string; reference: string }
+  input: { amount: number; method: string; reference: string; paidAt?: string }
 ): Promise<{ ok: true } & SettlementResult | { ok: false; response: Response }> {
   const reference = input.reference.trim();
   if (!reference) {
     return { ok: false, response: fail("The payment reference is missing.", 400, "invalid_reference") };
   }
 
+  // A reference identifies a payment *against one invoice*. UTRs and gateway ids
+  // are globally unique in practice, but a receipt-book number is not, and
+  // scoping the lookup keeps an ordinary cash reference from being reported as
+  // somebody else's duplicate.
   const existing = await one(
     `payments?select=id,receipt_no&organisation_id=eq.${invoice.organisation_id}` +
-      `&reference=eq.${encodeURIComponent(reference)}&limit=1`
+      `&invoice_id=eq.${invoice.id}&reference=eq.${encodeURIComponent(reference)}&limit=1`
   );
   if (existing) {
     return {
@@ -308,10 +312,10 @@ async function recordSettlement(
   }
 
   const paymentId = await deterministicPaymentId(
-    `fee-payment:${invoice.organisation_id}:${reference}`
+    `fee-payment:${invoice.organisation_id}:${invoice.id}:${reference}`
   );
   const receiptNo = await nextReceiptNo(invoice.organisation_id);
-  const paidAt = new Date().toISOString();
+  const paidAt = input.paidAt ?? new Date().toISOString();
   const newPaid = round2(invoice.paid_amount + requested);
   const newStatus = newPaid >= invoice.total ? "paid" : "partial";
 
@@ -333,7 +337,7 @@ async function recordSettlement(
   if (insertRes.status === 409) {
     const raced = await one(
       `payments?select=id,receipt_no&organisation_id=eq.${invoice.organisation_id}` +
-        `&reference=eq.${encodeURIComponent(reference)}&limit=1`
+        `&invoice_id=eq.${invoice.id}&reference=eq.${encodeURIComponent(reference)}&limit=1`
     );
     if (raced) {
       return {
@@ -404,6 +408,98 @@ export async function recordVerifiedUpiPayment(
     amount: requested,
     method: "UPI",
     reference: utr,
+  });
+}
+
+/** The ways the finance desk can say money arrived, besides the gateway. */
+const MANUAL_METHODS = new Set([
+  "Bank transfer",
+  "UPI",
+  "Cash",
+  "Card",
+  "Cheque",
+]);
+
+/**
+ * Record a fee collection the office took outside the gateway.
+ *
+ * Cash, cheque, POS and a bank transfer all end up here. The invoice, school and
+ * outstanding balance are still resolved from the database; only the method,
+ * the office's own reference and the date the money arrived come from the
+ * request. The reference is required and used as the idempotency key, so a
+ * double submit or a retried request posts once.
+ */
+export async function recordManualPayment(
+  req: Request,
+  body: Json
+): Promise<{ ok: true } & SettlementResult | { ok: false; response: Response }> {
+  const invoiceId = String(body.invoiceId ?? "").trim();
+  const resolved = await resolveStaffInvoice(req, invoiceId);
+  if (!resolved.ok) return resolved;
+
+  const method = String(body.method ?? "").trim();
+  if (!MANUAL_METHODS.has(method)) {
+    return {
+      ok: false,
+      response: fail("Choose how the money arrived.", 400, "invalid_method"),
+    };
+  }
+
+  const reference = String(body.reference ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .trim();
+  if (reference.length < 2 || reference.length > 80) {
+    return {
+      ok: false,
+      response: fail(
+        "Enter the receipt book number, cheque number, UTR or other reference for this payment.",
+        400,
+        "invalid_reference"
+      ),
+    };
+  }
+
+  const outstanding = round2(resolved.invoice.total - resolved.invoice.paid_amount);
+  const requested =
+    body.amount === undefined ? outstanding : round2(num(body.amount));
+
+  if (requested <= 0) {
+    return { ok: false, response: fail("Enter the amount received.", 400, "invalid_amount") };
+  }
+  if (requested > outstanding + 0.01) {
+    return {
+      ok: false,
+      response: fail("The amount is larger than the invoice balance.", 409, "amount_too_large"),
+    };
+  }
+  if (body.amount !== undefined && requested < 15000 && outstanding >= 15000) {
+    return {
+      ok: false,
+      response: fail("Minimum installment payment is ₹15,000.", 400, "below_minimum_installment"),
+    };
+  }
+
+  let paidAt: string | undefined;
+  const paidOn = String(body.paidOn ?? "").trim();
+  if (paidOn) {
+    const date = new Date(`${paidOn}T12:00:00Z`);
+    if (Number.isNaN(date.getTime())) {
+      return { ok: false, response: fail("That payment date is not valid.", 400, "invalid_date") };
+    }
+    if (date.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return {
+        ok: false,
+        response: fail("A payment cannot be dated in the future.", 400, "future_date"),
+      };
+    }
+    paidAt = date.toISOString();
+  }
+
+  return recordSettlement(resolved.invoice, {
+    amount: requested,
+    method,
+    reference,
+    paidAt,
   });
 }
 

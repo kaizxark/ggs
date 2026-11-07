@@ -15,7 +15,7 @@ export default function NotFound() {
           <div className="relative">
             <div
               className="absolute inset-0 rounded-full animate-pulse"
-              style={{ background: "rgba(240,88,60,.14)" }}
+              style={{ background: "var(--brand-soft)" }}
             />
             <AlertCircle
               className="relative h-16 w-16"

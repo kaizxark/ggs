@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { PASSWORD_NOT_STORED } from "./portal-accounts";
 import {
   changePortalCredentials,
   provisionPortalAccount,
@@ -607,7 +608,7 @@ describe("changePortalCredentials — a pupil choosing a name of their own", () 
     expect(store.passwordWrites).toEqual([
       { id: "auth-1", password: "newpassword1" },
     ]);
-    expect(store.credentialWrites[0].body.password).toBe("newpassword1");
+    expect(store.credentialWrites[0].body.password).toBe(PASSWORD_NOT_STORED);
   });
 
   it("accepts the shared name, which is an address and not a legal username", async () => {
@@ -671,14 +672,14 @@ describe("resetPupilPasswords — every pupil back to their date of birth", () =
 
   it("writes the same password to the school's own record", async () => {
     await resetPupilPasswords("org-1");
-    expect(store.credentialWrites[0].body.password).toBe("290805");
+    expect(store.credentialWrites[0].body.password).toBe(PASSWORD_NOT_STORED);
   });
 
   it("creates that record when the pupil has none", async () => {
     store.credentials.length = 0;
     const result = await resetPupilPasswords("org-1");
     expect(result.reset).toBe(1);
-    expect(store.credentialWrites[0].body.password).toBe("290805");
+    expect(store.credentialWrites[0].body.password).toBe(PASSWORD_NOT_STORED);
   });
 
   it("leaves a pupil with no date of birth alone, and says so", async () => {

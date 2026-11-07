@@ -40,6 +40,7 @@ import {
 } from "../shared/ai-auth.js";
 import {
   handleFeeConfirmRequest,
+  handleFeeManualRequest,
   handleFeePaymentRequest,
   handleFeeRecordRequest,
   handleFeeWebhookRequest,
@@ -165,6 +166,7 @@ async function handler(req: Request): Promise<Response> {
   if (feeAction === "confirm") return handleFeeConfirmRequest(req);
   if (feeAction === "webhook") return handleFeeWebhookRequest(req);
   if (feeAction === "record") return handleFeeRecordRequest(req);
+  if (feeAction === "manual") return handleFeeManualRequest(req);
 
   if (!SERVICE_KEY) {
     return fail("The database is not configured on this deployment.", 503, "not_configured");
