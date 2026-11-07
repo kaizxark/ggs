@@ -10,7 +10,13 @@ export function MetricBlock({
   positive = true,
   icon: Icon,
   spark,
-  trend = true,
+  /*
+   * A trend arrow only makes sense when `comparison` is an actual movement
+   * ("+4.2% this term"). Most call sites pass a static descriptor ("0 on
+   * roster", "Grades 6–10"), where a green/red arrow pointed the wrong way and
+   * made a neutral fact look like good or bad news. Off unless asked for.
+   */
+  trend = false,
   loading = false,
   className = "",
 }: {

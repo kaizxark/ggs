@@ -42,8 +42,8 @@
   --rail: #142f2b;
   --rail-deep: #0f2421;
   --rail-text: #f6eddd;
-  --rail-muted: rgba(246, 237, 221, 0.66);
-  --rail-faint: rgba(246, 237, 221, 0.40);
+  --rail-muted: rgba(246, 237, 221, 0.74);
+  --rail-faint: rgba(246, 237, 221, 0.58);
 
   /* Ink */
   --text-primary: #241e18;
@@ -444,7 +444,24 @@ kbd { display: inline-flex; min-width: 21px; height: 20px; align-items: center; 
     animation: none;
   }
 }
-.page-intro { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; }
+.page-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  width: 100%;
+}
+.page-intro > div:first-child {
+  min-width: 0;
+  text-align: left;
+}
+.page-intro .page-title,
+.page-intro .page-subtitle,
+.page-intro .eyebrow,
+.page-intro .breadcrumb {
+  text-align: left;
+}
 .eyebrow { margin: 0; color: var(--text-muted); font-size: 12px; font-weight: 700; letter-spacing: .09em; line-height: 1.4; text-transform: uppercase; }
 .page-title { margin: 8px 0 0; color: var(--text-primary); font-family: var(--font-sans); font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.06; font-optical-sizing: auto; text-wrap: balance; }
 .page-subtitle { margin: 8px 0 0; color: var(--text-muted); font-size: 14px; line-height: 1.5; text-wrap: pretty; }
@@ -1569,6 +1586,51 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .pupil-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pupil-grid, .pupil-grid.even { grid-template-columns: 1fr; }
   .pupil-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Mobile and tablet headers: ensure strictly left-aligned column layout */
+  .page-intro {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+    width: 100% !important;
+    text-align: left !important;
+  }
+  .page-intro > div:first-child {
+    width: 100% !important;
+    text-align: left !important;
+  }
+  .page-intro .page-title,
+  .page-intro .page-subtitle,
+  .page-intro .eyebrow,
+  .page-intro .breadcrumb {
+    text-align: left !important;
+  }
+  .page-intro .primary-button,
+  .page-intro .secondary-button,
+  .page-intro-side {
+    align-self: flex-start !important;
+  }
+  .profile-section-heading {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    text-align: left !important;
+  }
+  .profile-section-heading > div {
+    width: 100% !important;
+    text-align: left !important;
+  }
+  .panel-header {
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+  .panel-header > div:first-child {
+    min-width: 0;
+    text-align: left !important;
+  }
 }
 @media (max-width: 616px) {
   /* A fleet row is wide: icon, registration, driver, route, status. On a phone
@@ -1576,13 +1638,41 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .fleet-row { flex-wrap: wrap; row-gap: 9px; }
   .fleet-side { flex: 1 0 100%; flex-direction: row; align-items: center; gap: 12px; justify-content: flex-start; }
   .fleet-chevron { display: none; }
-  .page-intro { align-items: flex-start; flex-direction: column; }
-  .page-intro .primary-button, .page-intro .secondary-button { align-self: flex-start; }
+  .page-intro {
+    display: flex !important;
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+    width: 100% !important;
+    text-align: left !important;
+  }
+  .page-intro > div:first-child {
+    width: 100% !important;
+    text-align: left !important;
+  }
+  .page-intro .primary-button,
+  .page-intro .secondary-button,
+  .page-intro-side {
+    align-self: flex-start !important;
+  }
   .topbar { gap: 10px; }
   .topbar-left { min-width: 0; flex: 1; }
-  /* the search bar absorbs whatever the menu button and profile leave over */
-  .command-trigger { width: auto; min-width: 0; flex: 1 1 auto; }
-  .command-trigger span { display: none; }
+  /* Below the mobile-shell breakpoint the topbar is only used by roles that
+     keep the desktop rail (parents). A stretched, empty search field with a
+     ⌘K badge floating over it read as broken, so it becomes the same round
+     search button the staff shell uses. */
+  .command-trigger {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    justify-content: center;
+    padding: 0;
+    border-radius: 999px;
+  }
+  .command-trigger span,
+  .command-trigger kbd { display: none; }
   .topbar-actions { gap: 5px; flex: 0 0 auto; }
   .topbar-divider { display: none; }
   .topbar-profile { padding: 5px; }
@@ -2871,6 +2961,31 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   padding: 16px 14px calc(104px + env(safe-area-inset-bottom, 0px));
 }
 
+.pupil-m-page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  width: 100%;
+  margin-bottom: 2px;
+}
+.pupil-m-page-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  text-align: left;
+}
+.pupil-m-page-head p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: left;
+}
+
 /* ---------- Greeting ---------- */
 
 .pupil-m-hero {
@@ -3708,8 +3823,31 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   max-width: none;
   padding: 20px 14px calc(108px + env(safe-area-inset-bottom, 0px));
 }
-.staff-mobile .page-title { font-size: 24px; }
-.staff-mobile .page-intro { gap: 12px; }
+.staff-mobile .page-title { font-size: 24px; text-align: left; }
+.staff-mobile .page-intro {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+  width: 100% !important;
+  text-align: left !important;
+}
+.staff-mobile .page-intro > div:first-child {
+  width: 100% !important;
+  text-align: left !important;
+}
+.staff-mobile .page-intro .page-title,
+.staff-mobile .page-intro .page-subtitle,
+.staff-mobile .page-intro .eyebrow,
+.staff-mobile .page-intro .breadcrumb {
+  text-align: left !important;
+}
+.staff-mobile .page-intro .primary-button,
+.staff-mobile .page-intro .secondary-button,
+.staff-mobile .page-intro-side {
+  align-self: flex-start !important;
+}
 
 .staff-more-scrim {
   position: absolute;
@@ -4132,7 +4270,9 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
 
 /* ---------------------------------------------------------------- page furniture */
 .page-stack { gap: 24px; }
-.page-intro { align-items: flex-end; }
+@media (min-width: 947px) {
+  .page-intro { align-items: flex-end; }
+}
 .eyebrow { color: var(--brand); font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; }
 .page-title {
   font-family: var(--font-display);
