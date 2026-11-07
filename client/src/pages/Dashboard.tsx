@@ -148,6 +148,7 @@ import {
   type RowId,
   type Settings,
   type Student,
+  type Invoice,
   getAnnualFeeForGrade,
 } from "../lib/school-data";
 import {
