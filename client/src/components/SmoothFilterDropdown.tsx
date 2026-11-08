@@ -38,21 +38,44 @@ export function SmoothFilterDropdown({
     if (!open) return;
     if (!containerRef.current) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    const vertical = spaceBelow < 260 && spaceAbove > spaceBelow ? "top" : "bottom";
+    const updatePlacement = () => {
+      if (!containerRef.current) return;
+      const zoomVal = Number.parseFloat(
+        (getComputedStyle(document.documentElement) as any).zoom ?? ""
+      );
+      const zoom = Number.isFinite(zoomVal) && zoomVal > 0 ? zoomVal : 1;
 
-    const spaceRight = window.innerWidth - rect.left;
-    const spaceLeft = rect.right;
-    let horizontal: "left" | "right" = align;
-    if (align === "left" && spaceRight < 220 && spaceLeft > spaceRight) {
-      horizontal = "right";
-    } else if (align === "right" && spaceLeft < 220 && spaceRight > spaceLeft) {
-      horizontal = "left";
-    }
+      const rect = containerRef.current.getBoundingClientRect();
+      const vh = window.innerHeight / zoom;
+      const vw = window.innerWidth / zoom;
+      const rectBottom = rect.bottom / zoom;
+      const rectTop = rect.top / zoom;
+      const rectLeft = rect.left / zoom;
+      const rectRight = rect.right / zoom;
 
-    setPlacement({ vertical, horizontal });
+      const spaceBelow = vh - rectBottom;
+      const spaceAbove = rectTop;
+      const vertical = spaceBelow < 260 && spaceAbove > spaceBelow ? "top" : "bottom";
+
+      const spaceRight = vw - rectLeft;
+      const spaceLeft = rectRight;
+      let horizontal: "left" | "right" = align;
+      if (align === "left" && spaceRight < 220 && spaceLeft > spaceRight) {
+        horizontal = "right";
+      } else if (align === "right" && spaceLeft < 220 && spaceRight > spaceLeft) {
+        horizontal = "left";
+      }
+
+      setPlacement({ vertical, horizontal });
+    };
+
+    updatePlacement();
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, { capture: true });
+    };
   }, [open, align]);
 
   useEffect(() => {

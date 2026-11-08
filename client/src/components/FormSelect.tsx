@@ -44,18 +44,43 @@ export function FormSelect({
 
   const updateCoords = useCallback(() => {
     if (!triggerRef.current) return;
-    /* The UI zoom is gone, so the viewport and the measured rect share one
-       coordinate space; the popover can use them directly. */
-    const rect = triggerRef.current.getBoundingClientRect();
+    /*
+     * The app scales `html` with `zoom: var(--ui-zoom)`. That scales the used
+     * value of `top`/`left`/`width` on a fixed child, while `getBoundingClientRect()`
+     * already returns visual (post-zoom) coordinates — so feeding the rect
+     * straight into the portal placed it further out than the trigger.
+     * Work in the unzoomed layout space here; the browser's zoom multiplies it
+     * back when the popover paints.
+     */
+    const zoomValue = Number.parseFloat(
+      (getComputedStyle(document.documentElement) as any).zoom ?? ""
+    );
+    const zoom = Number.isFinite(zoomValue) && zoomValue > 0 ? zoomValue : 1;
+    const raw = triggerRef.current.getBoundingClientRect();
 
-    if (rect.width === 0 && rect.height === 0) {
+    if (raw.width === 0 && raw.height === 0) {
       setOpen(false);
       return;
     }
 
-    const vh = window.innerHeight;
-    const vw = window.innerWidth;
+    // If the trigger has scrolled offscreen, close the dropdown
+    if (raw.bottom < 0 || raw.top > window.innerHeight) {
+      setOpen(false);
+      return;
+    }
+
+    const rect = {
+      top: raw.top / zoom,
+      bottom: raw.bottom / zoom,
+      left: raw.left / zoom,
+      width: raw.width / zoom,
+      height: raw.height / zoom,
+    };
+
+    const vh = window.innerHeight / zoom;
+    const vw = window.innerWidth / zoom;
     const margin = 8;
+    const gap = 6;
     const spaceBelow = vh - rect.bottom - margin;
     const spaceAbove = rect.top - margin;
 
@@ -64,7 +89,7 @@ export function FormSelect({
     setPlacement(nextPlacement);
 
     const available = shouldFlip ? spaceAbove : spaceBelow;
-    const maxHeight = Math.max(120, Math.min(260, available - 8));
+    const maxHeight = Math.max(120, Math.min(260, available - margin));
 
     // Match button width, clamped to viewport with 8px margins
     const width = Math.min(Math.max(rect.width, 160), vw - margin * 2);
@@ -78,14 +103,16 @@ export function FormSelect({
 
     if (shouldFlip) {
       setCoords({
-        bottom: vh - rect.top + 6,
+        top: undefined,
+        bottom: vh - rect.top + gap,
         left,
         width,
         maxHeight,
       });
     } else {
       setCoords({
-        top: rect.bottom + 6,
+        top: rect.bottom + gap,
+        bottom: undefined,
         left,
         width,
         maxHeight,
