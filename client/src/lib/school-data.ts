@@ -171,15 +171,6 @@ export const mockTimetable = [
   { id: "tt-sat-6", day: "Saturday", period: "Period 6", time: "11:45 – 12:30", grade_6: "Biology", grade_7: "Chemistry", grade_8: "Physics", grade_9: "Social Studies", grade_10: "English" },
 ];
 
-export const mockSubjects = [
-  { id: "sub-1", name: "Mathematics", teacher: "Meera Shah", classes: "Grades 6–10", periods: 9, progress: 64 },
-  { id: "sub-2", name: "Science", teacher: "Ravi Menon", classes: "Grades 6–10", periods: 8, progress: 71 },
-  { id: "sub-3", name: "English", teacher: "Sonia Joseph", classes: "Grades 6–10", periods: 7, progress: 58 },
-  { id: "sub-4", name: "Computer Science", teacher: "Karthik Rao", classes: "Grades 6–10", periods: 4, progress: 82 },
-  { id: "sub-5", name: "Social Studies", teacher: "Arvind Iyer", classes: "Grades 6–10", periods: 5, progress: 49 },
-  { id: "sub-6", name: "Languages", teacher: "Priya Nair", classes: "Grades 6–10", periods: 6, progress: 67 },
-];
-
 export const mockExams = [
   { id: "EXM-001", name: "Mid-term Mathematics", subject: "Mathematics", grade: "Grade 8", date: "02 Oct 2026", time: "09:00 – 10:30", venue: "Room 204", status: "Scheduled" },
   { id: "EXM-002", name: "Mid-term Physics", subject: "Physics", grade: "Grade 10", date: "03 Oct 2026", time: "09:00 – 10:30", venue: "Lab 1", status: "Scheduled" },
@@ -321,7 +312,7 @@ export function getAnnualFeeForGrade(grade?: string | number | null): number {
   if (num >= 9) return 60000;
   return 50000;
 }
-export interface SubjectRow extends BaseRow { name: string; teacher: string; classes: string; periods: number; progress: number; }
+export interface SubjectRow extends BaseRow { name: string; code: string | null; description: string | null; active: boolean; teacher: string | null; classes: number; classList: string[]; progress: number; results: number; }
 export interface PerformanceTrend extends BaseRow { month: string; mathematics: number; science: number; english: number; }
 export interface SubjectAverage extends BaseRow { subject: string; average: number; }
 export interface GradeOutcome extends BaseRow { grade: string; average: number; attendance: number; change: string; }

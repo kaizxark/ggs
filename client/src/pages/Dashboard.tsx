@@ -186,6 +186,7 @@ import { recordManualPayment } from "../lib/fee-payments";
 import { authHeaders } from "../lib/supabase";
 import { ReportsView } from "../components/ReportsView";
 import { ExaminationsView } from "../components/ExaminationsView";
+import { AcademicsView } from "../components/AcademicsView";
 import { FormSelect } from "../components/FormSelect";
 import { DateDropdowns } from "../components/DateDropdowns";
 import { SmoothFilterDropdown } from "../components/SmoothFilterDropdown";
@@ -814,7 +815,7 @@ function CommandPaletteBody({
     const matchingSubjects = allowedScreenSet.has("Academics")
       ? subjects
           .filter(sub =>
-            `${sub.name} ${sub.teacher} ${sub.classes}`
+            `${sub.name} ${sub.teacher ?? ""} ${sub.classList.join(" ")}`
               .toLowerCase()
               .includes(normalized)
           )
@@ -1592,7 +1593,7 @@ function CommandPaletteBody({
                         Subject: {sub.name}
                       </span>
                       <span className="block text-[12.5px] text-[var(--text-muted)]">
-                        Classes {sub.classes} · Teacher: {sub.teacher}
+                        {sub.classList.length > 0 ? `Classes ${sub.classList.join(", ")}` : "No classes assigned"} · Teacher: {sub.teacher ?? "Unassigned"}
                       </span>
                     </span>
                     <span className="command-shortcut">↵</span>
@@ -5655,150 +5656,6 @@ function StaffView({
     </div>
   );
 }
-
-function AcademicsView({ onBack }: { onBack: () => void }) {
-  const { rows: subjects } = useSubjects();
-  const { rows: staffMembers } = useStaff();
-  const { rows: exams } = useExams();
-  const teachersCount = useMemo(
-    () =>
-      staffMembers.filter(
-        (member) =>
-          /teacher|faculty|instructor/i.test(member.role) ||
-          /languages|science|mathematics|english|social|sports|computer/i.test(
-            member.department
-          )
-      ).length,
-    [staffMembers]
-  );
-
-  return (
-    <div className="page-stack">
-      <div className="page-intro">
-        <div>
-          <Breadcrumb
-            parent="Global Kids School"
-            current="Academics"
-            onParentClick={onBack}
-          />
-          <h1 className="page-title">Academics</h1>
-        </div>
-      </div>
-
-      <div className="metric-grid">
-        <MetricBlock
-          label="Class Timetables"
-          value="10 classes"
-          comparison="Grades 6–10 (Sections A & B)"
-          icon={CalendarDays}
-        />
-        <MetricBlock
-          label="Subjects offered"
-          value={String(subjects.length || 12)}
-          comparison={`${subjects.length || 12} active curriculum areas`}
-          icon={BookOpen}
-        />
-        <MetricBlock
-          label="Teaching staff"
-          value={String(teachersCount || staffMembers.length || 12)}
-          comparison={`${staffMembers.length || 12} faculty assigned`}
-          icon={Users}
-        />
-        <MetricBlock
-          label="Examinations"
-          value={String(exams.length)}
-          comparison={
-            exams.length > 0
-              ? `${exams.filter(e => e.status === "Published").length} published`
-              : "Assessments scheduled"
-          }
-          icon={GraduationCap}
-        />
-      </div>
-
-      {/* The timetable builder owns its own data, permissions and validation. */}
-      <TimetableView />
-
-      <section className="panel table-panel">
-        <div className="panel-header">
-          <div>
-            <h2 className="panel-title">Subject load</h2>
-          </div>
-        </div>
-        <div className="table-scroll">
-          <table className="data-table" style={{ minWidth: 720 }}>
-            <thead>
-              <tr>
-                <th>Subject</th>
-                <th>Teacher</th>
-                <th>Classes</th>
-                <th>Periods / week</th>
-                <th>Syllabus covered</th>
-                <th className="text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subjects.map(subject => (
-                <tr key={subject.name}>
-                  <td className="font-medium text-[var(--text-primary)]">
-                    {subject.name}
-                  </td>
-                  <td className="muted-cell">{subject.teacher}</td>
-                  <td>
-                    <span className="grade-chip">{subject.classes}</span>
-                  </td>
-                  <td className="muted-cell">{subject.periods}</td>
-                  <td>
-                    <div className="flex items-center gap-3">
-                      <span className="progress-bar">
-                        <span
-                          style={{
-                            width: `${subject.progress}%`,
-                            background:
-                              subject.progress >= 75
-                                ? "var(--brand)"
-                                : subject.progress >= 60
-                                  ? "var(--warning)"
-                                  : "var(--danger)",
-                          }}
-                        />
-                      </span>
-                      <span className="font-medium text-[var(--text-hover)]">
-                        {subject.progress}%
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <button
-                      className="tiny-action"
-                      onClick={() =>
-                        toast(`Syllabus plan opened for ${subject.name}`)
-                      }
-                    >
-                      Plan
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {subjects.length === 0 && (
-          <div className="empty-state px-5 py-10">
-            <BookOpen size={22} className="text-[var(--text-muted)]" />
-            <p className="panel-title" style={{ fontSize: 15, marginTop: 6 }}>
-              No subjects assigned yet
-            </p>
-            <p className="panel-subtitle">
-              Subject load appears here once classes and teachers are assigned.
-            </p>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
 
 /**
  * Format currency according to Indian financial conventions (Lakh, Crore, en-IN formatting).

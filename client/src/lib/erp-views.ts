@@ -230,8 +230,11 @@ const VIEW_TABLES: Record<string, string[]> = {
   fee_categories: ["invoices"],
   exams: ["examinations", "classrooms"],
   exam_results: ["exam_results", "examinations", "students", "classrooms", "enrollments"],
-  subjects: ["exam_results", "staff", "classrooms"],
-  subject_averages: ["exam_results", "staff", "classrooms"],
+  subjects: ["subjects", "subject_teachers", "staff", "classrooms", "exam_results"],
+  subject_averages: ["subjects", "subject_teachers", "staff", "classrooms", "exam_results"],
+  teaching_allocations: ["subject_teachers", "subjects", "staff", "classrooms"],
+  assignments: ["assignments", "classrooms"],
+  classrooms: ["classrooms"],
   grade_outcomes: ["exam_results", "classrooms", "enrollments", "attendance"],
   performance_trend: ["examinations", "exam_results"],
   health_metrics: ["attendance", "exam_results", "invoices", "payments"],
@@ -1009,54 +1012,188 @@ export function useExamResultsView() {
   return useErpView<ExamResult>("exam_results", loadExamResults, []);
 }
 
+/**
+ * The subject catalog, joined honestly. Rows come from the `subjects` table;
+ * teacher names and class counts from `subject_teachers`; the average from
+ * real `exam_results`. A subject with no allocations or no marks says so —
+ * nothing is invented to fill the table.
+ */
 async function loadSubjects(): Promise<SubjectRow[]> {
-  const [results, staff, classrooms] = await Promise.all([
-    fetchAll("exam_results", "id,student_id,examination_id,subject,marks,max_marks,grade"),
-    fetchAll("staff", "id,usn,name,designation,department,email,active"),
-    fetchAll("classrooms", "id,grade,section,room,class_teacher_id"),
+  const [subjects, allocations, staff, classrooms, results] = await Promise.all([
+    fetchAll("subjects", "id,name,code,description,active"),
+    fetchAll("subject_teachers", "id,subject_id,staff_id,classroom_id,is_primary"),
+    fetchAll("staff", "id,name"),
+    fetchAll("classrooms", "id,grade,section"),
+    fetchAll("exam_results", "id,student_id,subject,marks,max_marks,grade"),
   ]);
-  const bySubject = new Map<string, { sum: number; n: number }>();
+
+  const staffById = new Map(staff.map((s) => [String(s.id), String(s.name ?? "")]));
+  const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
+
+  // Distinct allocation per subject -> teacher names + covered classrooms.
+  const allocBySubject = new Map<string, { staff: Set<string>; rooms: Set<string> }>();
+  for (const a of allocations) {
+    const key = String(a.subject_id);
+    const cur = allocBySubject.get(key) ?? { staff: new Set<string>(), rooms: new Set<string>() };
+    const staffName = a.staff_id ? staffById.get(String(a.staff_id)) : undefined;
+    if (staffName) cur.staff.add(staffName);
+    const room = a.classroom_id ? roomById.get(String(a.classroom_id)) : undefined;
+    if (room) cur.rooms.add(`${room.grade}${room.section ? `-${room.section}` : ""}`);
+    allocBySubject.set(key, cur);
+  }
+
+  // Real per-subject average - marks as a share of max, absences skipped.
+  const perfBySubject = new Map<string, { sum: number; n: number }>();
   for (const r of results) {
     if (r.grade === "Ab") continue;
-    const key = String(r.subject);
-    const cur = bySubject.get(key) ?? { sum: 0, n: 0 };
     const max = num(r.max_marks);
-    if (max > 0) {
-      cur.sum += num(r.marks) / max;
-      cur.n++;
-    }
-    bySubject.set(key, cur);
+    if (max <= 0) continue;
+    const key = String(r.subject).toLowerCase();
+    const cur = perfBySubject.get(key) ?? { sum: 0, n: 0 };
+    cur.sum += num(r.marks) / max;
+    cur.n++;
+    perfBySubject.set(key, cur);
   }
-  const teacherFor = (subject: string) => {
-    const hit = staff.find((s) =>
-      String(s.department ?? "").toLowerCase().includes(subject.split(" ")[0].toLowerCase())
-    );
-    return hit ? String(hit.name) : "Unassigned";
-  };
-  const grades = classrooms.length
-    ? `Grades ${Math.min(...classrooms.map((c) => num(c.grade)))}–${Math.max(...classrooms.map((c) => num(c.grade)))}`
-    : "—";
-  return Array.from(bySubject.entries()).map(([subject, v]) => ({
-    id: subject,
-    name: subject,
-    teacher: teacherFor(subject),
-    classes: grades,
-    periods: 0,
-    progress: v.n > 0 ? Math.round((v.sum / v.n) * 100) : 0,
-  }));
+
+  return subjects.map((s) => {
+    const alloc = allocBySubject.get(String(s.id));
+    const perf = perfBySubject.get(String(s.name ?? "").toLowerCase());
+    const teachers = alloc ? Array.from(alloc.staff).sort().join(", ") : null;
+    return {
+      id: String(s.id),
+      name: String(s.name ?? ""),
+      code: s.code ? String(s.code) : null,
+      description: s.description ? String(s.description) : null,
+      active: s.active === true,
+      teacher: teachers,
+      classes: alloc && alloc.rooms.size > 0 ? alloc.rooms.size : 0,
+      classList: alloc ? Array.from(alloc.rooms).sort() : [],
+      progress: perf && perf.n > 0 ? Math.round((perf.sum / perf.n) * 100) : 0,
+      results: perf?.n ?? 0,
+    } as unknown as SubjectRow;
+  });
 }
 
+/** An empty catalog is a real state: show the entry point, not a mock feed. */
 export function useSubjectsView() {
   return useErpView<SubjectRow>("subjects", loadSubjects, []);
 }
 
 async function loadSubjectAverages(): Promise<SubjectAverage[]> {
   const rows = await loadSubjects();
-  return rows.map((r) => ({ id: r.id, subject: r.name.split(" ")[0], average: r.progress }));
+  return rows
+    .filter((r) => ((r as unknown as { results?: number }).results ?? 0) > 0)
+    .map((r) => ({ id: r.id, subject: r.name.split(" ")[0], average: r.progress }));
 }
 
 export function useSubjectAveragesView() {
   return useErpView<SubjectAverage>("subject_averages", loadSubjectAverages, []);
+}
+
+export interface TeachingAllocation {
+  id: string;
+  subjectId: string;
+  subjectName: string;
+  staffId: string | null;
+  staffName: string | null;
+  classroomId: string | null;
+  classroomLabel: string;
+  isPrimary: boolean;
+}
+
+async function loadTeachingAllocations(): Promise<TeachingAllocation[]> {
+  const [allocations, subjects, staff, classrooms] = await Promise.all([
+    fetchAll("subject_teachers", "id,subject_id,staff_id,classroom_id,is_primary"),
+    fetchAll("subjects", "id,name"),
+    fetchAll("staff", "id,name"),
+    fetchAll("classrooms", "id,grade,section,room"),
+  ]);
+  const subjectById = new Map(subjects.map((s) => [String(s.id), String(s.name ?? "")]));
+  const staffById = new Map(staff.map((s) => [String(s.id), String(s.name ?? "")]));
+  const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
+  return allocations.map((a) => {
+    const room = a.classroom_id ? roomById.get(String(a.classroom_id)) : undefined;
+    return {
+      id: String(a.id),
+      subjectId: String(a.subject_id ?? ""),
+      subjectName: subjectById.get(String(a.subject_id)) ?? "Unknown subject",
+      staffId: a.staff_id ? String(a.staff_id) : null,
+      staffName: a.staff_id ? (staffById.get(String(a.staff_id)) ?? null) : null,
+      classroomId: a.classroom_id ? String(a.classroom_id) : null,
+      classroomLabel: room ? `Grade ${room.grade} — ${room.section ?? "?"}` : "—",
+      isPrimary: a.is_primary === true,
+    } as TeachingAllocation;
+  });
+}
+
+export function useTeachingAllocationsView() {
+  return useErpView<TeachingAllocation>("teaching_allocations", loadTeachingAllocations, []);
+}
+
+export interface AssignmentRow {
+  id: string;
+  title: string;
+  subject: string;
+  classroomId: string | null;
+  classroomLabel: string;
+  dueAt: string | null;
+  instructions: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+async function loadAssignments(): Promise<AssignmentRow[]> {
+  const [assignments, classrooms] = await Promise.all([
+    fetchAll("assignments", "id,classroom_id,title,subject,instructions,due_at,created_by,created_at", "due_at"),
+    fetchAll("classrooms", "id,grade,section"),
+  ]);
+  const roomById = new Map(classrooms.map((c) => [String(c.id), c]));
+  return assignments.map((a) => {
+    const room = a.classroom_id ? roomById.get(String(a.classroom_id)) : undefined;
+    return {
+      id: String(a.id),
+      title: String(a.title ?? ""),
+      subject: String(a.subject ?? ""),
+      classroomId: a.classroom_id ? String(a.classroom_id) : null,
+      classroomLabel: room ? `Grade ${room.grade} — ${room.section ?? "?"}` : "—",
+      dueAt: a.due_at ? String(a.due_at) : null,
+      instructions: a.instructions ? String(a.instructions) : null,
+      createdBy: a.created_by ? String(a.created_by) : null,
+      createdAt: String(a.created_at ?? ""),
+    } as AssignmentRow;
+  });
+}
+
+export function useAssignmentsView() {
+  return useErpView<AssignmentRow>("assignments", loadAssignments, []);
+}
+
+/** Classrooms power class pickers (staff allocation, homework posting). */
+export interface ClassroomRow {
+  id: string;
+  grade: string;
+  section: string | null;
+  room: string | null;
+  label: string;
+}
+
+async function loadClassrooms(): Promise<ClassroomRow[]> {
+  const rooms = await fetchAll("classrooms", "id,grade,section,room,class_teacher_id");
+  return rooms.map((c) => {
+    const grade = String(c.grade ?? "");
+    const section = c.section ? String(c.section) : null;
+    return {
+      id: String(c.id),
+      grade,
+      section,
+      room: c.room ? String(c.room) : null,
+      label: section ? `Grade ${grade} — ${section}` : `Grade ${grade}`,
+    } as ClassroomRow;
+  });
+}
+
+export function useClassroomsView() {
+  return useErpView<ClassroomRow>("classrooms", loadClassrooms, []);
 }
 
 async function loadGradeOutcomes(): Promise<{ id: string; grade: string; average: number; attendance: number; change: string }[]> {
