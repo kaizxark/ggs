@@ -140,9 +140,10 @@ export function StaffMobileShell({
           <img src="/global-kids-logo.svg" alt="Global Kids" />
           <span>
             <strong className="staff-mobile-brand-title">Global Kids</strong>
-            <small>
-              {name || (isExecutive ? "Administrator" : "Staff")} · {role}
-            </small>
+            {/* The brand block names the school. The signed-in person already
+                has an avatar and an account sheet, so repeating their name
+                and role here read like the school had been renamed. */}
+            <small>Tumakuru, Karnataka</small>
           </span>
         </div>
 

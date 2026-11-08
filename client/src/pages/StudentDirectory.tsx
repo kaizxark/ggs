@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { DrawerBackdrop } from "@/components/DrawerBackdrop";
 import { useDataRevision } from "@/lib/live-data";
@@ -435,13 +436,20 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
     <div className="page-stack">
       <div className="page-intro">
         <div>
+          <Breadcrumb
+            parent="Global Kids School"
+            current="Students"
+            onParentClick={onBack}
+          />
           <h1 className="page-title">Students</h1>
           <p className="page-subtitle">
             {page
               ? `${page.total.toLocaleString()} student${page.total === 1 ? "" : "s"} on record${
                   activeFilterCount ? " matching your filters" : ""
                 }`
-              : "Loading the student list…"}
+              : error
+                ? "The student list could not be loaded."
+                : "Loading the student list…"}
           </p>
         </div>
         <div className="intro-actions">

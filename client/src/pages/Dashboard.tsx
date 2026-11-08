@@ -2513,6 +2513,17 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
     return availableClasses[0]?.id || "class-g6-a";
   });
 
+  /* The class list is built from data that arrives after first paint. When the
+     real list replaces the fallback, the previously selected id can stop
+     existing — and FormSelect then renders the raw id ("class-g6-a") in the
+     trigger because it has no matching option. Snap to the first real class. */
+  useEffect(() => {
+    if (!availableClasses.length) return;
+    if (!availableClasses.some(c => c.id === selectedClassId)) {
+      setSelectedClassId(availableClasses[0].id);
+    }
+  }, [availableClasses, selectedClassId]);
+
   const currentClass = useMemo(() => {
     return (
       availableClasses.find(c => c && c.id === selectedClassId) ||
@@ -2829,7 +2840,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                   onClick={() => markAll("present")}
                   title="Mark all enrolled students as present"
                 >
-                  <Check size={14} className="text-emerald-400" />
+                  <Check size={14} className="text-[var(--success)]" />
                   All Present
                 </button>
                 <button
@@ -2838,7 +2849,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                   onClick={() => markAll("absent")}
                   title="Mark all enrolled students as absent"
                 >
-                  <X size={14} className="text-rose-400" />
+                  <X size={14} className="text-[var(--danger)]" />
                   All Absent
                 </button>
                 <button
@@ -3757,6 +3768,16 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           <div className="chart-wrap">
             {invoicesViewLoading || financeMonthsLoading ? (
               <SkeletonChart height={260} variant="bar" />
+            ) : revenueData.length === 0 ? (
+              <div className="empty-state py-14">
+                <BarChart3 size={24} className="text-[var(--text-muted)]" />
+                <p className="panel-title" style={{ fontSize: 15, marginTop: 4 }}>
+                  No revenue recorded yet
+                </p>
+                <p className="panel-subtitle">
+                  Collections appear here once invoices are raised for the year.
+                </p>
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart
@@ -3846,6 +3867,11 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                       style={{ height: 136, width: 136 }}
                     />
                   </div>
+                </div>
+              ) : feeCategories.length === 0 ? (
+                <div className="pie-empty" role="img" aria-label="No fee data recorded">
+                  <IndianRupee size={20} />
+                  <span>No fee data</span>
                 </div>
               ) : (
                 <>
@@ -4104,19 +4130,19 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                         <td className="muted-cell">{row.family}</td>
                         <td className="font-mono text-xs text-[var(--text-secondary)]">{row.id}</td>
                         <td className="muted-cell">
-                          <span className={row.status === "Overdue" ? "text-rose-400 font-semibold" : ""}>
+                          <span className={row.status === "Overdue" ? "text-[var(--danger)] font-semibold" : ""}>
                             {row.due_date}
                           </span>
                         </td>
                         <td className="font-medium text-[var(--text-secondary)]">
                           ₹{annualFee.toLocaleString("en-IN")}
                         </td>
-                        <td className="font-semibold text-emerald-400">
+                        <td className="font-semibold text-[var(--success)]">
                           ₹{paidAmount.toLocaleString("en-IN")}
                         </td>
                         <td className="font-bold text-[var(--text-primary)]">
                           {outstandingBalance > 0 ? (
-                            <span className={row.status === "Overdue" ? "text-rose-400 font-bold" : "text-amber-400 font-bold"}>
+                            <span className={row.status === "Overdue" ? "text-[var(--danger)] font-bold" : "text-[var(--warning)] font-bold"}>
                               ₹{outstandingBalance.toLocaleString("en-IN")}
                             </span>
                           ) : (
@@ -4220,7 +4246,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <h2 className="panel-title">Overdue accounts & defaulters</h2>
               </div>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                {overdueInvoices.length} pupil account{overdueInvoices.length === 1 ? "" : "s"} with unsettled fee balances past due date. Total overdue: <strong className="text-rose-400">₹{(overdueTotalAmount / 100000).toFixed(2)}L</strong>
+                {overdueInvoices.length} pupil account{overdueInvoices.length === 1 ? "" : "s"} with unsettled fee balances past due date. Total overdue: <strong className="text-[var(--danger)]">₹{(overdueTotalAmount / 100000).toFixed(2)}L</strong>
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -4289,10 +4315,10 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                         </td>
                         <td className="muted-cell">{row.family}</td>
                         <td className="font-mono text-xs text-[var(--text-secondary)]">{row.id}</td>
-                        <td className="text-rose-400 font-semibold">{row.due_date}</td>
+                        <td className="text-[var(--danger)] font-semibold">{row.due_date}</td>
                         <td className="muted-cell">₹{totalFee.toLocaleString("en-IN")}</td>
-                        <td className="text-emerald-400 font-semibold">₹{paid.toLocaleString("en-IN")}</td>
-                        <td className="font-bold text-rose-400 text-sm">
+                        <td className="text-[var(--success)] font-semibold">₹{paid.toLocaleString("en-IN")}</td>
+                        <td className="font-bold text-[var(--danger)] text-sm">
                           ₹{overdueAmt.toLocaleString("en-IN")}
                         </td>
                         <td className="text-right">
@@ -4482,7 +4508,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                             )}
                           </div>
                         </td>
-                        <td className="font-bold text-emerald-400 text-sm">
+                        <td className="font-bold text-[var(--success)] text-sm">
                           ₹{pay.amount.toLocaleString("en-IN")}
                         </td>
                         <td>
@@ -4550,10 +4576,10 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     <td className="font-semibold text-[var(--text-primary)]">
                       ₹{(row.totalBilled / 100000).toFixed(2)}L
                     </td>
-                    <td className="font-semibold text-emerald-400">
+                    <td className="font-semibold text-[var(--success)]">
                       ₹{(row.totalPaid / 100000).toFixed(2)}L
                     </td>
-                    <td className="font-semibold text-amber-400">
+                    <td className="font-semibold text-[var(--warning)]">
                       ₹{(row.totalPending / 100000).toFixed(2)}L
                     </td>
                     <td>
@@ -4593,10 +4619,10 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   <td className="font-bold text-[var(--text-primary)]">
                     ₹{(billed / 100000).toFixed(2)}L
                   </td>
-                  <td className="font-bold text-emerald-400">
+                  <td className="font-bold text-[var(--success)]">
                     ₹{(collected / 100000).toFixed(2)}L
                   </td>
-                  <td className="font-bold text-amber-400">
+                  <td className="font-bold text-[var(--warning)]">
                     ₹{(outstanding / 100000).toFixed(2)}L
                   </td>
                   <td>
@@ -4750,11 +4776,11 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                   <span className="text-[var(--text-muted)]">Paid to date:</span>
-                  <span className="text-emerald-400 font-semibold">₹{Number(selectedInvoice.paid || 0).toLocaleString("en-IN")}</span>
+                  <span className="text-[var(--success)] font-semibold">₹{Number(selectedInvoice.paid || 0).toLocaleString("en-IN")}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 6 }}>
                   <span className="text-[var(--text-muted)] font-semibold">Remaining balance due:</span>
-                  <span className="text-amber-400 font-bold">₹{Number(selectedInvoice.amount || 0).toLocaleString("en-IN")}</span>
+                  <span className="text-[var(--warning)] font-bold">₹{Number(selectedInvoice.amount || 0).toLocaleString("en-IN")}</span>
                 </div>
               </div>
             )}
@@ -4973,7 +4999,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 </div>
                 <div>
                   <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Invoice Due Date</span>
-                  <span className={inspectingInvoice.status === "Overdue" ? "text-rose-400 font-semibold" : ""}>{inspectingInvoice.due_date}</span>
+                  <span className={inspectingInvoice.status === "Overdue" ? "text-[var(--danger)] font-semibold" : ""}>{inspectingInvoice.due_date}</span>
                 </div>
               </div>
             </div>
@@ -4997,11 +5023,11 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                 <span className="text-[var(--text-secondary)]">Total Paid to Date:</span>
-                <span className="text-emerald-400 font-semibold">₹{Number(inspectingInvoice.paid ?? 0).toLocaleString("en-IN")}</span>
+                <span className="text-[var(--success)] font-semibold">₹{Number(inspectingInvoice.paid ?? 0).toLocaleString("en-IN")}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4 }}>
                 <span className="font-semibold text-[var(--text-primary)]">Remaining Balance Due:</span>
-                <strong className={inspectingInvoice.amount > 0 ? "text-amber-400 text-base font-bold" : "text-emerald-400"}>
+                <strong className={inspectingInvoice.amount > 0 ? "text-[var(--warning)] text-base font-bold" : "text-[var(--success)]"}>
                   ₹{Number(inspectingInvoice.amount ?? inspectingInvoice.outstanding ?? 0).toLocaleString("en-IN")}
                 </strong>
               </div>
@@ -5734,6 +5760,17 @@ function AcademicsView({ onBack }: { onBack: () => void }) {
             </tbody>
           </table>
         </div>
+        {subjects.length === 0 && (
+          <div className="empty-state px-5 py-10">
+            <BookOpen size={22} className="text-[var(--text-muted)]" />
+            <p className="panel-title" style={{ fontSize: 15, marginTop: 6 }}>
+              No subjects assigned yet
+            </p>
+            <p className="panel-subtitle">
+              Subject load appears here once classes and teachers are assigned.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -6176,6 +6213,14 @@ function AnalyticsView({
     [subjectAverages, attendancePct, graded]
   );
 
+  /**
+   * A radar with no data still draws its spokes, which reads as a broken
+   * chart rather than an empty one. Detect that case and show a real empty
+   * state instead.
+   */
+  const hasRadarData =
+    attendanceRadar.filter(point => point.value > 0).length >= 3;
+
   /** Full institutional analytics export containing live students & staff records with Indian Rupee formatting */
   const handleExportReport = () => {
     const lines: string[] = [];
@@ -6236,18 +6281,16 @@ function AnalyticsView({
   };
 
   return (
-    <div className="page-stack space-y-6">
+    <div className="page-stack">
       {/* Executive Header with Live DB Connection Status */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-[var(--border)]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Breadcrumb
             parent="Global Kids School"
             current="Analytics"
             onParentClick={onBack}
           />
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] mt-1">
-            Analytics
-          </h1>
+          <h1 className="page-title">Analytics</h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
@@ -6350,7 +6393,9 @@ function AnalyticsView({
                 {totalStudents}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                {graded.length} graded pupils
+                {gradeBreakdowns.length > 0
+                  ? `${gradeBreakdowns.length} grade${gradeBreakdowns.length === 1 ? "" : "s"} represented`
+                  : "No grade data yet"}
               </span>
             </div>
 
@@ -6369,27 +6414,29 @@ function AnalyticsView({
 
             <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium flex items-center gap-1.5">
-                <Briefcase size={14} className="text-emerald-500" />
+                <Briefcase size={14} className="text-[var(--success)]" />
                 Student–Teacher Ratio
               </span>
-              <p className="text-2xl font-bold text-emerald-500 mt-1.5">
-                {staffStats.studentTeacherRatio}:1
+              <p className="text-2xl font-bold text-[var(--success)] mt-1.5">
+                {staffStats.teachers > 0 ? `${staffStats.studentTeacherRatio}:1` : "—"}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                CBSE 30:1 benchmark
+                {staffStats.teachers > 0
+                  ? "CBSE 30:1 benchmark"
+                  : "Add teaching staff to compute"}
               </span>
             </div>
 
             <div className="p-4 rounded-xl bg-[var(--bg-panel)] border border-[var(--border)] shadow-xs flex flex-col justify-between h-full">
               <span className="text-xs text-[var(--text-muted)] font-medium flex items-center gap-1.5">
-                <UserCheck size={14} className="text-amber-500" />
+                <UserCheck size={14} className="text-[var(--warning)]" />
                 Staff Attendance Rate
               </span>
-              <p className="text-2xl font-bold text-amber-500 mt-1.5">
-                {staffStats.staffAttendanceAvg}%
+              <p className="text-2xl font-bold text-[var(--warning)] mt-1.5">
+                {staffStats.total > 0 ? `${staffStats.staffAttendanceAvg}%` : "—"}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                Term attendance
+                {staffStats.total > 0 ? "Term attendance" : "No staff attendance recorded"}
               </span>
             </div>
           </div>
@@ -6406,34 +6453,48 @@ function AnalyticsView({
             </div>
 
             {/* Proportional Segment Bar */}
+            {graded.length === 0 ? (
+              <div className="mb-5 rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-2.5 text-xs text-[var(--text-muted)]">
+                No graded results yet — the distribution appears once exam marks are recorded.
+              </div>
+            ) : (
             <div className="w-full h-4 rounded-full overflow-hidden flex bg-[var(--bg-hover)] p-0.5 gap-0.5 border border-[var(--border)] mb-5">
-              <div
-                style={{ width: `${Math.max(scoreTiers.distinction.pct, 2)}%` }}
-                className="h-full rounded-l-full bg-[var(--brand)] transition-all duration-500"
-                title={`Distinction: ${scoreTiers.distinction.count} (${scoreTiers.distinction.pct}%)`}
-              />
-              <div
-                style={{ width: `${Math.max(scoreTiers.merit.pct, 2)}%` }}
-                className="h-full bg-[var(--info)] transition-all duration-500"
-                title={`Merit: ${scoreTiers.merit.count} (${scoreTiers.merit.pct}%)`}
-              />
-              <div
-                style={{ width: `${Math.max(scoreTiers.pass.pct, 2)}%` }}
-                className="h-full bg-[var(--warning)] transition-all duration-500"
-                title={`Pass: ${scoreTiers.pass.count} (${scoreTiers.pass.pct}%)`}
-              />
-              <div
-                style={{ width: `${Math.max(scoreTiers.critical.pct, 2)}%` }}
-                className="h-full rounded-r-full bg-[var(--danger)] transition-all duration-500"
-                title={`At Risk: ${scoreTiers.critical.count} (${scoreTiers.critical.pct}%)`}
-              />
+              {scoreTiers.distinction.pct > 0 && (
+                <div
+                  style={{ width: `${Math.max(scoreTiers.distinction.pct, 2)}%` }}
+                  className="h-full rounded-l-full bg-[var(--success)] transition-all duration-500"
+                  title={`Distinction: ${scoreTiers.distinction.count} (${scoreTiers.distinction.pct}%)`}
+                />
+              )}
+              {scoreTiers.merit.pct > 0 && (
+                <div
+                  style={{ width: `${Math.max(scoreTiers.merit.pct, 2)}%` }}
+                  className="h-full bg-[var(--info)] transition-all duration-500"
+                  title={`Merit: ${scoreTiers.merit.count} (${scoreTiers.merit.pct}%)`}
+                />
+              )}
+              {scoreTiers.pass.pct > 0 && (
+                <div
+                  style={{ width: `${Math.max(scoreTiers.pass.pct, 2)}%` }}
+                  className="h-full bg-[var(--warning)] transition-all duration-500"
+                  title={`Pass: ${scoreTiers.pass.count} (${scoreTiers.pass.pct}%)`}
+                />
+              )}
+              {scoreTiers.critical.pct > 0 && (
+                <div
+                  style={{ width: `${Math.max(scoreTiers.critical.pct, 2)}%` }}
+                  className="h-full rounded-r-full bg-[var(--danger)] transition-all duration-500"
+                  title={`At Risk: ${scoreTiers.critical.count} (${scoreTiers.critical.pct}%)`}
+                />
+              )}
             </div>
+            )}
 
             {/* 4-Tier Breakdown Cards (Equal Height) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
               <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--brand)]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--success)]" />
                   <span className="text-xs font-semibold text-[var(--text-muted)]">
                     Distinction (85%+)
                   </span>
@@ -6442,7 +6503,7 @@ function AnalyticsView({
                   <span className="text-xl font-bold text-[var(--text-primary)]">
                     {scoreTiers.distinction.count}
                   </span>
-                  <span className="text-xs font-medium text-[var(--brand)]">
+                  <span className="text-xs font-medium text-[var(--success)]">
                     {scoreTiers.distinction.pct}%
                   </span>
                 </div>
@@ -6490,10 +6551,10 @@ function AnalyticsView({
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mt-2">
-                  <span className="text-xl font-bold text-rose-500">
+                  <span className="text-xl font-bold text-[var(--danger)]">
                     {scoreTiers.critical.count}
                   </span>
-                  <span className="text-xs font-medium text-rose-500">
+                  <span className="text-xs font-medium text-[var(--danger)]">
                     {scoreTiers.critical.pct}%
                   </span>
                 </div>
@@ -6514,25 +6575,39 @@ function AnalyticsView({
                 </span>
               </div>
               <div className="chart-wrap flex-1 flex items-center justify-center p-3">
-                <ResponsiveContainer width="100%" height={260}>
-                  <RadarChart data={attendanceRadar} outerRadius="72%">
-                    <PolarGrid stroke="var(--border)" />
-                    <PolarAngleAxis
-                      dataKey="axis"
-                      tick={{ fill: "var(--text-muted)", fontSize: 11 }}
-                    />
-                    <Radar
-                      dataKey="value"
-                      stroke="var(--brand)"
-                      fill="var(--brand)"
-                      fillOpacity={0.25}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
+                {hasRadarData ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <RadarChart data={attendanceRadar} outerRadius="72%">
+                      <PolarGrid stroke="var(--border)" />
+                      <PolarAngleAxis
+                        dataKey="axis"
+                        tick={{ fill: "var(--text-muted)", fontSize: 11 }}
+                      />
+                      <Radar
+                        dataKey="value"
+                        stroke="var(--brand)"
+                        fill="var(--brand)"
+                        fillOpacity={0.25}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="empty-state py-10">
+                    <Activity size={24} className="text-[var(--text-muted)]" />
+                    <p className="panel-title" style={{ fontSize: 15, marginTop: 4 }}>
+                      Not enough data to plot
+                    </p>
+                    <p className="panel-subtitle">
+                      Vitals appear once attendance and exam results are recorded.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
                 <span>Composite institutional health</span>
-                <span className="font-semibold text-[var(--text-primary)]">{attendancePct}% Overall</span>
+                <span className="font-semibold text-[var(--text-primary)]">
+                  {hasRadarData ? `${attendancePct}% Overall` : "Awaiting data"}
+                </span>
               </div>
             </section>
 
@@ -6559,7 +6634,9 @@ function AnalyticsView({
                     <span className="font-semibold text-[var(--text-primary)]">
                       Faculty Coverage:{" "}
                     </span>
-                    {staffStats.total} staff members ({staffStats.teachers} teaching, {staffStats.administrative} admin) maintaining a {staffStats.studentTeacherRatio}:1 student ratio.
+                    {staffStats.total === 0
+                      ? "No staff records yet. Add faculty to compute the student–teacher ratio."
+                      : `${staffStats.total} staff members (${staffStats.teachers} teaching, ${staffStats.administrative} admin) maintaining a ${staffStats.studentTeacherRatio}:1 student ratio.`}
                   </div>
                 </div>
 
@@ -6569,31 +6646,37 @@ function AnalyticsView({
                     <span className="font-semibold text-[var(--text-primary)]">
                       Leading Grade:{" "}
                     </span>
-                    {fastestGrade} is currently the top performing cohort across all {gradeBreakdowns.length} active grades.
+                    {gradeBreakdowns.length === 0
+                      ? "No cohort results recorded yet."
+                      : `${fastestGrade} is currently the top performing cohort across all ${gradeBreakdowns.length} active grades.`}
                   </div>
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
-                  <Activity size={15} className="text-emerald-500 shrink-0 mt-0.5" />
+                  <Activity size={15} className="text-[var(--success)] shrink-0 mt-0.5" />
                   <div>
                     <span className="font-semibold text-[var(--text-primary)]">
                       Score Distribution:{" "}
                     </span>
-                    Cohort median is {medianAverage}% (mean {overallAverage}%) across {graded.length} evaluated pupils.
+                    {graded.length === 0
+                      ? "No exam results recorded yet."
+                      : `Cohort median is ${medianAverage}% (mean ${overallAverage}%) across ${graded.length} evaluated pupils.`}
                   </div>
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex items-start gap-2.5">
-                  <AlertCircle size={15} className="text-rose-500 shrink-0 mt-0.5" />
+                  <AlertCircle size={15} className="text-[var(--danger)] shrink-0 mt-0.5" />
                   <div>
                     <span className="font-semibold text-[var(--text-primary)]">
                       Early Warning:{" "}
                     </span>
-                    {atRisk === 0 ? (
-                      "All enrolled students meet the passing threshold."
+                    {graded.length === 0 ? (
+                      "No exam results recorded yet, so no at-risk learners can be identified."
+                    ) : atRisk === 0 ? (
+                      "All evaluated learners meet the passing threshold."
                     ) : (
                       <>
-                        <span className="font-bold text-rose-500">{atRisk} learners</span> have scores below 50% and require remediation.
+                        <span className="font-bold text-[var(--danger)]">{atRisk} learners</span> have scores below 50% and require remediation.
                       </>
                     )}
                   </div>
@@ -6659,7 +6742,7 @@ function AnalyticsView({
               <span className="text-xs text-[var(--text-muted)] font-medium">
                 Leadership / Principal
               </span>
-              <p className="text-2xl font-bold text-amber-500 mt-1.5">
+              <p className="text-2xl font-bold text-[var(--warning)] mt-1.5">
                 {staffStats.principal}
               </p>
               <span className="text-[11px] text-[var(--text-muted)] mt-1">
@@ -6738,31 +6821,53 @@ function AnalyticsView({
               <div className="flex-1 grid grid-cols-2 gap-3 py-1">
                 <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                   <span className="text-xs text-[var(--text-muted)] font-medium">Student–Teacher Ratio</span>
-                  <p className="text-2xl font-bold text-emerald-500 mt-1">{staffStats.studentTeacherRatio}:1</p>
-                  <span className="text-[11px] text-[var(--text-muted)]">Below CBSE 30:1 cap</span>
+                  <p className="text-2xl font-bold text-[var(--success)] mt-1">
+                    {staffStats.teachers > 0 ? `${staffStats.studentTeacherRatio}:1` : "—"}
+                  </p>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {staffStats.teachers > 0 ? "Below CBSE 30:1 cap" : "No teaching staff on record"}
+                  </span>
                 </div>
                 <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                   <span className="text-xs text-[var(--text-muted)] font-medium">Faculty Attendance</span>
-                  <p className="text-2xl font-bold text-[var(--brand)] mt-1">{staffStats.staffAttendanceAvg}%</p>
-                  <span className="text-[11px] text-[var(--text-muted)]">Term duty rate</span>
+                  <p className="text-2xl font-bold text-[var(--brand)] mt-1">
+                    {staffStats.total > 0 ? `${staffStats.staffAttendanceAvg}%` : "—"}
+                  </p>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {staffStats.total > 0 ? "Term duty rate" : "No staff attendance recorded"}
+                  </span>
                 </div>
                 <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                   <span className="text-xs text-[var(--text-muted)] font-medium">Teaching Faculty Share</span>
                   <p className="text-2xl font-bold text-[var(--info)] mt-1">
-                    {Math.round((staffStats.teachers / Math.max(staffStats.total, 1)) * 100)}%
+                    {staffStats.total > 0
+                      ? `${Math.round((staffStats.teachers / staffStats.total) * 100)}%`
+                      : "—"}
                   </p>
-                  <span className="text-[11px] text-[var(--text-muted)]">{staffStats.teachers} classroom educators</span>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {staffStats.total > 0
+                      ? `${staffStats.teachers} classroom educators`
+                      : "No staff on record"}
+                  </span>
                 </div>
                 <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                   <span className="text-xs text-[var(--text-muted)] font-medium">Admin & Leadership Share</span>
-                  <p className="text-2xl font-bold text-amber-500 mt-1">
-                    {Math.round(((staffStats.administrative + staffStats.principal) / Math.max(staffStats.total, 1)) * 100)}%
+                  <p className="text-2xl font-bold text-[var(--warning)] mt-1">
+                    {staffStats.total > 0
+                      ? `${Math.round(((staffStats.administrative + staffStats.principal) / staffStats.total) * 100)}%`
+                      : "—"}
                   </p>
-                  <span className="text-[11px] text-[var(--text-muted)]">{staffStats.administrative + staffStats.principal} ops & leadership</span>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    {staffStats.total > 0
+                      ? `${staffStats.administrative + staffStats.principal} ops & leadership`
+                      : "No staff on record"}
+                  </span>
                 </div>
               </div>
               <div className="pt-3 border-t border-[var(--border)] flex items-center justify-end mt-auto text-xs text-[var(--text-muted)]">
-                <span className="font-medium text-emerald-500">100% Active</span>
+                <span className="font-medium text-[var(--text-secondary)]">
+                  {staffStats.total} member{staffStats.total === 1 ? "" : "s"} on record
+                </span>
               </div>
             </section>
           </div>
@@ -6935,11 +7040,11 @@ function AnalyticsView({
                       </td>
                       <td>
                         {row.atRiskCount > 0 ? (
-                          <span className="text-rose-500 font-semibold">
+                          <span className="text-[var(--danger)] font-semibold">
                             {row.atRiskCount} at risk
                           </span>
                         ) : (
-                          <span className="text-emerald-500 text-xs font-medium">
+                          <span className="text-[var(--success)] text-xs font-medium">
                             None flagged
                           </span>
                         )}
@@ -7211,7 +7316,7 @@ function AnalyticsView({
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
                 <span>Parent alert threshold &lt;75%</span>
-                <span className="font-semibold text-rose-500">
+                <span className="font-semibold text-[var(--danger)]">
                   {attendanceBands[3].count} Below 70%
                 </span>
               </div>
@@ -7294,7 +7399,7 @@ function AnalyticsView({
                   Daily Attendance Snapshot ({latestAttendance?.day ?? "Latest Recorded Day"})
                 </h2>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--success-soft)] text-[var(--success)] border border-[var(--success-border)]">
                 {attendancePct}% Cohort Present
               </span>
             </div>
@@ -7304,7 +7409,7 @@ function AnalyticsView({
                 <span className="text-xs text-[var(--text-muted)] font-medium">
                   Present
                 </span>
-                <p className="text-2xl font-bold text-emerald-500 mt-1">
+                <p className="text-2xl font-bold text-[var(--success)] mt-1">
                   {latestAttendance?.present ?? 0}
                 </p>
                 <span className="text-[11px] text-[var(--text-muted)] mt-1">
@@ -7315,7 +7420,7 @@ function AnalyticsView({
                 <span className="text-xs text-[var(--text-muted)] font-medium">
                   Absent
                 </span>
-                <p className="text-2xl font-bold text-rose-500 mt-1">
+                <p className="text-2xl font-bold text-[var(--danger)] mt-1">
                   {latestAttendance?.absent ?? 0}
                 </p>
                 <span className="text-[11px] text-[var(--text-muted)] mt-1">
@@ -7643,18 +7748,16 @@ function SettingsView({ onBack }: { onBack: () => void }) {
   tabs.push({ id: "system", label: "Data & Session", icon: Database });
 
   return (
-    <div className="page-stack max-w-5xl mx-auto space-y-8 pb-16">
+    <div className="page-stack max-w-5xl mx-auto pb-16">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pb-6 border-b border-[var(--border)]">
-        <div className="space-y-1.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+        <div>
           <Breadcrumb
             parent="Global Kids School"
             current="Settings & Preferences"
             onParentClick={onBack}
           />
-          <h1 className="page-title text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
-            Settings & Preferences
-          </h1>
+          <h1 className="page-title">Settings & Preferences</h1>
         </div>
       </div>
 
@@ -7756,7 +7859,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   Manage the username and secret credentials used to access the Global Kids School portal.
                 </p>
               </div>
-              <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
+              <span className="p-2.5 rounded-xl bg-[var(--info-soft)] text-[var(--info)]">
                 <Lock size={20} />
               </span>
             </div>
@@ -7788,7 +7891,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <ShieldAlert size={16} className="text-amber-400" />
+                            <ShieldAlert size={16} className="text-[var(--warning)]" />
                             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-primary)]">
                               Identity Verification via OTP
                             </span>
@@ -7836,7 +7939,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                             type="button"
                             onClick={() => void handleVerifyOtp()}
                             disabled={verifyingOtp || otpCode.length !== 6}
-                            className="h-10 px-5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            className="h-10 px-5 rounded-xl text-xs font-semibold bg-[var(--success)] hover:bg-[var(--success-strong)] text-white transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                           >
                             {verifyingOtp ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
                             <span>{verifyingOtp ? "Verifying…" : "Verify OTP"}</span>
@@ -7845,26 +7948,26 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                       )}
                     </div>
                   ) : (
-                    <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-between gap-3">
+                    <div className="p-4 rounded-2xl border border-[var(--success-border)] bg-[var(--success-soft)] flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                        <span className="p-2 rounded-xl bg-[var(--success-soft)] text-[var(--success)]">
                           <CheckCircle2 size={18} />
                         </span>
                         <div>
-                          <p className="text-xs font-bold text-emerald-300">Identity Verified via OTP</p>
+                          <p className="text-xs font-bold text-[var(--success)]">Identity Verified via OTP</p>
                           <p className="text-xs text-[var(--text-muted)]">
                             One-time authorization active. You may now enter and confirm your new password.
                           </p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold uppercase tracking-wider">
+                      <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-[var(--success-soft)] text-[var(--success)] font-bold uppercase tracking-wider">
                         Authorized
                       </span>
                     </div>
                   )}
                 </div>
 
-                <div className="space-y-1.5">
+                <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                     New Password
                   </label>
@@ -7879,7 +7982,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   />
                 </div>
 
-                <div className="space-y-1.5">
+                <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                     Confirm New Password
                   </label>
@@ -7948,14 +8051,14 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 Official institution information, active academic year, and running term parameters.
               </p>
             </div>
-            <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400">
+            <span className="p-2.5 rounded-xl bg-[var(--violet-soft)] text-[var(--violet)]">
               <Building2 size={20} />
             </span>
           </div>
 
           <div className="p-6 sm:p-7 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Institution Name
                 </label>
@@ -7967,7 +8070,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Campus / Branch
                 </label>
@@ -7979,7 +8082,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Street Address
                 </label>
@@ -7991,7 +8094,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Contact Phone
                 </label>
@@ -8003,7 +8106,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Active Academic Year
                 </label>
@@ -8017,7 +8120,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 </select>
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Current Term
                 </label>
@@ -8069,14 +8172,14 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 Configure once with Google Gemini or OpenAI; every authorized staff member gains intelligent assistant queries.
               </p>
             </div>
-            <span className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 flex-shrink-0">
+            <span className="p-2.5 rounded-xl bg-[var(--violet-soft)] text-[var(--violet)] flex-shrink-0">
               <Sparkles size={20} />
             </span>
           </div>
 
           <div className="p-6 sm:p-7 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   AI Provider Engine
                 </label>
@@ -8090,7 +8193,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Model Endpoint
                 </label>
@@ -8113,7 +8216,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Base API URL
                 </label>
@@ -8127,7 +8230,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                   Secret API Key
                 </label>
@@ -8165,7 +8268,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
 
               {sharedReady && (
                 <button
-                  className="secondary-button h-10 px-4 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300"
+                  className="secondary-button h-10 px-4 rounded-xl text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger)]"
                   onClick={() => {
                     setAiConfig({ ...aiConfig, key: "" });
                     setAiState({ ...aiConfig, key: "" });
@@ -8207,7 +8310,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   Download a complete JSON snapshot of your school parameters, academic scales, and automation rules.
                 </p>
               </div>
-              <span className="p-2.5 rounded-xl bg-sky-500/10 text-sky-400">
+              <span className="p-2.5 rounded-xl bg-[var(--info-soft)] text-[var(--info)]">
                 <Download size={20} />
               </span>
             </div>
@@ -8249,10 +8352,10 @@ function SettingsView({ onBack }: { onBack: () => void }) {
           </section>
 
           {/* Session Sign-Out & Danger Zone */}
-          <section className="rounded-2xl border border-rose-500/25 bg-[var(--bg-panel)] shadow-sm overflow-hidden">
-            <div className="p-6 sm:p-7 border-b border-rose-500/20 bg-rose-500/5 flex items-center justify-between">
+          <section className="rounded-2xl border border-[var(--danger-border)] bg-[var(--bg-panel)] shadow-sm overflow-hidden">
+            <div className="p-6 sm:p-7 border-b border-[var(--danger-border)] bg-[var(--danger-soft-2)] flex items-center justify-between">
               <div className="space-y-1">
-                <p className="eyebrow text-xs font-bold text-rose-400 uppercase tracking-wider">
+                <p className="eyebrow text-xs font-bold text-[var(--danger)] uppercase tracking-wider">
                   Session & Controls
                 </p>
                 <h3 className="text-lg font-bold text-[var(--text-primary)]">
@@ -8262,7 +8365,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                   Manage active browser sessions and restore factory defaults if required.
                 </p>
               </div>
-              <span className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400">
+              <span className="p-2.5 rounded-xl bg-[var(--danger-soft)] text-[var(--danger)]">
                 <LogOut size={20} />
               </span>
             </div>
@@ -8279,7 +8382,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                 </div>
 
                 <button
-                  className="secondary-button h-10 px-5 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border-rose-500/30 flex items-center gap-2 flex-shrink-0"
+                  className="secondary-button h-10 px-5 rounded-xl text-xs font-semibold text-[var(--danger)] hover:text-[var(--danger)] hover:bg-[var(--danger-soft)] border-[var(--danger-border)] flex items-center gap-2 flex-shrink-0"
                   onClick={async () => {
                     try {
                       await supabaseSignOut();
@@ -8601,6 +8704,7 @@ export default function Home() {
           onStudentOpened={() => {
             pendingStudentRef.current = null;
           }}
+          onBack={() => navigate("Overview")}
         />
       );
     }

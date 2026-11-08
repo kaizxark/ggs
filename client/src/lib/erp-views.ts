@@ -886,7 +886,10 @@ async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
     return {
       id: slot.id,
       month: slot.month,
-      collected: Math.round((got / 100000) * 10) / 10,
+      // Both series must be cumulative to share an axis: a per-month
+      // collection plotted against a cumulative outstanding balance made the
+      // "pending" bars tower over "collected" even when most fees were paid.
+      collected: Math.round((cumulativeCollected / 100000) * 10) / 10,
       pending: Math.round((remaining / 100000) * 10) / 10,
     };
   });
@@ -898,13 +901,24 @@ export function useFinanceMonthlyView() {
 
 async function loadFeeCategories(): Promise<FeeCategory[]> {
   const invoices = await loadInvoices();
-  const totalBilled = invoices.reduce((sum, inv) => sum + (inv.total ?? 50000), 0);
+  const totalBilled = invoices.reduce(
+    (sum, inv) => sum + (inv.total ?? inv.amount ?? 0),
+    0
+  );
 
   const gradeTotals = new Map<string, number>();
   for (const inv of invoices) {
-    const grade = (inv as any).grade || "Grade 6";
-    gradeTotals.set(grade, (gradeTotals.get(grade) ?? 0) + (inv.total ?? 50000));
+    const grade = String((inv as { grade?: string }).grade ?? "").trim();
+    if (!grade) continue;
+    gradeTotals.set(
+      grade,
+      (gradeTotals.get(grade) ?? 0) + (inv.total ?? inv.amount ?? 0)
+    );
   }
+
+  // No invoices means no mix to show. Inventing five equal slices made an
+  // empty year look like a real fee structure.
+  if (totalBilled <= 0) return [];
 
   const colors: Record<string, string> = {
     "Grade 6": "#2f6f68",
@@ -914,18 +928,18 @@ async function loadFeeCategories(): Promise<FeeCategory[]> {
     "Grade 10": "#0f3833",
   };
 
-  const categories: FeeCategory[] = ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"].map((grade, idx) => {
-    const amount = gradeTotals.get(grade) || (grade >= "Grade 9" ? 1200000 : 1000000);
-    const pct = totalBilled > 0 ? Math.round((amount / totalBilled) * 1000) / 10 : 20;
-    return {
-      id: `fc-${idx + 1}`,
-      name: `${grade} (₹${(grade >= "Grade 9" ? 60000 : 50000).toLocaleString("en-IN")})`,
-      value: Math.round(pct),
-      color: colors[grade] || "#2f6f68",
-    };
-  });
-
-  return categories;
+  return Array.from(gradeTotals.entries())
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([grade, amount], idx) => {
+      const pct = Math.round((amount / totalBilled) * 1000) / 10;
+      const annualFee = /9|10/.test(grade) ? 60000 : 50000;
+      return {
+        id: `fc-${idx + 1}`,
+        name: `${grade} (₹${annualFee.toLocaleString("en-IN")})`,
+        value: Math.round(pct),
+        color: colors[grade] ?? ["#2f6f68", "#4f8f85", "#6fb0a5", "#1d504a", "#0f3833"][idx % 5],
+      };
+    });
 }
 
 export function useFeeCategoriesView() {

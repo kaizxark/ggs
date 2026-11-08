@@ -1850,11 +1850,11 @@ function ReportCardsTab({
 
       {/* Completion Enforcement Banner */}
       {!isGradingComplete ? (
-        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5 text-amber-300">
+        <div className="p-4 rounded-xl border border-[var(--warning-border)] bg-[var(--warning-soft)] flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 text-[var(--warning)]">
             <Lock size={16} className="flex-shrink-0" />
             <div>
-              <strong className="block text-amber-200">
+              <strong className="block text-[var(--warning)]">
                 Report Cards Distribution Locked ({pendingCount} Student Grades Pending)
               </strong>
               <span>

@@ -750,16 +750,14 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
   return (
     <div className="page-stack pb-12">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 pb-6 border-b border-[var(--border)]">
-        <div className="space-y-1.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+        <div>
           <Breadcrumb
             parent="Global Kids School"
             current="User & Access Management"
             onParentClick={onBack}
           />
-          <h1 className="page-title text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
-            User & Access Management
-          </h1>
+          <h1 className="page-title">User & Access Management</h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -794,7 +792,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
                 Principal
               </span>
-              <span className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+              <span className="p-2 rounded-lg bg-[var(--violet-soft)] text-[var(--violet)]">
                 <Shield size={16} />
               </span>
             </div>
@@ -816,7 +814,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
                 Admin Staff
               </span>
-              <span className="p-2 rounded-lg bg-sky-500/10 text-sky-400">
+              <span className="p-2 rounded-lg bg-[var(--info-soft)] text-[var(--info)]">
                 <Building2 size={16} />
               </span>
             </div>
@@ -837,7 +835,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
             <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
               Faculty
             </span>
-            <span className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+            <span className="p-2 rounded-lg bg-[var(--info-soft)] text-[var(--info)]">
               <BookOpen size={16} />
             </span>
           </div>
@@ -857,7 +855,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
             <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
               Student Portals
             </span>
-            <span className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+            <span className="p-2 rounded-lg bg-[var(--success-soft)] text-[var(--success)]">
               <GraduationCap size={16} />
             </span>
           </div>
@@ -949,7 +947,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               <button
                 className={`secondary-button h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                   revealed
-                    ? "border-amber-500/40 text-amber-400 bg-amber-500/10 shadow-sm"
+                    ? "border-[var(--warning-border)] text-[var(--warning)] bg-[var(--warning-soft)] shadow-sm"
                     : ""
                 }`}
                 onClick={() => setRevealed(!revealed)}
@@ -998,10 +996,14 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                       <div className="empty-state max-w-sm mx-auto space-y-2">
                         <Users size={32} className="mx-auto text-[var(--text-muted)]" />
                         <p className="text-sm font-bold text-[var(--text-primary)]">
-                          No staff members found
+                          {visibleStaff.length === 0
+                            ? "No staff accounts yet"
+                            : "No staff members found"}
                         </p>
                         <p className="text-xs text-[var(--text-muted)]">
-                          Try adjusting your search query or role filter.
+                          {visibleStaff.length === 0
+                            ? "Add a staff member first; their portal login appears here."
+                            : "Try adjusting your search query or role filter."}
                         </p>
                       </div>
                     </td>
@@ -1061,18 +1063,18 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         {/* Role: Principal (Admin), Administrative Staff, or Teacher */}
                         <td className="py-4.5 px-6">
                           {isPrincipal ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-purple-500/10 text-purple-400 border-purple-500/25">
-                              <Shield size={13} className="text-purple-400" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-[var(--violet-soft)] text-[var(--violet)] border-[var(--violet-border)]">
+                              <Shield size={13} className="text-[var(--violet)]" />
                               <span>Principal (Admin)</span>
                             </span>
                           ) : isAdmStaff ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-sky-500/10 text-sky-400 border-sky-500/25">
-                              <Building2 size={13} className="text-sky-400" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-[var(--info-soft)] text-[var(--info)] border-[var(--info-border)]">
+                              <Building2 size={13} className="text-[var(--info)]" />
                               <span>Administrative Staff</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
-                              <BookOpen size={13} className="text-indigo-400" />
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border bg-[var(--info-soft)] text-[var(--info)] border-[var(--info-border)]">
+                              <BookOpen size={13} className="text-[var(--info)]" />
                               <span>Teacher</span>
                             </span>
                           )}
@@ -1116,7 +1118,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         {/* Password */}
                         <td className="py-4.5 px-6">
                           <div className="flex items-center gap-2">
-                            <code className="text-xs font-mono font-medium text-emerald-400 bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
+                            <code className="text-xs font-mono font-medium text-[var(--success)] bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
                               {passwordSet
                                 ? "Set by owner"
                                 : hasPassword
@@ -1143,8 +1145,8 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
                         {/* Status */}
                         <td className="py-4.5 px-6">
-                          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
-                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                          <span className="inline-flex items-center gap-1.5 text-xs text-[var(--success)] font-semibold">
+                            <span className="h-2 w-2 rounded-full bg-[var(--success)]" />
                             Active
                           </span>
                         </td>
@@ -1226,7 +1228,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               <button
                 className={`secondary-button h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                   revealed
-                    ? "border-amber-500/40 text-amber-400 bg-amber-500/10 shadow-sm"
+                    ? "border-[var(--warning-border)] text-[var(--warning)] bg-[var(--warning-soft)] shadow-sm"
                     : ""
                 }`}
                 onClick={() => setRevealed(!revealed)}
@@ -1333,7 +1335,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
                         <td className="py-4.5 px-6">
                           <div className="flex items-center gap-2">
-                            <code className="text-xs font-mono font-medium text-emerald-400 bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
+                            <code className="text-xs font-mono font-medium text-[var(--success)] bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
                               {row.passwordSet
                                 ? "Set by owner"
                                 : row.password
@@ -1409,8 +1411,8 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 </label>
                 {/principal/i.test(editingPerson.designation ?? "") &&
                 !/vice/i.test(editingPerson.designation ?? "") ? (
-                  <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex items-center gap-3">
-                    <Shield size={20} className="text-purple-400 flex-shrink-0" />
+                  <div className="p-4 rounded-2xl bg-[var(--violet-soft)] border border-[var(--violet-border)] flex items-center gap-3">
+                    <Shield size={20} className="text-[var(--violet)] flex-shrink-0" />
                     <div>
                       <p className="text-sm font-bold text-[var(--text-primary)]">
                         School Principal (Admin)
@@ -1455,7 +1457,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
               {/* Dynamic Edit: Teacher Scope */}
               {editRole === "teacher" && (
                 <div className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)]/50 space-y-4">
-                  <div className="space-y-1.5">
+                  <div>
                     <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                       Subject
                     </label>
@@ -1510,7 +1512,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div>
                     <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block">
                       Class Teacher of
                     </label>
@@ -1532,8 +1534,8 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
               {/* Dynamic Edit: Administrative Modules */}
               {(editRole === "admin" || editRole === "staff") && (
-                <div className="p-5 rounded-2xl border border-sky-500/20 bg-sky-500/5 space-y-3">
-                  <label className="text-xs font-bold uppercase tracking-wider text-sky-400 block">
+                <div className="p-5 rounded-2xl border border-[var(--info-border)] bg-[var(--info-soft-2)] space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--info)] block">
                     Administrative Modules & Operations
                   </label>
                   <div className="grid grid-cols-2 gap-2.5">
@@ -1544,7 +1546,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                           key={mod.id}
                           className={`flex items-center gap-2.5 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
                             isChecked
-                              ? "bg-blue-500/15 border-blue-500/40 text-[var(--text-primary)]"
+                              ? "bg-[var(--info-soft)] border-[var(--info-border)] text-[var(--text-primary)]"
                               : "bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--border-strong)]"
                           }`}
                         >

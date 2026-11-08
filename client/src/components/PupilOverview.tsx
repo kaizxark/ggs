@@ -954,8 +954,8 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
                 padding: "12px 16px",
               }}
             >
-              <span className="text-xs text-emerald-400 block mb-1">Total Paid Amount</span>
-              <strong className="text-lg text-emerald-400">
+              <span className="text-xs text-[var(--success)] block mb-1">Total Paid Amount</span>
+              <strong className="text-lg text-[var(--success)]">
                 ₹{(profile?.fees?.summary?.paid ?? 0).toLocaleString("en-IN")}
               </strong>
             </div>
@@ -976,8 +976,8 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
               <span
                 className={`text-xs block mb-1 ${
                   (profile?.fees?.summary?.outstanding ?? 0) === 0
-                    ? "text-emerald-400"
-                    : "text-amber-400"
+                    ? "text-[var(--success)]"
+                    : "text-[var(--warning)]"
                 }`}
               >
                 Remaining Balance Due
@@ -985,8 +985,8 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
               <strong
                 className={`text-lg ${
                   (profile?.fees?.summary?.outstanding ?? 0) === 0
-                    ? "text-emerald-400"
-                    : "text-amber-400"
+                    ? "text-[var(--success)]"
+                    : "text-[var(--warning)]"
                 }`}
               >
                 ₹{(profile?.fees?.summary?.outstanding ?? 0).toLocaleString("en-IN")}
@@ -1022,7 +1022,7 @@ export default function PupilOverview({ onBack }: { onBack: () => void }) {
                       <td className="font-medium text-[var(--text-primary)]">
                         {p.method || "Verified Payment"}
                       </td>
-                      <td className="text-emerald-400 font-semibold">
+                      <td className="text-[var(--success)] font-semibold">
                         ₹{(p.amount || 0).toLocaleString("en-IN")}
                       </td>
                       <td className="font-mono text-xs text-[var(--text-muted)]">

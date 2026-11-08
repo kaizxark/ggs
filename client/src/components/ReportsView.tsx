@@ -327,10 +327,10 @@ export function ReportsView({ onBack }: ReportsViewProps) {
         <div className="report-card flex flex-col justify-between group hover:border-[var(--brand)] transition-all">
           <div>
             <div className="flex items-center justify-between">
-              <span className="report-icon orange flex items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
+              <span className="report-icon orange flex items-center justify-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning)]">
                 <IndianRupee size={20} />
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-[var(--warning-soft)] text-[var(--warning)] border border-[var(--warning-border)]">
                 {feeStats.defaulterCount} Defaulters
               </span>
             </div>
@@ -365,10 +365,18 @@ export function ReportsView({ onBack }: ReportsViewProps) {
         <div className="report-card flex flex-col justify-between group hover:border-[var(--brand)] transition-all">
           <div>
             <div className="flex items-center justify-between">
-              <span className="report-icon teal flex items-center justify-center rounded-xl bg-teal-500/10 text-teal-400">
+              <span className="report-icon teal flex items-center justify-center rounded-xl bg-[var(--success-soft)] text-[var(--success)]">
                 <ShieldCheck size={20} />
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-teal-500/15 text-teal-400 border border-teal-500/30">
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                  attendanceStats.average >= 90
+                    ? "bg-[var(--success-soft)] text-[var(--success)] border-[var(--success-border)]"
+                    : attendanceStats.average >= 75
+                      ? "bg-[var(--warning-soft)] text-[var(--warning)] border-[var(--warning-border)]"
+                      : "bg-[var(--danger-soft)] text-[var(--danger)] border-[var(--danger-border)]"
+                }`}
+              >
                 {attendanceStats.average}% Average
               </span>
             </div>
@@ -403,10 +411,10 @@ export function ReportsView({ onBack }: ReportsViewProps) {
         <div className="report-card flex flex-col justify-between group hover:border-[var(--brand)] transition-all">
           <div>
             <div className="flex items-center justify-between">
-              <span className="report-icon blue flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+              <span className="report-icon blue flex items-center justify-center rounded-xl bg-[var(--info-soft)] text-[var(--info)]">
                 <Users size={20} />
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-[var(--info-soft)] text-[var(--info)] border border-[var(--info-border)]">
                 {studentStats.total} Enrolled
               </span>
             </div>
@@ -441,10 +449,10 @@ export function ReportsView({ onBack }: ReportsViewProps) {
         <div className="report-card flex flex-col justify-between group hover:border-[var(--brand)] transition-all">
           <div>
             <div className="flex items-center justify-between">
-              <span className="report-icon violet flex items-center justify-center rounded-xl bg-purple-500/10 text-purple-400">
+              <span className="report-icon violet flex items-center justify-center rounded-xl bg-[var(--violet-soft)] text-[var(--violet)]">
                 <GraduationCap size={20} />
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-[var(--violet-soft)] text-[var(--violet)] border border-[var(--violet-border)]">
                 {staffStats.total} Faculty
               </span>
             </div>
@@ -659,7 +667,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                     onClick={() => setFilterDefaultersOnly((prev) => !prev)}
                     className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
                       filterDefaultersOnly
-                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        ? "bg-[var(--warning-soft)] text-[var(--warning)] border-[var(--warning-border)]"
                         : "bg-[var(--bg-input)] text-[var(--text-muted)] border-[var(--border)]"
                     }`}
                   >
@@ -673,7 +681,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                     onClick={() => setFilterBelowThresholdOnly((prev) => !prev)}
                     className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all ${
                       filterBelowThresholdOnly
-                        ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                        ? "bg-[var(--danger-soft)] text-[var(--danger)] border-[var(--danger-border)]"
                         : "bg-[var(--bg-input)] text-[var(--text-muted)] border-[var(--border)]"
                     }`}
                   >
@@ -723,16 +731,16 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                             <td className="font-semibold text-[var(--text-primary)]">{s.name}</td>
                             <td>{s.grade || "Unassigned"} - {s.section || "—"}</td>
                             <td>₹{total.toLocaleString("en-IN")}</td>
-                            <td className="text-emerald-400">₹{paid.toLocaleString("en-IN")}</td>
-                            <td className={due > 0 ? "text-amber-400 font-semibold" : "text-[var(--text-muted)]"}>
+                            <td className="text-[var(--success)]">₹{paid.toLocaleString("en-IN")}</td>
+                            <td className={due > 0 ? "text-[var(--warning)] font-semibold" : "text-[var(--text-muted)]"}>
                               {due > 0 ? `₹${due.toLocaleString("en-IN")}` : "₹0"}
                             </td>
                             <td>
                               <span
                                 className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
                                   isPaid
-                                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
-                                    : "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                                    ? "bg-[var(--success-soft)] text-[var(--success)] border border-[var(--success-border)]"
+                                    : "bg-[var(--warning-soft)] text-[var(--warning)] border border-[var(--warning-border)]"
                                 }`}
                               >
                                 {isPaid ? "Paid in full" : "Pending due"}
@@ -782,7 +790,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                             <td>
                               <span
                                 className={`font-semibold ${
-                                  atRisk ? "text-rose-400" : rate >= 90 ? "text-emerald-400" : "text-amber-300"
+                                  atRisk ? "text-[var(--danger)]" : rate >= 90 ? "text-[var(--success)]" : "text-[var(--warning)]"
                                 }`}
                               >
                                 {rate}%
@@ -792,8 +800,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                               <span
                                 className={`px-2 py-0.5 rounded text-[11px] font-semibold flex items-center gap-1.5 w-fit ${
                                   atRisk
-                                    ? "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                                    : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                                    ? "bg-[var(--danger-soft)] text-[var(--danger)] border border-[var(--danger-border)]"
+                                    : "bg-[var(--success-soft)] text-[var(--success)] border border-[var(--success-border)]"
                                 }`}
                               >
                                 {atRisk ? <ShieldAlert size={12} /> : <Check size={12} />}
@@ -840,7 +848,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                           <td>{s.grade || "Unassigned"}</td>
                           <td>{s.section ? `Section ${s.section}` : "—"}</td>
                           <td>
-                            <span className="capitalize px-2 py-0.5 rounded text-[11px] bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                            <span className="capitalize px-2 py-0.5 rounded text-[11px] bg-[var(--info-soft)] text-[var(--info)] border border-[var(--info-border)]">
                               {s.status || "Active"}
                             </span>
                           </td>
@@ -849,8 +857,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                             <span
                               className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
                                 s.fees?.toLowerCase() === "paid"
-                                  ? "bg-emerald-500/15 text-emerald-400"
-                                  : "bg-amber-500/15 text-amber-400"
+                                  ? "bg-[var(--success-soft)] text-[var(--success)]"
+                                  : "bg-[var(--warning-soft)] text-[var(--warning)]"
                               }`}
                             >
                               {s.fees || "Unpaid"}
@@ -897,7 +905,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                           <td>{m.department || "General"}</td>
                           <td className="text-[var(--text-secondary)]">{m.email || "—"}</td>
                           <td>
-                            <span className="px-2 py-0.5 rounded text-[11px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                            <span className="px-2 py-0.5 rounded text-[11px] bg-[var(--success-soft)] text-[var(--success)] border border-[var(--success-border)]">
                               {m.status || "On campus"}
                             </span>
                           </td>

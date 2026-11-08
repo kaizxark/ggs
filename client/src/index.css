@@ -1406,6 +1406,22 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .fee-mix { position: relative; display: flex; align-items: center; gap: 14px; padding: 16px 21px 18px; }
 .pie-wrap { position: relative; width: 160px; flex: 0 0 auto; }
 .pie-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+/* An empty pie chart drew nothing at all, so the panel looked half-rendered.
+   The dashed ring keeps the shape of the chart while saying it has no data. */
+.pie-empty {
+  display: flex;
+  height: 170px;
+  width: 160px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  text-align: center;
+}
 .pie-center strong { color: var(--text-secondary); font-family: var(--font-sans); font-size: 16px; letter-spacing: -.05em; }
 .pie-center span { margin-top: 4px; color: var(--text-muted); font-size: 12.5px; }
 .fee-legend { display: flex; flex: 1; flex-direction: column; gap: 13px; }
