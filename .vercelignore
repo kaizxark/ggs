@@ -15,6 +15,7 @@ test.html
 *.pdf
 .env
 .env.*
+.shots/
 .freebuff/
 .impeccable/
 .kilo/

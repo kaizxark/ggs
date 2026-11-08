@@ -3,9 +3,11 @@
 .pnpm-store/
 
 # Build outputs
+.shots/
 dist/
 build/
-*.dist
+*..shots/
+dist
 
 # Environment variables
 .env
