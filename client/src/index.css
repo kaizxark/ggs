@@ -1617,7 +1617,7 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .mobile-nav-scrim.visible { position: fixed; inset: 0; z-index: 25; display: block; background: rgba(26, 20, 15, 0.45); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
   .mobile-menu-button { display: inline-grid; }
   .topbar { padding-inline: 18px; }
-  .content-area { padding: 27px 18px calc(72px + env(safe-area-inset-bottom, 0px)); }
+  .content-area { padding: 27px 18px calc(130px + env(safe-area-inset-bottom, 0px)); }
   /* Recharts and grids can overflow a narrow viewport; keep it contained so
      the bottom of the page stays reachable. */
   .chart-wrap > div, .recharts-wrapper { max-width: 100%; }
@@ -3108,8 +3108,10 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .pupil-mobile {
   position: relative;
   display: flex;
-  height: calc(100vh / var(--ui-zoom));
-  height: calc(100dvh / var(--ui-zoom));
+  height: 100vh;
+  height: 100dvh;
+  height: calc(100dvh / var(--ui-zoom, 1));
+  width: 100%;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-page);
@@ -3119,7 +3121,9 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .pupil-m-scroll {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
@@ -3128,7 +3132,7 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 14px calc(104px + env(safe-area-inset-bottom, 0px));
+  padding: 16px 14px calc(130px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 .pupil-m-page-head {
@@ -3902,8 +3906,10 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .staff-mobile {
   position: relative;
   display: flex;
-  height: calc(100vh / var(--ui-zoom));
-  height: calc(100dvh / var(--ui-zoom));
+  height: 100vh;
+  height: 100dvh;
+  height: calc(100dvh / var(--ui-zoom, 1));
+  width: 100%;
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-page);
@@ -3983,15 +3989,20 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .staff-mobile-scroll {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
 .staff-mobile-scroll.locked { overflow: hidden; }
 
-.staff-mobile-content {
-  max-width: none;
-  padding: 20px 14px calc(108px + env(safe-area-inset-bottom, 0px));
+.staff-mobile-content,
+.staff-mobile-scroll .content-area,
+.staff-mobile .content-area {
+  max-width: none !important;
+  padding: 20px 14px calc(130px + env(safe-area-inset-bottom, 0px)) !important;
+  box-sizing: border-box;
 }
 .staff-mobile .page-title { font-size: 24px; text-align: left; }
 .staff-mobile .page-intro {
@@ -4823,7 +4834,7 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
   .page-title { font-size: 27px; }
 }
 @media (max-width: 616px) {
-  .content-area { padding: 18px 14px 44px; }
+  .content-area { padding: 18px 14px calc(130px + env(safe-area-inset-bottom, 0px)); }
   .page-title { font-size: 23px; }
   .metric-block { padding: 16px; }
   .panel-header { padding: 16px 16px 12px; }
