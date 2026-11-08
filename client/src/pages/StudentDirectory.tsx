@@ -742,7 +742,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
       {showAdd && (
         <StudentDialog
           title="Add a student"
-          description="Create a comprehensive student record with academic placement, personal, guardian, and emergency details."
+          description="Create a student record with academic placement, personal, and guardian details."
           submitLabel="Create student"
           options={options}
           onClose={() => setShowAdd(false)}
@@ -894,15 +894,20 @@ function StudentRow({
  * says why, rather than quietly rendering as empty.
  * ------------------------------------------------------------------ */
 
-const DRAWER_TABS: Record<StudentSection, string> = {
+const DRAWER_ACTIVE_SECTIONS: StudentSection[] = [
+  "personal",
+  "academics",
+  "fees",
+  "admission",
+  "documents",
+];
+
+const DRAWER_TABS: Partial<Record<StudentSection, string>> = {
   personal: "Personal",
-  guardians: "Guardians",
   academics: "Academics",
-  attendance: "Attendance",
   fees: "Fees",
-  documents: "Documents",
   admission: "Admission",
-  account: "Account",
+  documents: "Documents",
 };
 
 function StudentDrawer({
@@ -970,7 +975,9 @@ function StudentDrawer({
   closeRef.current = onClose;
 
   const allowed = detail ? new Set(detail.sections) : new Set<string>();
-  const visibleTabs = ALL_STUDENT_SECTIONS.filter((key) => !detail || allowed.has(key));
+  const visibleTabs = DRAWER_ACTIVE_SECTIONS.filter(
+    (key) => (!detail || allowed.has(key)) && (key !== "fees" || maySeeFees),
+  );
 
   return (
     <>
@@ -1029,19 +1036,6 @@ function StudentDrawer({
           <strong className="text-[var(--brand)]">{formatDate(student.joined_on)}</strong>
         </div>
       </div>
-
-      {maySeeFees && student.outstanding_fees !== undefined && (
-        <div className="drawer-stats">
-          <div>
-            <span>Outstanding</span>
-            <strong>{formatMoney(student.outstanding_fees)}</strong>
-          </div>
-          <div>
-            <span>Guardian</span>
-            <strong className="text-[var(--text-primary)]">{student.guardian_name ?? "\u2014"}</strong>
-          </div>
-        </div>
-      )}
 
       <div className="drawer-tabs scroll-x">
         {visibleTabs.map((key) => {
@@ -1182,119 +1176,87 @@ function DrawerSection({
      summary rather than a continuation of the tab list above. */
 
   if (tab === "personal") {
-    push("USN", s.usn);
     push("Date of birth", formatDate(s.date_of_birth));
-    push("Age", s.age === null ? null : `${s.age} years`);
     push("Gender", s.gender);
     push("Blood group", s.blood_group);
-    push("Nationality", s.nationality);
-    push("Mother tongue", s.mother_tongue);
-    push("Religion", s.religion);
-    push("Email", s.email);
     push("Phone", s.phone);
+    push("Email", s.email);
     push(
       "Address",
       [s.address?.line1, s.address?.line2, s.address?.city, s.address?.state, s.address?.pincode]
         .filter(Boolean)
         .join(", "),
     );
-    push(
-      "Emergency contact",
-      [s.emergency_contact_name, s.emergency_contact_phone].filter(Boolean).join(" \u00b7 "),
-    );
     push("Status", s.status);
-  } else if (tab === "guardians") {
-    if (!detail.guardians.length) rows.push(["Guardians", "None recorded"]);
-    detail.guardians.forEach((g) => {
-      push(`${g.full_name}${g.is_primary ? " (primary)" : ""}`, g.relationship);
-      push("  Contact", [g.phone, g.alternate_phone].filter(Boolean).join(" / ") || null);
-      push("  Email", g.email);
-      push("  Occupation", g.occupation);
-      push("  Emergency contact", g.is_emergency_contact ? "Yes" : "No");
-      push("  Portal access", g.has_portal_account ? "Enabled" : "Not enabled");
-    });
   } else if (tab === "academics") {
-    const results = detail.academics.results;
-    if (!results.length) rows.push(["Examinations", "No results published"]);
-    results.forEach((r) => {
-      push(r.name, r.published ? (r.percentage === null ? "Not graded" : formatPercent(r.percentage)) : "Unpublished");
-      r.papers.forEach((paper) => {
-        push(`  ${paper.subject}`, paper.percentage === null ? "No marks" : formatPercent(paper.percentage));
+    const att = detail.attendance?.summary;
+    if (att) {
+      push(
+        "Attendance",
+        att.percentage === null
+          ? "No sessions marked"
+          : `${formatPercent(att.percentage)} (${att.present} of ${att.marked_sessions} sessions)`,
+      );
+      if (att.absent > 0) {
+        push("Absences", `${att.absent} session${att.absent === 1 ? "" : "s"}`);
+      }
+    }
+
+    push("Academic average", formatPercent(student.academic_average));
+    push(
+      "Enrolled class",
+      `Grade ${student.grade ?? "Unassigned"}${student.section ? ` \u00b7 Section ${student.section}` : ""}${student.roll_no ? ` \u00b7 Roll ${student.roll_no}` : ""}`,
+    );
+
+    const publishedResults = detail.academics.results.filter((r) => r.published);
+    if (publishedResults.length > 0) {
+      publishedResults.slice(0, 3).forEach((r) => {
+        push(
+          r.name,
+          r.percentage === null ? "Marks pending" : `${formatPercent(r.percentage)} overall`,
+        );
       });
-    });
-    detail.academics.subject_performance.forEach((p) => {
-      push(
-        `${p.subject} average`,
-        p.average === null ? "No average" : `${formatPercent(p.average)} over ${p.papers} papers`,
-      );
-    });
-    detail.academics.enrollment_history.forEach((h) => {
-      push(
-        `${h.academic_year ?? "Year not recorded"} \u00b7 ${h.grade ?? "?"}${h.section ? ` ${h.section}` : ""}`,
-        h.active ? `Current \u00b7 enrolled ${formatDate(h.enrolled_on)}` : "Previous",
-      );
-    });
-  } else if (tab === "attendance") {
-    const a = detail.attendance.summary;
-    push("Overall", a.percentage === null ? "Not recorded" : formatPercent(a.percentage));
-    push("Sessions marked", a.marked_sessions);
-    push("Present", a.present);
-    push("Absent", a.absent);
-    detail.attendance.trend.forEach((t) => push(`${t.month}`, `${formatPercent(t.percentage)} over ${t.sessions} sessions`));
-    detail.attendance.absences.slice(0, 12).forEach((x) => push(formatDate(x.date), x.notes ?? x.status));
-    detail.attendance.leaves.forEach((l) => {
-      push(`${l.leave_type} \u00b7 ${formatDate(l.from_on)}`, `${l.days} day(s) \u00b7 ${l.status}`);
-    });
+    } else if (!detail.academics.results.length) {
+      push("Examinations", "No examination records");
+    }
+
+    if (detail.academics.subject_performance.length > 0) {
+      detail.academics.subject_performance.slice(0, 4).forEach((p) => {
+        push(
+          `${p.subject}`,
+          p.average === null ? "No marks" : formatPercent(p.average),
+        );
+      });
+    }
   } else if (tab === "fees") {
     const f = detail.fees.summary;
-    push("Billed", formatMoney(f.billed));
-    push("Paid", formatMoney(f.paid));
-    push("Outstanding", formatMoney(f.outstanding));
-    push("Overdue invoices", `${f.overdue_count} \u00b7 ${formatMoney(f.overdue_amount)}`);
-    detail.fees.accounts.forEach((a) => {
-      push(
-        `Fee account \u00b7 ${a.status}`,
-        `Total ${formatMoney(a.total_fee)}, paid ${formatMoney(a.paid_amount)}`,
-      );
-      if (a.scholarship) push("  Scholarship", formatMoney(a.scholarship));
-      if (a.concession) push("  Concession", formatMoney(a.concession));
-    });
-    detail.fees.installments.forEach((i) => {
-      push(
-        `${i.label} \u00b7 due ${formatDate(i.due_on)}`,
-        `${formatMoney(i.amount)} \u00b7 ${i.status}`,
-      );
-    });
-    detail.fees.invoices.forEach((i) => {
-      push(
-        `${i.invoice_no}${i.due_on ? ` \u00b7 due ${formatDate(i.due_on)}` : ""}`,
-        `${formatMoney(i.total)}, paid ${formatMoney(i.paid_amount)} \u00b7 ${i.status}`,
-      );
-    });
+    push("Total fee billed", formatMoney(f.billed));
+    push("Total fee paid", formatMoney(f.paid));
+    push("Outstanding balance", formatMoney(f.outstanding));
+    push(
+      "Status",
+      f.outstanding <= 0
+        ? "Fully paid"
+        : f.overdue_count > 0
+          ? `${f.overdue_count} invoice(s) overdue (${formatMoney(f.overdue_amount)})`
+          : "Pending balance",
+    );
   } else if (tab === "admission") {
-    if (!detail.admission.length) rows.push(["Admission", "No application history"]);
-    detail.admission.forEach((a) => {
-      push(`Application \u00b7 ${a.status}`, a.applied_on ? `Applied ${formatDate(a.applied_on)}` : null);
-      push("  Admitted", a.admitted_on ? formatDate(a.admitted_on) : null);
-      push("  Previous school", a.previous_school);
-      push("  Previous class", a.previous_class);
-      push("  Previous board", a.previous_board);
-      push("  Type", a.admission_type);
-      push("  Remarks", a.remarks);
-      if (a.withdrawn_on) push("Withdrawn", `${formatDate(a.withdrawn_on)} \u00b7 ${a.withdrawal_reason ?? ""}`);
-      if (a.graduated_on) push("Graduated", formatDate(a.graduated_on));
-    });
-  } else if (tab === "account") {
-    const a = detail.account;
-    push("Portal access", a.has_account ? "Enabled" : "Not enabled");
-    /* The USN is the pupil's username. Listing it as "Username" here created a
-       second identity next to the USN in the drawer for the same value. */
-    push("USN", s.usn ?? a.login_identifier);
-    push("Full name", a.full_name);
-    push("Role", a.role);
-    push("Status", a.status);
-    push("Issued", a.issued_at ? formatDate(a.issued_at) : null);
-    push("Linked guardians", a.linked_parents);
+    push("Admitted on", formatDate(student.joined_on));
+    push(
+      "Enrolled class",
+      `Grade ${student.grade ?? "Unassigned"}${student.section ? ` \u00b7 Section ${student.section}` : ""}`,
+    );
+    push("Status", student.status);
+    const primaryAdm = detail.admission[0];
+    if (primaryAdm) {
+      if (primaryAdm.admission_type) {
+        push("Admission type", primaryAdm.admission_type);
+      }
+      if (primaryAdm.previous_school) {
+        push("Previous school", primaryAdm.previous_school);
+      }
+    }
   }
 
   if (!rows.length) {

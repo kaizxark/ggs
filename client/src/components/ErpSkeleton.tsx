@@ -103,7 +103,28 @@ export function SkeletonMetric() {
           <SkeletonText width="58%" height={24} />
           <SkeletonText width="44%" style={{ marginTop: 8 }} />
         </div>
-        <SkeletonBlock style={{ height: 44, width: 84, flex: "0 0 auto" }} />
+        <span
+          className="erp-skeleton-spark"
+          style={{ width: 84, height: 44 }}
+        >
+          {/* A line, not a solid slab: the real card draws a sparkline here,
+              and a filled rectangle read as a missing image. */}
+          <svg
+            viewBox="0 0 100 44"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            className="erp-skeleton-spark-svg"
+          >
+            <path
+              className="erp-skeleton-spark-area"
+              d="M0,34 L20,26 L40,30 L60,18 L80,22 L100,12 L100,44 L0,44 Z"
+            />
+            <path
+              className="erp-skeleton-spark-line"
+              d="M0,34 L20,26 L40,30 L60,18 L80,22 L100,12"
+            />
+          </svg>
+        </span>
       </div>
     </div>
   );
@@ -200,16 +221,19 @@ export function SkeletonTable({
   );
 }
 
-/** Mirrors a `.panel` with a header and a body block. */
+/** Mirrors a `.panel` with a header and a body of record rows. */
 export function SkeletonPanel({
   title,
   bodyHeight = 160,
+  rows,
   className,
 }: {
   title?: boolean;
   bodyHeight?: number;
+  rows?: number;
   className?: string;
 }) {
+  const rowCount = rows ?? Math.max(3, Math.round(bodyHeight / 58));
   return (
     <section className={cx("panel", className)} aria-hidden="true">
       {title !== false && (
@@ -221,8 +245,11 @@ export function SkeletonPanel({
           <SkeletonText width={64} />
         </div>
       )}
-      <div style={{ padding: "18px 20px" }}>
-        <SkeletonBlock style={{ height: bodyHeight }} />
+      {/* Rows, not one solid slab. A single filled rectangle the size of the
+          panel reads as a failed image; rows read as "records are arriving".
+          `SkeletonList` brings its own horizontal padding. */}
+      <div style={{ paddingTop: 4, minHeight: bodyHeight }}>
+        <SkeletonList rows={rowCount} avatar={false} />
       </div>
     </section>
   );

@@ -8674,16 +8674,54 @@ export default function Home() {
       // layer — so rendering it for a frame while a pupil's profile resolves
       // would put data in a child's browser that the sidebar then hides.
       if (!currentUser) {
+        // Mirror the whole overview, not just its metric row. Showing four
+        // cards alone left two thirds of the page blank, which read as a
+        // broken layout rather than as loading.
         return (
-          <div className="page-stack">
-            <SkeletonRegion label="Loading your dashboard">
-              <div className="metric-grid">
-                <SkeletonMetric />
-                <SkeletonMetric />
-                <SkeletonMetric />
-                <SkeletonMetric />
-              </div>
-            </SkeletonRegion>
+          <div className="page-stack" role="status" aria-busy="true">
+            <span className="sr-only">Loading your dashboard</span>
+            <div className="metric-grid">
+              <SkeletonMetric />
+              <SkeletonMetric />
+              <SkeletonMetric />
+              <SkeletonMetric />
+            </div>
+            <div className="dashboard-grid dashboard-grid-top">
+              <section className="panel" aria-hidden="true">
+                <div className="panel-header">
+                  <SkeletonText width={108} height={16} />
+                  <SkeletonText width={78} height={11} />
+                </div>
+                <SkeletonChart height={250} variant="area" />
+              </section>
+              <section className="panel" aria-hidden="true">
+                <div className="panel-header">
+                  <SkeletonText width={124} height={16} />
+                  <SkeletonText width={62} height={11} />
+                </div>
+                <div style={{ padding: "8px 20px 16px" }}>
+                  <SkeletonList rows={5} avatar={false} />
+                </div>
+              </section>
+            </div>
+            <div className="dashboard-grid dashboard-grid-mid">
+              <section className="panel" aria-hidden="true">
+                <div className="panel-header">
+                  <SkeletonText width={132} height={16} />
+                </div>
+                <div style={{ padding: "8px 20px 16px" }}>
+                  <SkeletonList rows={3} avatar />
+                </div>
+              </section>
+              <section className="panel" aria-hidden="true">
+                <div className="panel-header">
+                  <SkeletonText width={118} height={16} />
+                </div>
+                <div style={{ padding: "8px 20px 16px" }}>
+                  <SkeletonList rows={3} avatar={false} />
+                </div>
+              </section>
+            </div>
           </div>
         );
       }
