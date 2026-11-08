@@ -776,7 +776,24 @@ function ConductedExamsTab({
 
       {/* Exams Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pager.pageRows.map((exam) => {
+        {filtered.length === 0 ? (
+          <div className="md:col-span-2 lg:col-span-3 empty-state py-14">
+            <Calendar size={24} />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              {exams.length === 0
+                ? "No conducted exams in the registry yet"
+                : "No assessments match your search"}
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              {exams.length === 0
+                ? isAdminOrPrincipal
+                  ? "Record one with “Add Conducted Exam” once an assessment has been held."
+                  : "Assessments will appear here once the office records them."
+                : "Try a different title, class or grade filter."}
+            </p>
+          </div>
+        ) : (
+        pager.pageRows.map((exam) => {
           const stats = completionMap.get(exam.id);
           const isComplete = stats?.isComplete ?? false;
           const pct = stats?.completionPct ?? 0;
@@ -881,7 +898,8 @@ function ConductedExamsTab({
               </div>
             </div>
           );
-        })}
+        })
+        )}
       </div>
 
       {!pager.isSinglePage && (

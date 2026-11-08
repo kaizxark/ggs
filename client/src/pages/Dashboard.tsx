@@ -6354,16 +6354,24 @@ function AnalyticsView({
           <>
             <MetricBlock
               label="Academic Average"
-              value={`${overallAverage}%`}
-              comparison={`Median ${medianAverage}%`}
+              value={overallAverage > 0 ? `${overallAverage}%` : "—"}
+              comparison={
+                overallAverage > 0
+                  ? `Median ${medianAverage}%`
+                  : "No graded pupils yet"
+              }
               icon={GraduationCap}
               spark={academicSpark}
               className="h-full flex flex-col justify-between"
             />
             <MetricBlock
               label="Attendance Rate"
-              value={`${attendancePct}%`}
-              comparison={`${latestPresent} present today`}
+              value={latestMarked > 0 ? `${attendancePct}%` : "—"}
+              comparison={
+                latestMarked > 0
+                  ? `${latestPresent} present today`
+                  : "No attendance sessions recorded"
+              }
               icon={ClipboardCheck}
               spark={attendanceSpark}
               className="h-full flex flex-col justify-between"
