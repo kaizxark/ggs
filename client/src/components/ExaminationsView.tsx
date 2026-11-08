@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Calendar,
   Plus,
@@ -41,7 +41,9 @@ import {
   type Student,
 } from "@/lib/erp-views";
 import { isSuperAdminId } from "@shared/super-admin";
-import { authHeaders } from "@/lib/supabase";
+import { supabase, authHeaders } from "@/lib/supabase";
+import { useRealtimeInvalidation } from "@/lib/use-realtime";
+import { notifyDataChanged } from "@/lib/live-data";
 
 export interface ExaminationsViewProps {
   onBack: () => void;
@@ -123,44 +125,6 @@ const DEFAULT_SUBJECTS_GRADE10: ExamSubjectConfig[] = [
   { id: "sub-g10-5", subject: "English", maxMarks: 25, passMarks: 10, assignedTeacher: "Sonia Joseph" },
 ];
 
-const INITIAL_EXAMS: ConductedExam[] = [
-  {
-    id: "EXM-MID-2026",
-    title: "Term 1 Midterm Examination 2026",
-    examType: "Midterm",
-    term: "Term 1 (2026–2027)",
-    grade: "Grade 8",
-    conductedDate: "05 Oct 2026",
-    subjects: DEFAULT_SUBJECTS_GRADE8,
-    totalMaxMarks: 600,
-    notes: "CBSE curriculum physical assessment conducted across 6 core subject papers.",
-    createdAt: "2026-10-06T09:00:00.000Z",
-  },
-  {
-    id: "EXM-FA1-2026",
-    title: "Formative Assessment 1 (FA1)",
-    examType: "FA1",
-    term: "Term 1 (2026–2027)",
-    grade: "Grade 9",
-    conductedDate: "18 Aug 2026",
-    subjects: DEFAULT_SUBJECTS_GRADE9,
-    totalMaxMarks: 250,
-    notes: "First internal cycle formative evaluation.",
-    createdAt: "2026-08-19T10:00:00.000Z",
-  },
-  {
-    id: "EXM-INT-2026",
-    title: "Internal Assessment 1 (Internals)",
-    examType: "Internals",
-    term: "Term 1 (2026–2027)",
-    grade: "Grade 10",
-    conductedDate: "25 Sep 2026",
-    subjects: DEFAULT_SUBJECTS_GRADE10,
-    totalMaxMarks: 125,
-    notes: "Continuous evaluation component for CBSE Board examination readiness.",
-    createdAt: "2026-09-26T11:00:00.000Z",
-  },
-];
 
 export function calculateGradeLetter(score: number, max: number): {
   letter: string;
@@ -193,7 +157,9 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
 
   const [activeTab, setActiveTab] = useState<ExamTabKey>("exams");
 
-  // Persistent Conducted Exams
+  // Persistent Conducted Exams. The registry starts empty — an unreigstered
+  // exam cycle renders as an honest "no assessments yet", not a rehearsal
+  // someone else created.
   const [exams, setExams] = useState<ConductedExam[]>(() => {
     try {
       const stored = localStorage.getItem("erp_conducted_exams_v3");
@@ -201,7 +167,7 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
     } catch {
       // ignore
     }
-    return INITIAL_EXAMS;
+    return [];
   });
 
   const saveExams = (updater: (prev: ConductedExam[]) => ConductedExam[]) => {
@@ -212,13 +178,27 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
       } catch {
         // ignore
       }
+      void (async () => {
+        try {
+          await supabase
+            .from("settings")
+            .upsert({
+              id: "set-exams-conducted-v3",
+              key: "examinations:conducted_exams_v3",
+              value: next,
+            }, { onConflict: "key" });
+          notifyDataChanged();
+        } catch {
+          // ignore
+        }
+      })();
       return next;
     });
   };
 
   // Selected Exam for Grade Entry & Report Cards
   const [selectedExamId, setSelectedExamId] = useState<string>(
-    () => exams[0]?.id ?? "EXM-MID-2026"
+    () => exams[0]?.id ?? ""
   );
 
   const activeExam = useMemo(() => {
@@ -246,9 +226,70 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
       } catch {
         // ignore
       }
+      void (async () => {
+        try {
+          await supabase
+            .from("settings")
+            .upsert({
+              id: "set-exams-evaluations-v3",
+              key: "examinations:evaluations_v3",
+              value: next,
+            }, { onConflict: "key" });
+          notifyDataChanged();
+        } catch {
+          // ignore
+        }
+      })();
       return next;
     });
   };
+
+  const loadRemoteExams = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("settings")
+        .select("key, value")
+        .in("key", ["examinations:conducted_exams_v3", "examinations:evaluations_v3"]);
+
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          if (row.key === "examinations:conducted_exams_v3" && Array.isArray(row.value) && row.value.length > 0) {
+            setExams(row.value as ConductedExam[]);
+            try {
+              localStorage.setItem("erp_conducted_exams_v3", JSON.stringify(row.value));
+            } catch {
+              // ignore
+            }
+          }
+          if (row.key === "examinations:evaluations_v3" && row.value && typeof row.value === "object" && Object.keys(row.value).length > 0) {
+            setEvaluationsStore(row.value as Record<string, StudentExamRecord>);
+            try {
+              localStorage.setItem("erp_exam_evaluations_v3", JSON.stringify(row.value));
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+    } catch {
+      // offline fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRemoteExams();
+  }, [loadRemoteExams]);
+
+  const realtimeRevision = useRealtimeInvalidation([
+    "settings",
+    "examinations",
+    "exam_results",
+  ]);
+  useEffect(() => {
+    if (realtimeRevision > 0) {
+      void loadRemoteExams();
+    }
+  }, [realtimeRevision, loadRemoteExams]);
 
   // Eligible students for the active exam's grade
   const examCandidateStudents = useMemo<Student[]>(() => {
@@ -457,24 +498,32 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <MetricBlock
           label="Conducted Exams"
           value={String(globalMetrics.totalExams)}
-          comparison="Recorded assessments"
+          comparison={
+            globalMetrics.totalExams === 0 ? "No assessments recorded yet" : "Recorded assessments"
+          }
           positive={true}
           icon={Calendar}
         />
         <MetricBlock
           label="Grading Completion"
           value={`${globalMetrics.readyRate}%`}
-          comparison={`${globalMetrics.completedExamsCount} of ${globalMetrics.totalExams} exams complete`}
-          positive={globalMetrics.readyRate === 100}
+          comparison={
+            globalMetrics.totalExams === 0
+              ? "Register an exam to start tracking"
+              : `${globalMetrics.completedExamsCount} of ${globalMetrics.totalExams} exams complete`
+          }
+          positive={globalMetrics.totalExams > 0 && globalMetrics.readyRate === 100}
           icon={CheckCircle2}
         />
         <MetricBlock
           label="Pending Candidate Evaluations"
           value={String(globalMetrics.totalPendingStudents)}
           comparison={
-            globalMetrics.totalPendingStudents === 0
-              ? "All candidates evaluated"
-              : "Requires teacher scoring"
+            globalMetrics.totalExams === 0
+              ? "No exams in the registry yet"
+              : globalMetrics.totalPendingStudents === 0
+                ? "All candidates evaluated"
+                : "Requires teacher scoring"
           }
           positive={globalMetrics.totalPendingStudents === 0}
           icon={AlertTriangle}
@@ -482,10 +531,18 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
         <MetricBlock
           label="Report Cards Readiness"
           value={
-            globalMetrics.totalPendingStudents === 0 ? "Verified" : "Distribution Locked"
+            globalMetrics.totalExams === 0
+              ? "Awaiting data"
+              : globalMetrics.totalPendingStudents === 0
+                ? "Verified"
+                : "Distribution Locked"
           }
-          comparison="Requires 100% grading completion"
-          positive={globalMetrics.totalPendingStudents === 0}
+          comparison={
+            globalMetrics.totalExams === 0
+              ? "Depends on completed grading cycles"
+              : "Requires 100% grading completion"
+          }
+          positive={globalMetrics.totalExams > 0 && globalMetrics.totalPendingStudents === 0}
           icon={Award}
         />
       </div>
@@ -532,7 +589,6 @@ export function ExaminationsView({ onBack }: ExaminationsViewProps) {
           exams={exams}
           completionMap={examCompletionMap}
           isAdminOrPrincipal={isAdminOrPrincipal}
-          onAddExam={() => setAddExamModalOpen(true)}
           onEnterGrades={(examId) => {
             setSelectedExamId(examId);
             setActiveTab("marks");
@@ -657,7 +713,6 @@ function ConductedExamsTab({
   exams,
   completionMap,
   isAdminOrPrincipal,
-  onAddExam,
   onEnterGrades,
   onViewReportCards,
   onDeleteExam,
@@ -665,7 +720,6 @@ function ConductedExamsTab({
   exams: ConductedExam[];
   completionMap: Map<string, { isComplete: boolean; completionPct: number; pendingCount: number }>;
   isAdminOrPrincipal: boolean;
-  onAddExam: () => void;
   onEnterGrades: (examId: string) => void;
   onViewReportCards: (examId: string) => void;
   onDeleteExam: (examId: string) => void;
@@ -696,7 +750,7 @@ function ConductedExamsTab({
           <Search size={15} />
           <input
             type="text"
-            placeholder="Search conducted assessments by title or class…"
+            placeholder="Search assessments…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -717,13 +771,6 @@ function ConductedExamsTab({
               { value: "Grade 10", label: "Grade 10" },
             ]}
           />
-
-          {isAdminOrPrincipal && (
-            <button type="button" className="primary-button compact flex-shrink-0" onClick={onAddExam}>
-              <Plus size={14} />
-              <span>Add Exam</span>
-            </button>
-          )}
         </div>
       </div>
 

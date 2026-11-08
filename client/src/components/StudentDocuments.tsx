@@ -19,6 +19,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { useRealtimeInvalidation } from "../lib/use-realtime";
 import {
   DOC_TYPES,
   deleteStudentDocument,
@@ -95,6 +96,11 @@ export function StudentDocumentsPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const realtimeRevision = useRealtimeInvalidation(["student_documents"]);
+  useEffect(() => {
+    if (realtimeRevision > 0) void load();
+  }, [realtimeRevision, load]);
 
   const byType = new Map(documents.map((doc) => [doc.docType, doc]));
   const otherDocs = documents.filter((doc) => !DOC_TYPES.some((t) => t.id === doc.docType));

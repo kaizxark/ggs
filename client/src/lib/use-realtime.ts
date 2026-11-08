@@ -94,3 +94,67 @@ export function useRealtimeInvalidation(
 
   return version;
 }
+
+export interface UseRealtimeSubscriptionOptions<T> {
+  pk?: keyof T & string;
+  filter?: (row: Record<string, unknown>) => boolean;
+  enabled?: boolean;
+}
+
+/**
+ * Reusable React hook for managing collections with Supabase Realtime subscriptions.
+ *
+ * Automatically handles:
+ * - INSERT: appends or updates row by primary key (respecting optional filter)
+ * - UPDATE: updates row in place, or adds/removes row if filter match status changed
+ * - DELETE: removes row by primary key (safely handling Postgres RLS replica identity)
+ */
+export function useRealtimeSubscription<T extends Record<string, unknown>>(
+  table: string,
+  setRows: React.Dispatch<React.SetStateAction<T[]>>,
+  options: UseRealtimeSubscriptionOptions<T> = {}
+): void {
+  const { pk = "id" as keyof T & string, filter, enabled = true } = options;
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+
+  useRealtimeTable(
+    table,
+    (change) => {
+      const matches = (row: Record<string, unknown>) =>
+        filterRef.current ? filterRef.current(row) : true;
+
+      setRows((current) => {
+        if (change.eventType === "INSERT") {
+          if (!matches(change.new)) return current;
+          const incoming = change.new as unknown as T;
+          if (current.some((row) => String(row[pk]) === String(incoming[pk]))) {
+            return current.map((row) =>
+              String(row[pk]) === String(incoming[pk]) ? incoming : row
+            );
+          }
+          return [...current, incoming];
+        }
+        if (change.eventType === "UPDATE") {
+          const incoming = change.new as unknown as T;
+          if (!matches(change.new)) {
+            return current.filter((row) => String(row[pk]) !== String(incoming[pk]));
+          }
+          if (!current.some((row) => String(row[pk]) === String(incoming[pk]))) {
+            return [...current, incoming];
+          }
+          return current.map((row) =>
+            String(row[pk]) === String(incoming[pk]) ? incoming : row
+          );
+        }
+        if (change.eventType === "DELETE") {
+          const gone = change.old as unknown as T;
+          return current.filter((row) => String(row[pk]) !== String(gone[pk]));
+        }
+        return current;
+      });
+    },
+    enabled
+  );
+}
+

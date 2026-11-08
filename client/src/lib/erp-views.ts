@@ -49,16 +49,7 @@ import {
   type SubjectAverage,
   type SubjectRow,
   type TimetableEntry,
-  getAnnualFeeForGrade,
-  mockAttendanceData,
-  mockClassAttendance,
-  mockFeeCategories,
 } from "./school-data";
-import {
-  getStoredInvoices,
-  getStoredPayments,
-  getStudentFeeOverrides,
-} from "./fee-store";
 
 // The report screens import these shapes from the view layer rather than
 // reaching past it into `school-data`, so the view module is the one public
@@ -606,13 +597,13 @@ async function loadAttendanceDaily(): Promise<AttendanceDaily[]> {
       return rows[0].daily;
     }
   } catch {
-    // offline or RPC unavailable fallback
+    // offline or RPC unavailable — show the empty honest state
   }
-  return mockAttendanceData;
+  return [];
 }
 
 export function useAttendanceDailyView() {
-  return useErpView<AttendanceDaily>("attendance_daily", loadAttendanceDaily, mockAttendanceData);
+  return useErpView<AttendanceDaily>("attendance_daily", loadAttendanceDaily, []);
 }
 
 async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
@@ -622,13 +613,13 @@ async function loadClassAttendance(): Promise<ClassAttendanceRow[]> {
       return rows[0].classes;
     }
   } catch {
-    // offline or RPC unavailable fallback
+    // offline or RPC unavailable — show the empty honest state
   }
-  return mockClassAttendance;
+  return [];
 }
 
 export function useClassAttendanceView() {
-  return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, mockClassAttendance);
+  return useErpView<ClassAttendanceRow>("class_attendance", loadClassAttendance, []);
 }
 
 /**
@@ -704,10 +695,6 @@ async function loadInvoices(): Promise<Invoice[]> {
     fetchAll("payments", "id,invoice_id,amount,paid_at,receipt_no").catch(() => []),
   ]);
 
-  const storedInvoices = getStoredInvoices();
-  const storedPayments = getStoredPayments();
-  const overrides = getStudentFeeOverrides();
-
   const classroomById = new Map(classrooms.map((c) => [String(c.id), c]));
   const classOf = new Map<string, Record<string, unknown>>();
   for (const e of enrollments) {
@@ -716,7 +703,12 @@ async function loadInvoices(): Promise<Invoice[]> {
     if (room) classOf.set(String(e.student_id), room);
   }
 
-  // Payments mapped by invoice id
+  const studentById = new Map(students.map((s) => [String(s.id), s]));
+
+  // Payments actually recorded against each invoice — server rows only. The
+  // localStorage fee overlays this loader used to merge in were seed data with
+  // invented students, amounts and dues; the register must read the database
+  // even when that means it is empty.
   const paymentsByInvoice = new Map<string, number>();
   for (const p of payments) {
     if (p.invoice_id) {
@@ -724,135 +716,65 @@ async function loadInvoices(): Promise<Invoice[]> {
       paymentsByInvoice.set(invId, (paymentsByInvoice.get(invId) ?? 0) + num(p.amount));
     }
   }
-  for (const sp of storedPayments) {
-    if (sp.invoice_id) {
-      const invId = String(sp.invoice_id);
-      paymentsByInvoice.set(invId, (paymentsByInvoice.get(invId) ?? 0) + num(sp.amount));
-    }
-  }
 
-  // DB Invoices indexed by student_id
-  const dbInvoicesByStudent = new Map<string, Record<string, unknown>>();
-  for (const inv of invoices) {
-    if (inv.student_id) {
-      dbInvoicesByStudent.set(String(inv.student_id), inv);
-    }
-  }
-
-  // Stored invoices indexed by studentId and student name
-  const storedByStudentId = new Map<string, typeof storedInvoices[0]>();
-  const storedByStudentName = new Map<string, typeof storedInvoices[0]>();
-  for (const si of storedInvoices) {
-    if (si.studentId) storedByStudentId.set(si.studentId.toLowerCase(), si);
-    if (si.student) storedByStudentName.set(si.student.toLowerCase(), si);
-  }
-
+  const today = fmtDate(new Date().toISOString()).slice(-11);
   const result: Invoice[] = [];
-  const processedStudentIds = new Set<string>();
-  const processedInvoiceIds = new Set<string>();
 
-  // Iterate over all active/enrolled students
-  if (students.length > 0) {
-    for (const s of students) {
-      const sId = String(s.id);
-      processedStudentIds.add(sId);
-      const name = `${s.first_name ?? ""} ${s.last_name ?? ""}`.trim() || "Student";
-      const surname = s.last_name ? String(s.last_name) : name.split(" ").slice(-1)[0] || "Family";
-      const room = classOf.get(sId);
-      const gradeStr = room ? `Grade ${room.grade}` : s.grade ? (String(s.grade).startsWith("Grade") ? String(s.grade) : `Grade ${s.grade}`) : "Grade 6";
-      const sectionStr = room ? String(room.section) : String(s.section || "A");
-      const annualFee = getAnnualFeeForGrade(gradeStr);
+  for (const inv of invoices) {
+    const sId = inv.student_id ? String(inv.student_id) : "";
+    const s = sId ? studentById.get(sId) : undefined;
+    const name = s
+      ? `${s.first_name ?? ""} ${s.last_name ?? ""}`.trim() || "Student"
+      : String(inv.student_name ?? "Student");
+    const surname =
+      s?.last_name
+        ? String(s.last_name)
+        : name.split(" ").slice(-1)[0] || "Family";
+    const room = sId ? classOf.get(sId) : undefined;
+    const gradeStr = room
+      ? `Grade ${room.grade}`
+      : s?.grade
+        ? (String(s.grade).startsWith("Grade") ? String(s.grade) : `Grade ${s.grade}`)
+        : "—";
+    const sectionStr = room ? String(room.section) : String(s?.section || "—");
 
-      const dbInv = dbInvoicesByStudent.get(sId);
-      const storedInv = storedByStudentId.get(sId.toLowerCase()) || storedByStudentName.get(name.toLowerCase());
-      const override = overrides[sId] || overrides[name.toLowerCase()];
+    const total = num(inv.total);
+    const onInvoice = num(inv.paid_amount);
+    const recorded = paymentsByInvoice.get(String(inv.id)) ?? paymentsByInvoice.get(String(inv.invoice_no ?? "")) ?? 0;
+    const paid = Math.min(total, Math.max(onInvoice, recorded));
+    const outstanding = Math.max(0, total - paid);
+    const dueOn = inv.due_on ? fmtDate(String(inv.due_on)) : "—";
 
-      const invId = storedInv?.id || (dbInv?.invoice_no ? String(dbInv.invoice_no) : dbInv?.id ? String(dbInv.id) : `INV-2026-${sId.slice(-4) || String(result.length + 1001)}`);
-      processedInvoiceIds.add(invId);
-
-      // Determine paid amount
-      let paid = 0;
-      if (override) {
-        paid = override.paid_fees;
-      } else if (storedInv) {
-        paid = storedInv.paid;
-      } else if (dbInv) {
-        const invPaid = num(dbInv.paid_amount);
-        const invPmt = paymentsByInvoice.get(String(dbInv.id)) || paymentsByInvoice.get(String(dbInv.invoice_no)) || 0;
-        paid = Math.max(invPaid, invPmt);
-      } else {
-        const stuPmts = storedPayments.filter(p => p.student.toLowerCase() === name.toLowerCase());
-        paid = stuPmts.reduce((sum, p) => sum + p.amount, 0);
-      }
-
-      // Check if direct payments exist in storedPayments for this invoice ID
-      const directPayments = storedPayments.filter(p => p.invoice_id === invId);
-      const directSum = directPayments.reduce((s, p) => s + p.amount, 0);
-      if (directSum > paid) {
-        paid = directSum;
-      }
-
-      paid = Math.min(annualFee, paid);
-      const outstanding = Math.max(0, annualFee - paid);
-
-      const dueDate = dbInv?.due_on ? fmtDate(String(dbInv.due_on)) : storedInv?.due_date || "15 Oct 2026";
-      const isOverdue = dueDate.includes("Sep") || (dueDate < "2026-11-01" && outstanding > 0);
-
-      let status: "Paid" | "Partial" | "Overdue" | "Due";
-      if (outstanding === 0) {
-        status = "Paid";
-      } else if (paid > 0) {
-        status = "Partial";
-      } else if (isOverdue) {
-        status = "Overdue";
-      } else {
-        status = "Due";
-      }
-
-      result.push({
-        id: invId,
-        student_id: sId,
-        studentId: sId,
-        family: `${surname} family`,
-        student: name,
-        grade: gradeStr,
-        section: sectionStr,
-        due_date: dueDate,
-        total: annualFee,
-        paid,
-        outstanding,
-        amount: outstanding > 0 ? outstanding : annualFee,
-        status,
-        usn: String(s.usn ?? sId),
-      } as unknown as Invoice);
+    let status: "Paid" | "Partial" | "Overdue" | "Due";
+    if (outstanding === 0) {
+      status = "Paid";
+    } else if (paid > 0) {
+      status = "Partial";
+    } else if (dueOn !== "—" && dueOn < today) {
+      status = "Overdue";
+    } else {
+      status = "Due";
     }
+
+    result.push({
+      id: String(inv.invoice_no ?? inv.id),
+      student_id: sId,
+      studentId: sId,
+      family: `${surname} family`,
+      student: name,
+      grade: gradeStr,
+      section: sectionStr,
+      due_date: dueOn,
+      total,
+      paid,
+      outstanding,
+      amount: outstanding,
+      status,
+      usn: String(s?.usn ?? "—"),
+    } as unknown as Invoice);
   }
 
-  // Include any stored invoices not yet matched
-  for (const si of storedInvoices) {
-    if (!processedInvoiceIds.has(si.id) && !processedStudentIds.has(si.studentId || "")) {
-      const annualFee = getAnnualFeeForGrade(si.grade);
-      const paid = Math.min(annualFee, si.paid || 0);
-      const outstanding = Math.max(0, annualFee - paid);
-      result.push({
-        id: si.id,
-        student_id: si.studentId,
-        studentId: si.studentId,
-        family: si.family || `${si.student} family`,
-        student: si.student,
-        grade: si.grade || "Grade 6",
-        section: si.section || "A",
-        due_date: si.due_date || "15 Oct 2026",
-        total: annualFee,
-        paid,
-        outstanding,
-        amount: outstanding > 0 ? outstanding : annualFee,
-        status: outstanding === 0 ? "Paid" : paid > 0 ? "Partial" : si.status,
-      } as unknown as Invoice);
-    }
-  }
-
-  return result.sort((a, b) => b.amount - a.amount);
+  return result.sort((a, b) => (b.outstanding ?? 0) - (a.outstanding ?? 0));
 }
 
 export function useInvoicesView(enabled = true) {
@@ -877,33 +799,11 @@ async function loadPayments(): Promise<Payment[]> {
       amount: num(p.amount),
       method: String(p.method ?? "Bank transfer"),
       paid_at: String(p.paid_at ?? ""),
-      receipt_no: String(p.receipt_no ?? `RCP/26-27/${String(p.id).slice(-4)}`),
+      receipt_no: String(p.receipt_no ?? ""),
       reference: p.reference ? String(p.reference) : null,
       recipient_email: s?.email ? String(s.email) : null,
     };
   });
-
-  const stored = getStoredPayments();
-  const seenReceipts = new Set(dbMapped.map(p => p.receipt_no).filter(Boolean));
-  const seenIds = new Set(dbMapped.map(p => p.id));
-
-  for (const sp of stored) {
-    if (!seenIds.has(sp.id) && (!sp.receipt_no || !seenReceipts.has(sp.receipt_no))) {
-      dbMapped.push({
-        id: sp.id,
-        invoice_id: sp.invoice_id,
-        student: sp.student,
-        amount: sp.amount,
-        method: sp.method,
-        paid_at: sp.paid_at,
-        receipt_no: sp.receipt_no,
-        reference: sp.reference || null,
-        recipient_email: sp.recipient_email || null,
-      });
-      if (sp.receipt_no) seenReceipts.add(sp.receipt_no);
-      seenIds.add(sp.id);
-    }
-  }
 
   return dbMapped.sort((a, b) => b.paid_at.localeCompare(a.paid_at));
 }
@@ -933,7 +833,12 @@ async function loadFinanceMonthly(): Promise<FinanceMonth[]> {
     loadInvoices(),
   ]);
 
-  const totalBilled = invoices.reduce((sum, inv) => sum + (inv.total ?? inv.amount ?? 50000), 0);
+  // With nothing billed and nothing paid the 12 zero months would render as
+  // bare axes that look like a broken chart; the view's empty state is honest.
+  const totalBilled = invoices.reduce((sum, inv) => sum + (inv.total ?? inv.amount ?? 0), 0);
+  if (totalBilled === 0 && payments.length === 0) {
+    return [];
+  }
 
   // Group payments by month (YYYY-MM)
   const monthlyCollected = new Map<string, number>();
@@ -1010,7 +915,7 @@ async function loadFeeCategories(): Promise<FeeCategory[]> {
 }
 
 export function useFeeCategoriesView() {
-  return useErpView<FeeCategory>("fee_categories", loadFeeCategories, mockFeeCategories);
+  return useErpView<FeeCategory>("fee_categories", loadFeeCategories, []);
 }
 
 /* ------------------------------------------------------------------ */

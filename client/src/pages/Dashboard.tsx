@@ -199,7 +199,6 @@ import {
 } from "@shared/super-admin";
 import { screenLabelByName, screensForRole } from "@shared/ai-access";
 import { USERNAME_PATTERN } from "@/lib/username";
-import { recordFeePayment } from "@/lib/fee-store";
 
 /** Initials for the signed-in user, e.g. "Ehtesham" -> "EH". */
 function initialsFor(name: string): string {
@@ -1956,7 +1955,8 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     c => c.total > 0 && c.value < 92
   ).length;
 
-  // Actionable alerts directly projected from DB
+  // Actionable alerts projected straight from the database. A category with
+  // nothing to follow up on is omitted rather than flashing "0 items".
   const attentionItems = [
     ...(criticalStudentsCount > 0
       ? [
@@ -1970,14 +1970,18 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           },
         ]
       : []),
-    {
-      label: "Attendance follow-up",
-      value: String(belowThreshold),
-      detail: `${belowThreshold} pupil${belowThreshold === 1 ? "" : "s"} below 90% attendance`,
-      icon: Clock3,
-      tone: "amber",
-      view: "Attendance",
-    },
+    ...(belowThreshold > 0
+      ? [
+          {
+            label: "Attendance follow-up",
+            value: String(belowThreshold),
+            detail: `${belowThreshold} pupil${belowThreshold === 1 ? "" : "s"} below 90% attendance`,
+            icon: Clock3,
+            tone: "amber",
+            view: "Attendance",
+          },
+        ]
+      : []),
     ...(canSeeFinance && overdueInvoices.length > 0
       ? [
           {
@@ -1990,14 +1994,18 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           },
         ]
       : []),
-    {
-      label: "Classes on watch",
-      value: String(classesBelow),
-      detail: `${classesBelow} class${classesBelow === 1 ? "" : "es"} below 92%`,
-      icon: ClipboardCheck,
-      tone: "violet",
-      view: "Attendance",
-    },
+    ...(classesBelow > 0
+      ? [
+          {
+            label: "Classes on watch",
+            value: String(classesBelow),
+            detail: `${classesBelow} class${classesBelow === 1 ? "" : "es"} below 92%`,
+            icon: ClipboardCheck,
+            tone: "violet",
+            view: "Attendance",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -2292,27 +2300,35 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
             </span>
           </div>
           <div className="attention-list">
-            {attentionItems.map(item => (
-              <button
-                className="attention-row"
-                key={item.label}
-                onClick={() => onNavigate(item.view)}
-              >
-                <span className={`attention-icon ${item.tone}`}>
-                  <item.icon size={16} />
-                </span>
-                <span className="min-w-0 flex-1 text-left">
-                  <span className="block text-sm font-medium text-[var(--text-secondary)]">
-                    {item.label}
+            {attentionItems.length === 0 ? (
+              <div className="empty-state px-5 py-8">
+                <ShieldCheck size={22} />
+                Nothing needs follow-up right now — attendance, grades and
+                ledgers are all in order.
+              </div>
+            ) : (
+              attentionItems.map(item => (
+                <button
+                  className="attention-row"
+                  key={item.label}
+                  onClick={() => onNavigate(item.view)}
+                >
+                  <span className={`attention-icon ${item.tone}`}>
+                    <item.icon size={16} />
                   </span>
-                  <span className="mt-1 block text-[12.5px] text-[var(--text-muted)]">
-                    {item.detail}
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block text-sm font-medium text-[var(--text-secondary)]">
+                      {item.label}
+                    </span>
+                    <span className="mt-1 block text-[12.5px] text-[var(--text-muted)]">
+                      {item.detail}
+                    </span>
                   </span>
-                </span>
-                <span className="attention-value">{item.value}</span>
-                <ChevronRight size={15} className="text-[var(--text-muted)]" />
-              </button>
-            ))}
+                  <span className="attention-value">{item.value}</span>
+                  <ChevronRight size={15} className="text-[var(--text-muted)]" />
+                </button>
+              ))
+            )}
           </div>
         </section>
 
@@ -3410,23 +3426,12 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
   const [paymentReference, setPaymentReference] = useState("");
-  const [recipientEmail, setRecipientEmail] = useState("");
 
   const { rows: revenueData, loading: financeMonthsLoading } = useFinanceMonthly();
   const { rows: feeCategories, loading: feeCategoriesLoading } = useFeeCategories();
   const { rows: invoices, loading: invoicesViewLoading } = useInvoices();
   const { rows: payments, loading: paymentsLoading } = usePayments();
   const { rows: enrolledStudents } = useStudents();
-
-  useEffect(() => {
-    if (recordStudent) {
-      const email =
-        (recordStudent as any).email ||
-        (recordStudent as any).primary_email ||
-        `${recordStudent.name.toLowerCase().replace(/[^a-z0-9]/g, ".")}@example.com`;
-      setRecipientEmail(email);
-    }
-  }, [recordStudent]);
 
   const matchingStudents = useMemo(() => {
     if (!studentSearchQuery.trim()) return [];
@@ -3436,34 +3441,27 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       .slice(0, 6);
   }, [enrolledStudents, studentSearchQuery]);
 
+  // Invoices with money still owed, for the dialog's invoice picker.
+  const collectableInvoices = useMemo(
+    () => invoices.filter((i) => Number(i.outstanding ?? i.amount ?? 0) > 0),
+    [invoices]
+  );
+
+  // The invoice the payment settles against. Picking a student narrows to that
+  // student's real invoice row; if the student has none yet there is nothing to
+  // settle and the desk must issue the invoice first.
   const selectedInvoice = useMemo(() => {
     if (selectedInvoiceId) {
       return invoices.find(i => String(i.id).toLowerCase() === selectedInvoiceId.toLowerCase()) || null;
     }
     if (recordStudent) {
-      const found = invoices.find(
-        i =>
-          (recordStudent.id && (i.student_id === recordStudent.id || (i as any).studentId === recordStudent.id)) ||
-          i.student.toLowerCase() === recordStudent.name.toLowerCase()
+      return (
+        invoices.find(
+          i =>
+            (recordStudent.id && (i.student_id === recordStudent.id || (i as any).studentId === recordStudent.id)) ||
+            i.student.toLowerCase() === recordStudent.name.toLowerCase()
+        ) || null
       );
-      if (found) return found;
-
-      const totalFee = getAnnualFeeForGrade(recordStudent.grade);
-      return {
-        id: `INV-2026-${String(recordStudent.id).slice(-4) || "1201"}`,
-        student_id: String(recordStudent.id),
-        studentId: String(recordStudent.id),
-        student: recordStudent.name,
-        family: `${recordStudent.name.split(" ").slice(-1)[0] || recordStudent.name} family`,
-        grade: recordStudent.grade || "Grade 6",
-        section: recordStudent.section || "A",
-        due_date: "15 Oct 2026",
-        total: totalFee,
-        paid: 0,
-        amount: totalFee,
-        outstanding: totalFee,
-        status: "Due" as const,
-      };
     }
     return null;
   }, [invoices, selectedInvoiceId, recordStudent]);
@@ -3477,16 +3475,11 @@ function FinanceView({ onBack }: { onBack: () => void }) {
 
   // Overall Financial Metrics
   const billed = useMemo(
-    () => invoices.reduce((s, i) => s + (i.total ?? i.amount ?? 50000), 0),
+    () => invoices.reduce((s, i) => s + (i.total ?? i.amount ?? 0), 0),
     [invoices]
   );
   const collected = useMemo(
-    () =>
-      invoices.reduce(
-        (s, i) =>
-          s + (i.paid ?? (i.status === "Paid" ? (i.total ?? i.amount) : 0)),
-        0
-      ),
+    () => invoices.reduce((s, i) => s + (i.paid ?? 0), 0),
     [invoices]
   );
   const outstanding = Math.max(0, billed - collected);
@@ -3562,21 +3555,25 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const receiptsPager = usePagination(filteredReceipts);
   const pageReceipts = receiptsPager.pageRows;
 
-  // Cohort Class-wise Breakdown Data
+  // Cohort Class-wise Breakdown Data — totals straight off the invoice rows.
   const cohortBreakdown = useMemo(() => {
     const grades = ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
     return grades.map(g => {
       const gradeInvoices = invoices.filter(i => (i as any).grade === g || ((i as any).grade && (i as any).grade.includes(g.replace("Grade ", ""))));
       const pupilCount = gradeInvoices.length;
-      const feePerPupil = g >= "Grade 9" ? 60000 : 50000;
-      const totalBilled = gradeInvoices.reduce((s, i) => s + (i.total ?? feePerPupil), 0) || (pupilCount * feePerPupil);
-      const totalPaid = gradeInvoices.reduce((s, i) => s + (i.paid ?? (i.status === "Paid" ? feePerPupil : 0)), 0);
+      const totalBilled = gradeInvoices.reduce(
+        (s, i) => s + (i.total ?? i.amount ?? 0),
+        0
+      );
+      const totalPaid = gradeInvoices.reduce((s, i) => s + (i.paid ?? 0), 0);
       const totalPending = Math.max(0, totalBilled - totalPaid);
       const collectionPct = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 1000) / 10 : 0;
       return {
         grade: g,
         pupilCount,
-        feePerPupil,
+        // Real average assessed per pupil with an invoice behind the grade;
+        // grades with no billing yet show a dash rather than an invented fee.
+        feePerPupil: pupilCount > 0 ? Math.round(totalBilled / pupilCount) : null,
         totalBilled,
         totalPaid,
         totalPending,
@@ -3608,7 +3605,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       (inv as any).section || "—",
       inv.family,
       inv.due_date,
-      inv.total ?? inv.amount ?? 50000,
+      inv.total ?? inv.amount ?? 0,
       inv.paid ?? 0,
       inv.outstanding ?? inv.amount ?? 0,
       inv.status,
@@ -4105,8 +4102,8 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   </tr>
                 ) : (
                   pageInvoices.map(row => {
-                    const annualFee = row.total ?? (row as any).amount ?? 50000;
-                    const paidAmount = row.paid ?? (row.status === "Paid" ? annualFee : 0);
+                    const annualFee = row.total ?? (row as any).amount ?? 0;
+                    const paidAmount = row.paid ?? 0;
                     const outstandingBalance = row.outstanding ?? Math.max(0, annualFee - paidAmount);
                     return (
                       <tr key={row.id}>
@@ -4301,7 +4298,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   </tr>
                 ) : (
                   overdueInvoices.map(row => {
-                    const totalFee = row.total ?? (row as any).amount ?? 50000;
+                    const totalFee = row.total ?? (row as any).amount ?? 0;
                     const paid = row.paid ?? 0;
                     const overdueAmt = row.outstanding ?? Math.max(0, totalFee - paid);
                     return (
@@ -4571,7 +4568,9 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     </td>
                     <td>{row.pupilCount} pupils</td>
                     <td className="font-medium text-[var(--text-secondary)]">
-                      ₹{row.feePerPupil.toLocaleString("en-IN")} / pupil
+                      {row.feePerPupil != null
+                        ? `₹${row.feePerPupil.toLocaleString("en-IN")} / pupil`
+                        : "—"}
                     </td>
                     <td className="font-semibold text-[var(--text-primary)]">
                       ₹{(row.totalBilled / 100000).toFixed(2)}L
@@ -4759,6 +4758,32 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               )}
             </div>
 
+            {/* The manual-payment endpoint anchors on an invoice — the server
+                resolves the school, balance and receipt from this selection. */}
+            <div style={{ gridColumn: "span 2" }}>
+              <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] block mb-1">
+                Invoice to settle *
+              </label>
+              <FormSelect
+                value={selectedInvoice ? String(selectedInvoice.id) : ""}
+                onChange={(v) => setSelectedInvoiceId(v)}
+                ariaLabel="Select the invoice this payment settles"
+                placeholder="Select an invoice with an outstanding balance…"
+                options={collectableInvoices.map((inv) => ({
+                  value: String(inv.id),
+                  label: `${inv.student} · ${inv.id} · ₹${Number(
+                    inv.outstanding ?? inv.amount ?? 0
+                  ).toLocaleString("en-IN")} due`,
+                }))}
+              />
+              {recordStudent && !selectedInvoice && (
+                <p className="text-[11px] text-[var(--text-muted)] mt-1.5">
+                  No invoice is issued for {recordStudent.name} yet. Raise the
+                  invoice before recording a collection against it.
+                </p>
+              )}
+            </div>
+
             {selectedInvoice && (
               <div
                 style={{
@@ -4772,7 +4797,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                   <span className="text-[var(--text-muted)]">Annual Tuition Fee ({String((selectedInvoice as any).grade || "Enrolled")}):</span>
-                  <strong className="text-[var(--text-primary)]">₹{Number(selectedInvoice.total || (selectedInvoice as any).grade >= "Grade 9" ? 60000 : 50000).toLocaleString("en-IN")}</strong>
+                  <strong className="text-[var(--text-primary)]">₹{Number(selectedInvoice.total || 0).toLocaleString("en-IN")}</strong>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                   <span className="text-[var(--text-muted)]">Paid to date:</span>
@@ -4825,18 +4850,18 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             </label>
 
             <label>
-              Payment Reference / UTR (Optional)
+              Payment Reference *
               <input
                 value={paymentReference}
                 onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="e.g. UTR / Transaction ID / Slip No"
+                placeholder="e.g. UTR / Cheque no. / Receipt book no."
               />
               <span className="text-[11px] text-[var(--text-muted)] mt-1.5 block">
-                Recorded on receipt & payment ledger.
+                Required — this reference is the ledger's duplicate-payment guard.
               </span>
             </label>
 
-            {/* Row 2: Payment Method & Receipt Email */}
+            {/* Row 2: Payment Method */}
             <label>
               Payment Method *
               <FormSelect
@@ -4850,19 +4875,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   { value: "Cheque", label: "Cheque / Demand Draft" },
                 ]}
               />
-            </label>
-
-            <label>
-              Receipt Email *
-              <input
-                type="email"
-                value={recipientEmail}
-                onChange={(e) => setRecipientEmail(e.target.value)}
-                placeholder="registered.student@example.com"
-              />
-              <span className="text-[11px] text-[var(--text-muted)] mt-1.5 block">
-                Official payment receipt will be sent to this email.
-              </span>
             </label>
 
             {/* Row 3: Payment Date */}
@@ -4887,7 +4899,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 setStudentSearchQuery("");
                 setPaymentAmount("");
                 setPaymentReference("");
-                setRecipientEmail("");
+                
               }}
             >
               Cancel
@@ -4895,8 +4907,13 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             <button
               className="primary-button"
               onClick={async () => {
-                if (!recordStudent && !studentSearchQuery) {
-                  toast.error("Student required", { description: "Please search and select a student to record fee payment." });
+                // The manual-payment endpoint resolves the invoice, school and
+                // outstanding balance server-side, so an invoice selection is
+                // what anchors the entry — not a free-typed student name.
+                if (!selectedInvoice) {
+                  toast.error("Invoice required", {
+                    description: "Select the invoice this payment settles.",
+                  });
                   return;
                 }
                 const numAmount = Number(String(paymentAmount || "").replace(/[^0-9.]/g, ""));
@@ -4904,19 +4921,22 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   toast.error("Invalid amount", { description: "Please enter a valid payment amount." });
                   return;
                 }
-                const targetName = recordStudent?.name || studentSearchQuery;
+                const reference = paymentReference.trim();
+                if (reference.length < 2) {
+                  toast.error("Reference required", {
+                    description: "Enter the UTR, cheque number or receipt book number for this payment.",
+                  });
+                  return;
+                }
+                const targetName = selectedInvoice.student || recordStudent?.name;
 
                 try {
-                  const res = await recordFeePayment({
-                    studentId: recordStudent?.id != null ? String(recordStudent.id) : undefined,
-                    studentName: targetName,
-                    invoiceId: selectedInvoiceId ? String(selectedInvoiceId) : selectedInvoice?.id != null ? String(selectedInvoice.id) : undefined,
+                  const res = await recordManualPayment({
+                    invoiceId: String(selectedInvoice.id),
                     amount: numAmount,
                     method: paymentMethod,
-                    date: paymentDate,
-                    reference: paymentReference,
-                    recipientEmail: recipientEmail.trim(),
-                    grade: recordStudent?.grade || (selectedInvoice as any)?.grade,
+                    reference,
+                    paidOn: paymentDate,
                   });
 
                   setShowDialog(false);
@@ -4925,15 +4945,15 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   setStudentSearchQuery("");
                   setPaymentAmount("");
                   setPaymentReference("");
-                  setRecipientEmail("");
+                  
 
-                  if (res.isPaidInFull) {
-                    toast.success("Fees Settled in Full! 🎉", {
-                      description: `₹${numAmount.toLocaleString("en-IN")} received for ${targetName}. Receipt: ${res.receiptNo} generated and emailed to ${res.recipientEmail}. Account settled.`,
+                  if (res.duplicate) {
+                    toast.info("Payment already recorded", {
+                      description: `Receipt ${res.receiptNo} was already on the ledger for reference “${reference}”. Nothing was double-credited.`,
                     });
                   } else {
-                    toast.success("Payment Recorded & Receipt Sent! ✉️", {
-                      description: `₹${numAmount.toLocaleString("en-IN")} logged for ${targetName}. Receipt: ${res.receiptNo} emailed to ${res.recipientEmail}. Remaining balance: ₹${res.newBalance.toLocaleString("en-IN")}.`,
+                    toast.success("Payment recorded", {
+                      description: `₹${numAmount.toLocaleString("en-IN")} settled against ${selectedInvoice.invoice_no ? `invoice ${selectedInvoice.invoice_no}` : "the selected invoice"} for ${targetName}. Receipt: ${res.receiptNo}.`,
                     });
                   }
                 } catch (e) {
@@ -4943,7 +4963,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 }
               }}
             >
-              Record payment & Send Receipt
+              Record payment
             </button>
           </div>
         </AppDialog>
@@ -5019,7 +5039,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               </h4>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                 <span className="text-[var(--text-secondary)]">Annual Unified Tuition Fee:</span>
-                <strong>₹{Number(inspectingInvoice.total ?? 50000).toLocaleString("en-IN")}</strong>
+                <strong>₹{Number(inspectingInvoice.total ?? 0).toLocaleString("en-IN")}</strong>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                 <span className="text-[var(--text-secondary)]">Total Paid to Date:</span>
@@ -6494,6 +6514,11 @@ function AnalyticsView({
             )}
 
             {/* 4-Tier Breakdown Cards (Equal Height) */}
+            {graded.length === 0 ? (
+              <div className="mb-4 rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-xs text-[var(--text-muted)]">
+                Band breakdown appears once graded results exist.
+              </div>
+            ) : (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
               <div className="p-3.5 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
                 <div className="flex items-center gap-2 mb-1">
@@ -6563,6 +6588,7 @@ function AnalyticsView({
                 </div>
               </div>
             </div>
+            )}
           </section>
 
           {/* Paired Symmetrical Row: Radar vs AI Live Intelligence (Equal Heights & Padding) */}
@@ -7880,7 +7906,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
                     spellCheck={false}
                     onChange={event => setUsername(event.target.value)}
                     placeholder="e.g. principal"
-                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] font-mono text-sm text-[var(--brand)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
+                    className="w-full h-11 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] font-mono text-sm text-[var(--text-primary)] focus:border-[var(--brand)] outline-none transition-all placeholder:text-[var(--text-muted)]"
                   />
                   <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                     This is the unique handle you type on the login screen. Your official recovery email remains unchanged.

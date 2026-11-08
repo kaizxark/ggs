@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Breadcrumb } from "./Breadcrumb";
 import {
   useStudentsView,
   useInvoicesView,
@@ -297,18 +298,11 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       {/* Header with Title and Action */}
       <div className="page-intro">
         <div>
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1">
-            <span
-              onClick={onBack}
-              role="button"
-              tabIndex={0}
-              className="hover:text-[var(--text-primary)] cursor-pointer transition-colors"
-            >
-              Global Kids School
-            </span>
-            <span>/</span>
-            <span className="text-[var(--text-primary)] font-semibold">Reports</span>
-          </div>
+          <Breadcrumb
+            parent="Global Kids School"
+            current="Reports & Data Exports"
+            onParentClick={onBack}
+          />
           <h1 className="page-title">Reports & Data Exports</h1>
         </div>
         <button
@@ -331,7 +325,11 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                 <IndianRupee size={20} />
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-[var(--warning-soft)] text-[var(--warning)] border border-[var(--warning-border)]">
-                {feeStats.defaulterCount} Defaulters
+                {invoicesLoading
+                  ? "Loading…"
+                  : invoices.length === 0
+                    ? "No dues recorded yet"
+                    : `${feeStats.defaulterCount} Defaulters`}
               </span>
             </div>
             <h3 className="mt-4 text-[15px] font-bold text-[var(--text-primary)]">
@@ -370,14 +368,18 @@ export function ReportsView({ onBack }: ReportsViewProps) {
               </span>
               <span
                 className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${
-                  attendanceStats.average >= 90
-                    ? "bg-[var(--success-soft)] text-[var(--success)] border-[var(--success-border)]"
-                    : attendanceStats.average >= 75
-                      ? "bg-[var(--warning-soft)] text-[var(--warning)] border-[var(--warning-border)]"
-                      : "bg-[var(--danger-soft)] text-[var(--danger)] border-[var(--danger-border)]"
+                  attendanceStats.average === 0
+                    ? "bg-[var(--bg-raised)] text-[var(--text-muted)] border-[var(--border)]"
+                    : attendanceStats.average >= 90
+                      ? "bg-[var(--success-soft)] text-[var(--success)] border-[var(--success-border)]"
+                      : attendanceStats.average >= 75
+                        ? "bg-[var(--warning-soft)] text-[var(--warning)] border-[var(--warning-border)]"
+                        : "bg-[var(--danger-soft)] text-[var(--danger)] border-[var(--danger-border)]"
                 }`}
               >
-                {attendanceStats.average}% Average
+                {attendanceStats.average > 0
+                  ? `${attendanceStats.average}% Average`
+                  : "No attendance data yet"}
               </span>
             </div>
             <h3 className="mt-4 text-[15px] font-bold text-[var(--text-primary)]">
@@ -415,7 +417,11 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                 <Users size={20} />
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-[var(--info-soft)] text-[var(--info)] border border-[var(--info-border)]">
-                {studentStats.total} Enrolled
+                {studentsLoading
+                  ? "Loading…"
+                  : studentStats.total === 0
+                    ? "No pupils recorded yet"
+                    : `${studentStats.total} Enrolled`}
               </span>
             </div>
             <h3 className="mt-4 text-[15px] font-bold text-[var(--text-primary)]">
@@ -453,7 +459,11 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                 <GraduationCap size={20} />
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-[var(--violet-soft)] text-[var(--violet)] border border-[var(--violet-border)]">
-                {staffStats.total} Faculty
+                {staffLoading
+                  ? "Loading…"
+                  : staffStats.total === 0
+                    ? "No faculty recorded yet"
+                    : `${staffStats.total} Faculty`}
               </span>
             </div>
             <h3 className="mt-4 text-[15px] font-bold text-[var(--text-primary)]">

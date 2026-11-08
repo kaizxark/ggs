@@ -141,6 +141,7 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
     "profiles",
     "staff",
     "subjects",
+    "student_documents",
   ]);
   const hasLoadedRef = useRef(false);
 
