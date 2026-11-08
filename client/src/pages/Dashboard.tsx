@@ -8678,7 +8678,7 @@ export default function Home() {
         // cards alone left two thirds of the page blank, which read as a
         // broken layout rather than as loading.
         return (
-          <div className="page-stack" role="status" aria-busy="true">
+          <div className="page-stack skeleton-fade" role="status" aria-busy="true">
             <span className="sr-only">Loading your dashboard</span>
             <div className="metric-grid">
               <SkeletonMetric />

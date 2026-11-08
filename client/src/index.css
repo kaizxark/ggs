@@ -1278,6 +1278,7 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .skeleton-line,
   .pupil-m-sk { animation: none; background-image: none; }
   .erp-skeleton-bar, .erp-skeleton-row > * { animation: none; }
+  .skeleton-region, .skeleton-fade { animation: none; }
 }
 /* One status region per group, so a screen reader hears "Loading table" once
    instead of walking a column of empty boxes.
@@ -1287,6 +1288,11 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
    announcement it exists to make. Callers that need a different layout (the
    topbar identity block) set it via their own class. */
 .skeleton-region { display: block; }
+/* Placeholders appear softly rather than snapping on at full contrast. The
+   real content still replaces them instantly; this only takes the edge off
+   the first frame. */
+@keyframes skeleton-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.skeleton-region, .skeleton-fade { animation: skeleton-fade-in .3s ease-out both; }
 .sr-only {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
