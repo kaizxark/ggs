@@ -2908,6 +2908,115 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   padding: 4px 0 20px;
 }
 
+.pupil-drawer .pupil-drawer-body {
+  padding-bottom: 76px;
+}
+
+/* Floating bottom actions for the pupil drawer */
+.drawer-floating-gradient {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 84px;
+  background: linear-gradient(
+    to top,
+    var(--bg-panel) 35%,
+    color-mix(in srgb, var(--bg-panel) 75%, transparent) 70%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 18;
+}
+
+.drawer-floating-actions {
+  position: absolute;
+  bottom: 18px;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.drawer-pill-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1;
+  padding: 8px 16px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform .14s var(--ease-out), box-shadow .14s var(--ease-out), background-color .14s var(--ease-out), border-color .14s var(--ease-out), color .14s var(--ease-out);
+  user-select: none;
+}
+
+.drawer-pill-button.secondary {
+  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  box-shadow: 0 4px 14px rgba(24, 20, 16, 0.08), 0 1px 3px rgba(24, 20, 16, 0.04);
+}
+.drawer-pill-button.secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--brand);
+  color: var(--text-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(24, 20, 16, 0.12);
+}
+
+.drawer-pill-button.danger {
+  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-strong);
+  color: var(--danger);
+  box-shadow: 0 4px 14px rgba(24, 20, 16, 0.08), 0 1px 3px rgba(24, 20, 16, 0.04);
+}
+.drawer-pill-button.danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.14);
+}
+
+.drawer-pill-button.primary {
+  background: var(--brand);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(224, 90, 43, 0.38), 0 1px 3px rgba(224, 90, 43, 0.2);
+}
+.drawer-pill-button.primary:hover {
+  background: var(--brand-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(224, 90, 43, 0.48);
+}
+.drawer-pill-button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 640px) {
+  .drawer-floating-actions {
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    right: 14px;
+    left: 14px;
+    justify-content: flex-end;
+  }
+  .drawer-pill-button {
+    padding: 7px 13px;
+    font-size: 12.5px;
+  }
+}
+
 .drawer-footer {
   display: flex; flex: 0 0 auto; align-items: center; gap: 10px;
   border-top: 1px solid var(--border-strong);

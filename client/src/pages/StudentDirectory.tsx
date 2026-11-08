@@ -13,6 +13,7 @@ import {
   Layers,
   Maximize2,
   Minimize2,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
@@ -1094,24 +1095,38 @@ function StudentDrawer({
         )}
       </div>
 
-      <div className="drawer-footer">
+      <div className="drawer-floating-gradient" aria-hidden="true" />
+      <div className="drawer-floating-actions">
         {mayEdit && (
-          <button className="secondary-button compact" onClick={onEdit}>
-            Edit details
+          <button
+            type="button"
+            className="drawer-pill-button secondary"
+            onClick={onEdit}
+            title="Edit pupil details"
+          >
+            <Pencil size={13.5} />
+            <span>Edit details</span>
           </button>
         )}
         {detail?.viewer.role === "super_admin" && (
           <button
-            className="secondary-button compact danger"
+            type="button"
+            className="drawer-pill-button danger"
             onClick={() => setConfirmingDelete(true)}
+            title="Delete pupil record permanently"
           >
-            <Trash2 size={14} />
-            Delete
+            <Trash2 size={13.5} />
+            <span>Delete</span>
           </button>
         )}
-        <button className="primary-button compact" onClick={onOpenProfile}>
-          Open full profile
-          <ExternalLink size={14} />
+        <button
+          type="button"
+          className="drawer-pill-button primary"
+          onClick={onOpenProfile}
+          title="Open complete pupil profile"
+        >
+          <span>Open</span>
+          <ExternalLink size={13.5} />
         </button>
       </div>
 
