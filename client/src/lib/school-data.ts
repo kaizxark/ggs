@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "./supabase";
 import { notifyDataChanged, useDataRevision } from "./live-data";
+import { subscribeToTable } from "./realtime";
 
 export type RowId = string | number;
 export type BaseRow = { id: RowId } & Record<string, unknown>;
@@ -328,42 +329,6 @@ export interface ReportExport extends BaseRow { name: string; created: string; s
 export interface SettingRow extends BaseRow { key: string; value: string | number | boolean; }
 
 /* ------------------------------------------------------------------ */
-/* Realtime channel registry — one channel per table, fanned out       */
-/* ------------------------------------------------------------------ */
-
-type ChangePayload = { eventType: string; new: Record<string, unknown>; old: Record<string, unknown> };
-
-const channelListeners = new Map<string, Set<(payload: ChangePayload) => void>>();
-const channelHandles = new Map<string, { unsubscribe: () => void }>();
-
-function subscribeToTable(table: string, key: string, cb: (payload: ChangePayload) => void): () => void {
-  const mapKey = `${table}::${key}`;
-  let listeners = channelListeners.get(mapKey);
-  if (!listeners) {
-    listeners = new Set();
-    channelListeners.set(mapKey, listeners);
-  }
-  listeners.add(cb);
-  if (listeners.size === 1) {
-    const channel = supabase
-      .channel(`public:${mapKey}`)
-      .on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
-        listeners?.forEach((fn) => fn(payload as unknown as ChangePayload));
-      })
-      .subscribe();
-    channelHandles.set(mapKey, channel);
-  }
-  return () => {
-    listeners?.delete(cb);
-    if (listeners && listeners.size === 0) {
-      channelHandles.get(mapKey)?.unsubscribe();
-      channelHandles.delete(mapKey);
-      channelListeners.delete(mapKey);
-    }
-  };
-}
-
-/* ------------------------------------------------------------------ */
 /* Generic table hook                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -440,20 +405,43 @@ export function useSupabaseTable<T extends BaseRow>(
 
     let unsubscribe: (() => void) | undefined;
     if (realtime) {
-      unsubscribe = subscribeToTable(table, eqKey, (payload) => {
+      unsubscribe = subscribeToTable(table, (change) => {
         if (cancelled) return;
-        if (options.eq && payload.eventType !== "DELETE") {
-          const rowValue = String((payload.new as Record<string, unknown>)?.[options.eq.column] ?? "");
-          if (rowValue !== String(options.eq.value)) return;
-        }
+        const matchesFilter = (row: Record<string, unknown>) => {
+          if (!options.eq) return true;
+          return String(row?.[options.eq.column] ?? "") === String(options.eq.value);
+        };
         setRows((current) => {
-          if (payload.eventType === "INSERT") return [...current, payload.new as unknown as T];
-          if (payload.eventType === "UPDATE") {
-            const incoming = payload.new as unknown as T;
-            return current.map((row) => (String(row[pk]) === String(incoming[pk]) ? incoming : row));
+          if (change.eventType === "INSERT") {
+            const incoming = change.new as unknown as T;
+            if (!matchesFilter(change.new)) return current;
+            // Upsert by primary key: a repeated INSERT (reconnect replay, or a
+            // second tab's write) must not duplicate the row.
+            if (current.some((row) => String(row[pk]) === String(incoming[pk]))) {
+              return current.map((row) =>
+                String(row[pk]) === String(incoming[pk]) ? incoming : row
+              );
+            }
+            return [...current, incoming];
           }
-          if (payload.eventType === "DELETE") {
-            const gone = payload.old as unknown as T;
+          if (change.eventType === "UPDATE") {
+            const incoming = change.new as unknown as T;
+            // An update can move a row out of the filtered set (or into it).
+            if (!matchesFilter(change.new)) {
+              return current.filter((row) => String(row[pk]) !== String(incoming[pk]));
+            }
+            if (!current.some((row) => String(row[pk]) === String(incoming[pk]))) {
+              return [...current, incoming];
+            }
+            return current.map((row) =>
+              String(row[pk]) === String(incoming[pk]) ? incoming : row
+            );
+          }
+          if (change.eventType === "DELETE") {
+            // RLS is not applied to DELETE, so this payload only carries the
+            // primary key. Removing the matching row is safe: it can only
+            // remove a row this client was already allowed to read.
+            const gone = change.old as unknown as T;
             return current.filter((row) => String(row[pk]) !== String(gone[pk]));
           }
           return current;
@@ -611,7 +599,7 @@ export interface Settings {
 }
 
 export function useSettings() {
-  const { rows, source, loading, upsert } = useSupabaseTable<SettingRow>("settings", mockSettings, { pk: "key", realtime: false });
+  const { rows, source, loading, upsert } = useSupabaseTable<SettingRow>("settings", mockSettings, { pk: "key" });
 
   const get = (key: string) => rows.find((row) => row.key === key)?.value;
   const str = (key: string, fallback: string) => {

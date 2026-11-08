@@ -28,6 +28,7 @@ import { Breadcrumb } from "@/components/Breadcrumb";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { DrawerBackdrop } from "@/components/DrawerBackdrop";
 import { useDataRevision } from "@/lib/live-data";
+import { useRealtimeInvalidation } from "@/lib/use-realtime";
 import { MetricBlock } from "@/components/MetricBlock";
 import { SkeletonMetric } from "@/components/ErpSkeleton";
 import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
@@ -198,6 +199,19 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
   const [counts, setCounts] = useState<StudentCounts | null>(null);
   const [countsLoading, setCountsLoading] = useState(true);
   const dataRevision = useDataRevision();
+  // The directory is served by `/api/students`, so it does not go through
+  // `useErpView`'s table map. These are the tables that request reads.
+  const realtimeRevision = useRealtimeInvalidation([
+    "students",
+    "enrollments",
+    "classrooms",
+    "attendance",
+    "exam_results",
+    "invoices",
+    "student_guardians",
+    "staff",
+    "profiles",
+  ]);
 
   // Debounce: 300 ms is long enough to coalesce a word and short enough that the
   // list feels like it is following along.
@@ -232,7 +246,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [filters, dataRevision]
+    [filters, dataRevision, realtimeRevision]
   );
 
   const loadCounts = useCallback(async () => {
@@ -244,7 +258,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
     } finally {
       setCountsLoading(false);
     }
-  }, [dataRevision]);
+  }, [dataRevision, realtimeRevision]);
 
   useEffect(() => {
     void loadCounts();

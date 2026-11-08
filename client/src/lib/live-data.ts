@@ -17,7 +17,6 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { supabase } from "./supabase";
 
 type Listener = () => void;
 type Invalidator = () => void;
@@ -105,29 +104,13 @@ if (channel) {
 
 /*
  * Realtime is the second source of truth: a row changed by somebody else (or
- * by another device) arrives here without a reload. The tables are the ones
- * that drive counts, names and money; `profiles` and `settings` are included
- * so a display-name or school-name edit propagates too.
+ * by another device) arrives without a reload.
+ *
+ * That feed now lives in `realtime.ts` and is subscribed per view, so a screen
+ * only listens to the tables it actually reads. This module stays responsible
+ * for the *local* signal — a mutation in this tab, a write forwarded from
+ * another tab, and a refetch when the tab is brought back.
  */
-if (typeof window !== "undefined") {
-  const live = supabase.channel("erp-live-data");
-  for (const table of [
-    "students",
-    "staff",
-    "profiles",
-    "settings",
-    "invoices",
-    "payments",
-  ]) {
-    live.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table },
-      () => bump(false)
-    );
-  }
-  live.subscribe();
-}
-
 if (typeof window !== "undefined") {
   const refresh = () => {
     // Focus and visibilitychange both fire when a tab is brought back; one

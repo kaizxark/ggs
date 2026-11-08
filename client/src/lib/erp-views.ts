@@ -19,6 +19,7 @@ import {
   registerDataInvalidator,
   useDataRevision,
 } from "./live-data";
+import { useRealtimeInvalidation } from "./use-realtime";
 import {
   ROLE_LABELS,
   effectiveRole,
@@ -217,6 +218,59 @@ export function clearErpCache() {
 
 registerDataInvalidator(clearErpCache);
 
+/**
+ * Which database tables each view reads.
+ *
+ * Realtime is subscribed per view rather than globally so a change to, say,
+ * `announcements` does not reload the fee ledger. The list mirrors the
+ * `fetchAll` calls in the loader directly below it; aggregate views that use
+ * an RPC list the tables that RPC reads.
+ */
+const VIEW_TABLES: Record<string, string[]> = {
+  students: ["students", "enrollments", "classrooms", "attendance", "exam_results", "invoices"],
+  staff: ["staff", "profiles"],
+  attendance_daily: ["attendance", "classrooms", "students"],
+  class_attendance: ["attendance", "classrooms", "students"],
+  dashboard_attendance: ["attendance", "classrooms", "students", "enrollments"],
+  student_counts: ["students"],
+  invoices: ["invoices", "students", "classrooms", "enrollments", "payments"],
+  payments: ["payments", "invoices", "students"],
+  finance_monthly: ["payments", "invoices"],
+  fee_categories: ["invoices"],
+  exams: ["examinations", "classrooms"],
+  exam_results: ["exam_results", "examinations", "students", "classrooms", "enrollments"],
+  subjects: ["exam_results", "staff", "classrooms"],
+  subject_averages: ["exam_results", "staff", "classrooms"],
+  grade_outcomes: ["exam_results", "classrooms", "enrollments", "attendance"],
+  performance_trend: ["examinations", "exam_results"],
+  health_metrics: ["attendance", "exam_results", "invoices", "payments"],
+  announcements: ["announcements"],
+  messages: ["messages", "profiles"],
+  notifications: ["notifications"],
+  people: ["staff", "profiles"],
+  library_books: ["library_books", "library_loans"],
+  schedule: ["schedule"],
+  report_exports: ["report_exports"],
+  timetable: ["settings", "timetable"],
+  activity_log: ["activity_log", "activities", "activity_participations"],
+};
+
+/**
+ * Drop the raw-table cache for the tables a realtime event touched.
+ *
+ * `fetchAll` has no TTL: it is cleared by `notifyDataChanged` after a local
+ * write. A remote write has to clear it the same way, otherwise the view
+ * re-runs its loader and receives the cached pre-change rows.
+ */
+function invalidateRows(tables: readonly string[]) {
+  if (!tables.length) return;
+  for (const key of rowCache.keys()) {
+    if (tables.some((table) => key.startsWith(`${table}|`))) {
+      rowCache.delete(key);
+    }
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* View loader                                                         */
 /* ------------------------------------------------------------------ */
@@ -248,6 +302,9 @@ function useErpView<T extends { id: string | number }>(
   const [source, setSource] = useState<"mock" | "db">("db");
   const [nonce, setNonce] = useState(0);
   const revision = useDataRevision();
+  const tables = VIEW_TABLES[key] ?? [];
+  const realtimeRevision = useRealtimeInvalidation(tables);
+  const handledRealtime = useRef(0);
   const mockRef = useRef(mockRows);
   mockRef.current = mockRows;
   const loadRef = useRef(load);
@@ -263,6 +320,16 @@ function useErpView<T extends { id: string | number }>(
       return;
     }
     let cancelled = false;
+    // A remote write must not be answered from the row cache. Local writes go
+    // through `clearErpCache`; realtime invalidation has to do the same for
+    // just the tables this view reads.
+    if (realtimeRevision !== handledRealtime.current) {
+      handledRealtime.current = realtimeRevision;
+      if (realtimeRevision > 0) {
+        cache.delete(`${key}:${nonce}`);
+        invalidateRows(tables);
+      }
+    }
     // Only show loading skeleton on initial mount; keep rendered data steady during revalidations
     if (!hasLoadedRef.current) {
       setLoading(true);
@@ -288,7 +355,7 @@ function useErpView<T extends { id: string | number }>(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, nonce, enabled, revision, ...deps]);
+  }, [key, nonce, enabled, revision, realtimeRevision, ...deps]);
 
   const reload = useCallback(() => {
     hasLoadedRef.current = false;
@@ -1345,6 +1412,10 @@ export interface CurrentUser {
 export function useCurrentUser(): CurrentUser | null {
   const [session, setSession] = useState<Session | null>(null);
   const revision = useDataRevision();
+  // A role, name or avatar changed by an admin has to reach the affected
+  // person's open tab. `staff` is included because the sidebar title falls
+  // back to the staff record when the profile has no display name.
+  const realtimeRevision = useRealtimeInvalidation(["profiles", "staff"]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1420,7 +1491,7 @@ export function useCurrentUser(): CurrentUser | null {
     return () => {
       cancelled = true;
     };
-  }, [userId, session?.user?.email, revision]);
+  }, [userId, session?.user?.email, revision, realtimeRevision]);
 
   return profile;
 }
