@@ -142,7 +142,7 @@ export default function ResetPassword() {
 
       <div className="relative w-full max-w-[420px]">
         <div className="flex flex-col items-center mb-8">
-          <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-20 w-20 rounded-full" />
+          <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-24 w-24 object-contain" />
           <p className="mt-4 text-[12.5px] font-semibold text-[var(--text-muted)] tracking-[0.14em] uppercase">
             School OS · Admin Portal
           </p>

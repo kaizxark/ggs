@@ -2212,6 +2212,11 @@ function ReportCardDrawer({
           >
             {/* School Crest & Institutional Header */}
             <div style={{ textAlign: "center", borderBottom: "2px solid var(--border)", paddingBottom: "16px", marginBottom: "18px" }}>
+              <img
+                src="/global-kids-logo.svg"
+                alt="Global Kids School"
+                style={{ width: 56, height: 56, objectFit: "contain", margin: "0 auto 10px", display: "block" }}
+              />
               <h2 style={{ fontSize: "19px", fontWeight: 800, letterSpacing: "0.02em", color: "var(--text-primary)", margin: 0 }}>
                 GLOBAL KIDS SCHOOL, TUMAKURU
               </h2>

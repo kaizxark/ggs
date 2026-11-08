@@ -176,7 +176,7 @@ export default function Login() {
           <img
             src="/global-kids-logo.svg"
             alt="Global Kids School"
-            className="h-20 w-20 rounded-full"
+            className="h-24 w-24 object-contain"
           />
           <p className="mt-4 text-[13px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
             Global Kids School

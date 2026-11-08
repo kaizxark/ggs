@@ -86,7 +86,11 @@ export function SkeletonCircle({ size = 32, className }: SkeletonProps & { size?
   );
 }
 
-/** Mirrors `.metric-block`: label, big value, comparison line. */
+/**
+ * Mirrors `.metric-block`: label + icon, then value + comparison beside the
+ * sparkline. The old version added a full-width 3px bar that the real card
+ * never draws, so the panel got shorter the moment data arrived.
+ */
 export function SkeletonMetric() {
   return (
     <div className="metric-block" aria-hidden="true">
@@ -94,11 +98,13 @@ export function SkeletonMetric() {
         <SkeletonText width="52%" />
         <SkeletonCircle size={22} />
       </div>
-      <div className="metric-value" style={{ marginTop: 10 }}>
-        <SkeletonText width="46%" height={22} />
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <SkeletonText width="58%" height={24} />
+          <SkeletonText width="44%" style={{ marginTop: 8 }} />
+        </div>
+        <SkeletonBlock style={{ height: 44, width: 84, flex: "0 0 auto" }} />
       </div>
-      <SkeletonText width="38%" style={{ marginTop: 8 }} />
-      <SkeletonBlock className="mt-4" style={{ height: 3, width: "100%" }} />
     </div>
   );
 }
@@ -131,11 +137,9 @@ export function SkeletonMetrics({ count = 4, three = false }: { count?: number; 
 export function SkeletonTableRows({
   rows = 6,
   columns = 6,
-  stagger = true,
 }: {
   rows?: number;
   columns?: number;
-  stagger?: boolean;
 }) {
   return (
     <>
@@ -154,9 +158,6 @@ export function SkeletonTableRows({
               ) : (
                 <SkeletonText
                   width={`${34 + ((r * 3 + c * 7) % 5) * 9}%`}
-                  // A slow cascade as the eye moves down the table. Kept small:
-                  // anything longer reads as lag rather than as craft.
-                  style={stagger ? { animationDelay: `${r * 45}ms` } : undefined}
                 />
               )}
             </td>
@@ -421,7 +422,7 @@ export function SkeletonChart({
             <span
               key={i}
               className="erp-skeleton erp-skeleton-bar"
-              style={{ height: `${h}%`, animationDelay: `${i * 60}ms` }}
+              style={{ height: `${h}%` }}
             />
           ))}
         </div>

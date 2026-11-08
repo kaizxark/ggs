@@ -5098,16 +5098,19 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             >
               {/* Header Letterhead */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, borderBottom: "2px solid var(--border)", paddingBottom: 12 }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
-                    Global Kids School
-                  </h3>
-                  <p style={{ margin: "3px 0 0", fontSize: "12px", color: "var(--text-muted)" }}>
-                    Tumakuru Campus, Karnataka · Official ERP Ledger &amp; Fee Receipt
-                  </p>
-                  <span style={{ fontSize: "11px", color: "var(--text-faint)", marginTop: 2, display: "block" }}>
-                    Affiliated to Karnataka State Board / CBSE · AY 2026–27
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <img src="/global-kids-logo.svg" alt="Global Kids School" style={{ width: 44, height: 44, objectFit: "contain", flexShrink: 0 }} />
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+                      Global Kids School
+                    </h3>
+                    <p style={{ margin: "3px 0 0", fontSize: "12px", color: "var(--text-muted)" }}>
+                      Tumakuru Campus, Karnataka · Official ERP Ledger &amp; Fee Receipt
+                    </p>
+                    <span style={{ fontSize: "11px", color: "var(--text-faint)", marginTop: 2, display: "block" }}>
+                      Affiliated to Karnataka State Board / CBSE · AY 2026–27
+                    </span>
+                  </div>
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <span className="status-pill success text-xs font-mono font-bold" style={{ display: "inline-block" }}>

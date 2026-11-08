@@ -241,7 +241,7 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex]
 /* Square, so `width` is set rather than left to `auto` — that suited the old
    wide logo, but on a round mark an auto width collapses to the intrinsic
    height and the emblem ends up smaller than its 44px box. */
-.brand-logo { display: block; height: 34px; width: 34px; flex: 0 0 auto; border-radius: 50%; box-shadow: 0 0 0 1px var(--rail-rule); }
+.brand-logo { display: block; height: 38px; width: 38px; flex: 0 0 auto; object-fit: contain; }
 .sidebar-nav { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 15px 10px; }
 .nav-group { margin-bottom: 21px; }
 .nav-group-label { margin: 0 10px 9px; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .1em; line-height: 1.35; text-transform: uppercase; }
@@ -1233,7 +1233,14 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
  * pulses in sync. Colours match the panel surfaces (#1b2128 / #232c33)
  * so skeletons read as "shape of the content", not as a grey box.
  * ------------------------------------------------------------------ */
-@keyframes erp-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+/* A slow, wide wash rather than a narrow glint.
+ *
+ * The old sweep crossed each placeholder in 1.45s and every row/bar carried
+ * its own delay, so a page full of placeholders shimmered in several
+ * directions at once. On a phone the avatars and status dots strobed. This
+ * version travels less than a quarter as fast, uses a broad soft band, and
+ * runs in phase everywhere. */
+@keyframes erp-shimmer { 0% { background-position: 140% 0; } 100% { background-position: -40% 0; } }
 
 /* ---- Loading placeholders ----
  *
@@ -1248,19 +1255,19 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .erp-skeleton {
   border-radius: 6px;
   background-color: var(--skeleton-base);
-  background-image: linear-gradient(100deg,
-    transparent 22%,
-    rgba(24, 24, 27, .05) 42%,
+  background-image: linear-gradient(90deg,
+    transparent 0%,
     var(--skeleton-sheen) 50%,
-    rgba(24, 24, 27, .05) 58%,
-    transparent 78%);
+    transparent 100%);
   background-repeat: no-repeat;
-  background-size: 240% 100%;
-  animation: erp-shimmer 1.45s linear infinite;
+  background-size: 200% 100%;
+  animation: erp-shimmer 2.8s linear infinite;
 }
 /* Respect users who ask the OS to reduce motion. */
 @media (prefers-reduced-motion: reduce) {
-  .erp-skeleton { animation: none; background-image: none; }
+  .erp-skeleton,
+  .skeleton-line,
+  .pupil-m-sk { animation: none; background-image: none; }
   .erp-skeleton-bar, .erp-skeleton-row > * { animation: none; }
 }
 /* One status region per group, so a screen reader hears "Loading table" once
@@ -2291,15 +2298,23 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 /* ---------- Skeletons --------------------------------------------------- */
 
 .skeleton-panel { padding: 22px 21px; }
+/* Same surface tint and sweep as `.erp-skeleton`, so the older placeholder
+   markup in the profile and document panels does not pulse at a different
+   rhythm from the rest of the app. */
 .skeleton-line {
   display: block; height: 11px; border-radius: 5px;
-  background: var(--bg-hover); margin-bottom: 11px;
-  animation: erp-pulse 1.4s ease-in-out infinite;
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(90deg,
+    transparent 0%,
+    var(--skeleton-sheen) 50%,
+    transparent 100%);
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  animation: erp-shimmer 2.8s linear infinite;
+  margin-bottom: 11px;
 }
 .skeleton-line-wide { width: 74%; }
 .skeleton-line-short { width: 42%; }
-
-@keyframes erp-pulse { 0%, 100% { opacity: .5; } 50% { opacity: .9; } }
 
 /* ---------- Student profile dossier ------------------------------------
    The profile is a working record, not the directory. It gets one sticky
@@ -3776,10 +3791,10 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   gap: 10px;
 }
 .staff-mobile-brand img {
-  height: 36px;
-  width: 36px;
+  height: 38px;
+  width: 38px;
   flex: 0 0 auto;
-  border-radius: 50%;
+  object-fit: contain;
 }
 .staff-mobile-brand span {
   display: flex;
@@ -4118,15 +4133,13 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   display: block;
   border-radius: 6px;
   background-color: var(--skeleton-base);
-  background-image: linear-gradient(100deg,
-    transparent 22%,
-    rgba(24, 24, 27, .05) 42%,
+  background-image: linear-gradient(90deg,
+    transparent 0%,
     var(--skeleton-sheen) 50%,
-    rgba(24, 24, 27, .05) 58%,
-    transparent 78%);
+    transparent 100%);
   background-repeat: no-repeat;
-  background-size: 240% 100%;
-  animation: erp-shimmer 1.45s linear infinite;
+  background-size: 200% 100%;
+  animation: erp-shimmer 2.8s linear infinite;
 }
 .pupil-m-sk-photo { height: 58px; width: 58px; flex: 0 0 auto; border-radius: 50%; }
 
@@ -4240,7 +4253,7 @@ body { background: var(--bg-page); color: var(--text-primary); font-family: var(
   backdrop-filter: none;
 }
 .sidebar-top { padding: 20px 16px 14px; }
-.brand-row { gap: 11px; }  .brand-logo { height: 34px; width: 34px; box-shadow: 0 0 0 1px var(--rail-rule); }
+.brand-row { gap: 11px; }  .brand-logo { height: 38px; width: 38px; object-fit: contain; }
 .brand-wordmark-line1 { color: var(--rail-text); font-family: var(--font-display); font-size: 15.5px; font-weight: 700; letter-spacing: -0.02em; }
 .brand-wordmark-line2 { color: var(--rail-muted); font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
 .sidebar-nav { padding: 14px 12px 20px; }
@@ -4257,7 +4270,14 @@ body { background: var(--bg-page); color: var(--text-primary); font-family: var(
   .sidebar .nav-item.active svg { color: var(--rail-item-active-icon); }
 .nav-count { color: var(--rail-faint); font-size: 12px; }
 .sidebar-close-mobile { color: var(--rail-faint); }
-.main-area { margin-left: 264px; background: var(--bg-page); }
+.main-area { background: var(--bg-page); }
+/* Keep the rail offset scoped to viewports that actually show the rail.
+   This rule used to sit after the mobile media query with the same
+   specificity, so it won and the main column stayed indented by 264px on a
+   phone — the loading skeleton rendered as a narrow strip at the right edge. */
+@media (min-width: 947px) {
+  .main-area { margin-left: 264px; }
+}
 .topbar {
   min-height: 64px;
   padding: 0 32px;

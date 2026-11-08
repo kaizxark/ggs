@@ -23,7 +23,7 @@ export default function Navbar() {
             whileTap={{ scale: 0.95 }}
             className="h-9 w-9 rounded-full bg-white flex items-center justify-center"
           >
-            <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-9 w-9 rounded-full" />
+            <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-9 w-9 object-contain" />
           </motion.div>
           <span className="font-bold text-base sm:text-lg text-[#34291C] font-['Space_Grotesk'] tracking-tight group-hover:opacity-80 transition-opacity">
             Global Kids School

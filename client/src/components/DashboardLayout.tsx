@@ -168,7 +168,7 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-9 w-9 shrink-0 rounded-full" />
+                  <img src="/global-kids-logo.svg" alt="Global Kids School" className="h-9 w-9 shrink-0 object-contain" />
                   <span className="font-semibold tracking-tight truncate">
                     Navigation
                   </span>
