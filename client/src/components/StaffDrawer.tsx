@@ -26,6 +26,7 @@ import { ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { FormSelect } from "./FormSelect";
 import { toast } from "@/lib/toast";
 import { useDataRevision } from "@/lib/live-data";
+import { useRealtimeInvalidation } from "@/lib/use-realtime";
 import { ApiError, formatDate, initialsFor } from "@/lib/student-directory";
 import {
   deleteStaff,
@@ -122,6 +123,14 @@ export function StaffDrawer({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const dataRevision = useDataRevision();
+  // `/api/staff-profile` reads `staff`, the staff `profiles` row and the
+  // classrooms/subjects that drive the teaching assignment tabs.
+  const realtimeRevision = useRealtimeInvalidation([
+    "staff",
+    "profiles",
+    "classrooms",
+    "subjects",
+  ]);
 
   /*
    * Escape and the scroll lock live in `DrawerBackdrop`, as they do for the
@@ -167,7 +176,7 @@ export function StaffDrawer({
       live = false;
       controller.abort();
     };
-  }, [staff.id, reloadKey, dataRevision]);
+  }, [staff.id, reloadKey, dataRevision, realtimeRevision]);
 
   const record = detail?.staff;
   const account = detail?.account ?? null;

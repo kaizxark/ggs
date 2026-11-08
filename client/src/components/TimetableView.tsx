@@ -36,6 +36,7 @@ import {
   X,
 } from "lucide-react";
 
+import { useRealtimeInvalidation } from "@/lib/use-realtime";
 import { toast } from "@/lib/toast";
 import {
   conflictDocument,
@@ -164,6 +165,25 @@ export function TimetableView() {
   useEffect(() => {
     void load();
   }, []);
+
+  /*
+   * Timetables live in `settings` rows (`timetable:<classroom uuid>`), and the
+   * grid itself is composed from `classrooms`, `staff` and `subjects`. When a
+   * principal in another session saves a bell schedule or a slot, every open
+   * timetable screen reloads instead of showing its stale copy. The current
+   * class is passed through so the viewer is not yanked back to the first
+   * classroom by someone else's edit.
+   */
+  const realtimeRevision = useRealtimeInvalidation([
+    "settings",
+    "classrooms",
+    "staff",
+    "subjects",
+  ]);
+  useEffect(() => {
+    if (realtimeRevision > 0) void load(classId ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtimeRevision]);
 
   useEffect(() => {
     if (!data || !classId) {

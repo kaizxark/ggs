@@ -20,6 +20,7 @@ import {
 
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { useDataRevision } from "@/lib/live-data";
+import { useRealtimeInvalidation } from "@/lib/use-realtime";
 import { usePageScrollLock } from "@/components/SmoothScroll";
 import {
   ApiError,
@@ -124,6 +125,23 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
   const [deleting, setDeleting] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const dataRevision = useDataRevision();
+  // `/api/student-profile` composes the record from these tables; any of them
+  // changing elsewhere (fees posted, a mark entered) must refresh this page.
+  const realtimeRevision = useRealtimeInvalidation([
+    "students",
+    "enrollments",
+    "classrooms",
+    "attendance",
+    "exam_results",
+    "examinations",
+    "invoices",
+    "payments",
+    "student_guardians",
+    "guardians",
+    "profiles",
+    "staff",
+    "subjects",
+  ]);
   const hasLoadedRef = useRef(false);
 
   const load = useCallback(
@@ -142,7 +160,7 @@ export function StudentProfile({ studentId, onBack, onChanged }: StudentProfileP
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [studentId, dataRevision],
+    [studentId, dataRevision, realtimeRevision],
   );
 
   useEffect(() => {

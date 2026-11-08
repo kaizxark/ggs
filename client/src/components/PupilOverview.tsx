@@ -21,6 +21,7 @@ import {
   SkeletonText,
 } from "./ErpSkeleton";
 import { useDataRevision } from "../lib/live-data";
+import { useRealtimeInvalidation } from "../lib/use-realtime";
 
 type TrendPoint = {
   month: string;
@@ -416,6 +417,21 @@ export function usePupilProfile() {
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const dataRevision = useDataRevision();
+  // Same record shape the staff-facing profile page shows: when an admin
+  //posts a mark, records an absence or takes a fee payment, the pupil's own
+  // view should move with it.
+  const realtimeRevision = useRealtimeInvalidation([
+    "students",
+    "enrollments",
+    "classrooms",
+    "attendance",
+    "exam_results",
+    "examinations",
+    "invoices",
+    "payments",
+    "student_guardians",
+    "profiles",
+  ]);
   const hasLoadedProfileRef = useRef(false);
 
   useEffect(() => {
@@ -469,7 +485,7 @@ export function usePupilProfile() {
     return () => {
       live = false;
     };
-  }, [reloadKey, dataRevision]);
+  }, [reloadKey, dataRevision, realtimeRevision]);
 
   return { profile, loading, error, reload: () => setReloadKey((n) => n + 1) };
 }

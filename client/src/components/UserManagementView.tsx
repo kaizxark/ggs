@@ -36,6 +36,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "../lib/supabase";
 import { notifyDataChanged, useDataRevision } from "../lib/live-data";
+import { useRealtimeInvalidation } from "../lib/use-realtime";
 import {
   avatarTones,
   useCurrentUser,
@@ -227,6 +228,15 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
   const [editModules, setEditModules] = useState<string[]>([]);
   const [savingRole, setSavingRole] = useState(false);
   const dataRevision = useDataRevision();
+  // The accounts screen reads the person lists plus the roster rows behind
+  // them; a change from an invite acceptance or a backfill elsewhere lands here.
+  const realtimeRevision = useRealtimeInvalidation([
+    "profiles",
+    "staff",
+    "students",
+    "student_credentials",
+    "staff_credentials",
+  ]);
 
   useEffect(() => {
     void (async () => {
@@ -245,7 +255,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
         orgId: String(data?.organisation_id ?? ""),
       });
     })();
-  }, [dataRevision]);
+  }, [dataRevision, realtimeRevision]);
 
   const hasLoadedAccountsRef = useRef(false);
 
@@ -275,7 +285,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
     } finally {
       setAccountsLoading(false);
     }
-  }, [dataRevision]);
+  }, [dataRevision, realtimeRevision]);
 
   // Load accounts immediately on mount so credentials are ready
   useEffect(() => {

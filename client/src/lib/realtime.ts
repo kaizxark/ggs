@@ -81,6 +81,15 @@ function hash(value: string): string {
   return h.toString(36);
 }
 
+export interface RealtimeManagerOptions {
+  /**
+   * Where "the browser came back online" is listened for. Defaults to
+   * `window`; tests pass their own EventTarget so the reconnect path can be
+   * exercised outside a browser.
+   */
+  onlineTarget?: EventTarget;
+}
+
 /**
  * Build a manager around a Supabase client.
  *
@@ -88,7 +97,10 @@ function hash(value: string): string {
  * fake client: subscription lifetimes, reconnection and auth changes are the
  * parts most likely to regress, and they are not observable through the UI.
  */
-export function createRealtimeManager(client: SupabaseClient) {
+export function createRealtimeManager(
+  client: SupabaseClient,
+  options: RealtimeManagerOptions = {}
+) {
   const listeners = new Map<string, Set<RealtimeListener>>();
   const channels = new Map<string, ChannelEntry>();
   const seen = new Map<string, number>();
@@ -239,7 +251,10 @@ export function createRealtimeManager(client: SupabaseClient) {
   function reconnectUnjoined() {
     for (const table of Array.from(channels.keys())) {
       const entry = channels.get(table);
-      if (!entry || entry.joined || entry.timer) continue;
+      // Any join that is still pending has its backoff timer cleared: the
+      // network just changed, so the old delay is stale and the retry should
+      // happen now. Joined channels are untouched.
+      if (!entry || entry.joined) continue;
       destroyChannel(table);
       ensureChannel(table);
     }
@@ -297,13 +312,14 @@ export function createRealtimeManager(client: SupabaseClient) {
     });
     authSubscription = data.subscription;
 
-    if (typeof window !== "undefined") {
-      window.addEventListener("online", reconnectUnjoined);
-      if (typeof document !== "undefined") {
-        document.addEventListener("visibilitychange", () => {
-          if (document.visibilityState === "visible") reconnectUnjoined();
-        });
-      }
+    const onlineTarget = options.onlineTarget ?? (typeof window !== "undefined" ? window : null);
+    if (onlineTarget && typeof onlineTarget.addEventListener === "function") {
+      onlineTarget.addEventListener("online", reconnectUnjoined);
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") reconnectUnjoined();
+      });
     }
   }
 
