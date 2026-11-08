@@ -8985,14 +8985,19 @@ export default function Home() {
               </IconButton>
               {currentUser && currentUser.role !== "student" && (
                 <button
+                  type="button"
                   className="command-trigger"
                   onClick={() => setCommandOpen(true)}
+                  aria-label="Search records, students, classes or ask anything (Ctrl+K or ⌘K)"
                 >
-                  <Search size={16} />
-                  <span>Search anything</span>
-                  <kbd>
-                    <Command size={11} />K
-                  </kbd>
+                  <Search size={15} className="command-trigger-icon" />
+                  <span className="command-trigger-text">Search anything…</span>
+                  <span className="command-trigger-kbd">
+                    <kbd>
+                      <Command size={10} />
+                    </kbd>
+                    <kbd>K</kbd>
+                  </span>
                 </button>
               )}
             </div>
