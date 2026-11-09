@@ -1,11 +1,19 @@
 /**
- * Timetables — rebuilt.
+ * Timetable builder.
  *
- * The grid is the hero. A class picker, a teacher week view, and two dialogs
- * (slot editor, day builder) orbit around it. Everything on screen reads from
- * `/api/timetable`, which stores one document per class in `public.settings`
- * and re-checks teacher clashes school-wide on every save. The browser never
- * invents a timetable: the empty states explain what data is missing.
+ * The screen is built around one flow, in this order:
+ *
+ *   1. Pick a class.
+ *   2. Build the school day once (start time, lesson length, breaks). The setup
+ *      card does this in one click; "Edit day" fine-tunes it afterwards.
+ *   3. Click any cell and fill the lesson right there: subject, teacher, room.
+ *      "All days" copies that lesson across the week.
+ *   4. Save. Publishing is a separate, deliberate step.
+ *
+ * Every value comes from `/api/timetable`: real classrooms, real staff, real
+ * subjects and saved documents. An empty school renders as an empty school —
+ * nothing is seeded or invented. Teacher clashes are checked across every
+ * class on save and highlighted in the grid.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -39,6 +47,8 @@ import {
   setTimetablePublished,
   deleteTimetable,
   type ClassroomOption,
+  type StaffOption,
+  type SubjectOption,
   type TimetableBootstrap,
 } from "@/lib/timetable";
 import { ApiError } from "@/lib/student-directory";
@@ -47,8 +57,8 @@ import {
   DAYS,
   PERIOD_KINDS,
   PERIOD_KIND_LABELS,
-  breakMinutesPerDay,
   blankTimetable,
+  breakMinutesPerDay,
   buildBellSchedule,
   countUnassigned,
   dayLabel,
@@ -66,6 +76,7 @@ import {
   type ClassTimetable,
   type PeriodKind,
   type ScheduleTemplateInput,
+  type TimetableEntry,
 } from "@shared/timetable";
 
 function clone<T>(value: T): T {
@@ -160,7 +171,7 @@ interface GeneratorState extends ScheduleTemplateInput {
 const DEFAULT_GENERATOR: GeneratorState = {
   dayStart: "08:30",
   lessonMinutes: 45,
-  lessonCount: 7,
+  lessonCount: 6,
   shortBreakAfter: 2,
   shortBreakMinutes: 15,
   lunchAfter: 4,
@@ -224,6 +235,275 @@ function Frame({
   );
 }
 
+/* =========================================================================
+   STEP 2 — the school day
+   ========================================================================= */
+
+function SetupCard({
+  generator,
+  onChange,
+  onCreate,
+  onCopy,
+  copyDisabled,
+}: {
+  generator: GeneratorState;
+  onChange: (next: GeneratorState) => void;
+  onCreate: () => void;
+  onCopy: () => void;
+  copyDisabled: boolean;
+}) {
+  const preview = useMemo(() => buildBellSchedule(generator), [generator]);
+  const first = preview[0];
+  const last = preview[preview.length - 1];
+
+  return (
+    <section className="panel tt-setup">
+      <div className="tt-setup-head">
+        <span className="tt-step">Step 1</span>
+        <div>
+          <h3 className="tt-title" style={{ fontSize: 16 }}>
+            Build the school day
+          </h3>
+          <p className="tt-sub" style={{ margin: "2px 0 0" }}>
+            Set the hours once. Breaks and lunch are inserted automatically — you can fine-tune
+            every time afterwards.
+          </p>
+        </div>
+      </div>
+
+      <div className="tt-setup-grid">
+        <label className="tt-field">
+          Start time
+          <input
+            type="time"
+            className="tt-input"
+            value={generator.dayStart}
+            onChange={(event) => onChange({ ...generator, dayStart: event.target.value })}
+          />
+        </label>
+        <label className="tt-field">
+          Lesson length
+          <span className="tt-input-affix">
+            <input
+              type="number"
+              min={20}
+              max={90}
+              className="tt-input"
+              value={generator.lessonMinutes}
+              onChange={(event) =>
+                onChange({ ...generator, lessonMinutes: Number(event.target.value) })
+              }
+            />
+            <span>min</span>
+          </span>
+        </label>
+        <label className="tt-field">
+          Lessons per day
+          <input
+            type="number"
+            min={1}
+            max={12}
+            className="tt-input"
+            value={generator.lessonCount}
+            onChange={(event) =>
+              onChange({ ...generator, lessonCount: Number(event.target.value) })
+            }
+          />
+        </label>
+        <label className="tt-field">
+          Short break after
+          <span className="tt-input-affix">
+            <input
+              type="number"
+              min={0}
+              max={12}
+              className="tt-input"
+              value={generator.shortBreakAfter}
+              onChange={(event) =>
+                onChange({ ...generator, shortBreakAfter: Number(event.target.value) })
+              }
+            />
+            <span>lesson</span>
+          </span>
+        </label>
+        <label className="tt-field">
+          Break length
+          <span className="tt-input-affix">
+            <input
+              type="number"
+              min={0}
+              max={60}
+              className="tt-input"
+              value={generator.shortBreakMinutes}
+              onChange={(event) =>
+                onChange({ ...generator, shortBreakMinutes: Number(event.target.value) })
+              }
+            />
+            <span>min</span>
+          </span>
+        </label>
+        <label className="tt-field">
+          Lunch after
+          <span className="tt-input-affix">
+            <input
+              type="number"
+              min={0}
+              max={12}
+              className="tt-input"
+              value={generator.lunchAfter}
+              onChange={(event) =>
+                onChange({ ...generator, lunchAfter: Number(event.target.value) })
+              }
+            />
+            <span>lesson</span>
+          </span>
+        </label>
+        <label className="tt-field">
+          Lunch length
+          <span className="tt-input-affix">
+            <input
+              type="number"
+              min={0}
+              max={90}
+              className="tt-input"
+              value={generator.lunchMinutes}
+              onChange={(event) =>
+                onChange({ ...generator, lunchMinutes: Number(event.target.value) })
+              }
+            />
+            <span>min</span>
+          </span>
+        </label>
+      </div>
+
+      <div className="tt-setup-preview">
+        <Clock3 size={14} />
+        <span>
+          {first && last
+            ? `${first.startsAt} – ${last.endsAt} · ${lessonPeriods(preview).length} lessons · ${formatDuration(
+                breakMinutesPerDay(preview)
+              )} of breaks`
+            : "Adjust the numbers to preview the day"}
+        </span>
+      </div>
+
+      <div className="tt-setup-actions">
+        <button type="button" className="primary-button" onClick={onCreate}>
+          <CalendarDays size={15} />
+          <span>Create the day</span>
+        </button>
+        <button type="button" className="secondary-button" onClick={onCopy} disabled={copyDisabled}>
+          <Copy size={14} />
+          <span>Copy another class</span>
+        </button>
+        <span className="tt-sub">Then click any cell in the grid to add a lesson.</span>
+      </div>
+    </section>
+  );
+}
+
+/* =========================================================================
+   STEP 3 — one cell, edited in place
+   ========================================================================= */
+
+function CellEditor({
+  entry,
+  staffList,
+  subjectsList,
+  clash,
+  onPatch,
+  onDone,
+  onCopyAll,
+  onClear,
+}: {
+  entry: TimetableEntry | null;
+  staffList: StaffOption[];
+  subjectsList: SubjectOption[];
+  clash: boolean;
+  onPatch: (patch: Partial<TimetableEntry>) => void;
+  onDone: () => void;
+  onCopyAll: () => void;
+  onClear: () => void;
+}) {
+  const onEnter = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onDone();
+    }
+  };
+
+  return (
+    <div className="tt-cell-editor" onKeyDown={(event) => event.key === "Escape" && onDone()}>
+      <input
+        autoFocus
+        className="tt-input"
+        list="tt-subject-options"
+        placeholder="Subject"
+        aria-label="Subject"
+        value={entry?.subject ?? ""}
+        onChange={(event) => onPatch({ subject: event.target.value })}
+        onKeyDown={onEnter}
+      />
+      <select
+        className="tt-select"
+        aria-label="Teacher"
+        value={entry?.teacherId ?? ""}
+        onChange={(event) => {
+          const member = staffList.find((candidate) => candidate.id === event.target.value);
+          onPatch({ teacherId: member?.id ?? null, teacherName: member?.name ?? null });
+        }}
+      >
+        <option value="">Teacher — not assigned</option>
+        {staffList.map((member) => (
+          <option key={member.id} value={member.id}>
+            {member.name}
+            {member.department ? ` · ${member.department}` : ""}
+          </option>
+        ))}
+      </select>
+      <input
+        className="tt-input"
+        placeholder="Room (optional)"
+        aria-label="Room"
+        value={entry?.room ?? ""}
+        onChange={(event) => onPatch({ room: event.target.value })}
+        onKeyDown={onEnter}
+      />
+      {clash && (
+        <span className="tt-clash-pill">
+          <AlertTriangle size={11} /> Teacher clash
+        </span>
+      )}
+      <div className="tt-cell-editor-actions">
+        <button type="button" className="primary-button compact" onClick={onDone}>
+          <Check size={13} />
+          <span>Done</span>
+        </button>
+        <button
+          type="button"
+          className="secondary-button compact"
+          onClick={onCopyAll}
+          title="Copy this lesson to the same period on every working day"
+        >
+          <Copy size={13} />
+          <span>All days</span>
+        </button>
+        <button type="button" className="secondary-button compact" onClick={onClear}>
+          <Trash2 size={13} />
+          <span>Clear</span>
+        </button>
+      </div>
+      {subjectsList.length === 0 && (
+        <span className="tt-cell-editor-hint">No subject catalog yet — type the subject name.</span>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================================
+   MAIN
+   ========================================================================= */
+
 export function TimetableView() {
   const [data, setData] = useState<TimetableBootstrap | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,18 +511,18 @@ export function TimetableView() {
   /** When set, the screen is showing the read-only mirror of the last server copy. */
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [classId, setClassId] = useState("");
-  const [gradeFilter, setGradeFilter] = useState("all");
   const [draft, setDraft] = useState<ClassTimetable | null>(null);
   const [saved, setSaved] = useState<ClassTimetable | null>(null);
   const [busy, setBusy] = useState<"" | "save" | "publish" | "delete">("");
   const [writeError, setWriteError] = useState("");
   const [staleDraft, setStaleDraft] = useState<ClassTimetable | null>(null);
 
-  // Views & modals
   const [view, setView] = useState<"classes" | "teachers">("classes");
   const [teacherId, setTeacherId] = useState("");
-  const [slotModal, setSlotModal] = useState<{ day: number; periodId: string } | null>(null);
+  const [editing, setEditing] = useState<{ day: number; periodId: string } | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
+  /** The day as it was when the dialog opened, so Discard always works. */
+  const [bellSnapshot, setBellSnapshot] = useState<ClassTimetable | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const [copySourceId, setCopySourceId] = useState("");
   const [generator, setGenerator] = useState<GeneratorState>(DEFAULT_GENERATOR);
@@ -300,7 +580,7 @@ export function TimetableView() {
 
   /*
    * Timetables live in `settings` rows (`timetable:<classroom uuid>`), and the
-   * grid itself is composed from `classrooms`, `staff` and `subjects`. When a
+   * grid is composed from `classrooms`, `staff` and `subjects`. When a
    * principal in another session saves a bell schedule or a slot, every open
    * timetable screen reloads instead of showing its stale copy. The current
    * class is passed through so the viewer is not yanked back to the first
@@ -338,12 +618,29 @@ export function TimetableView() {
     );
     setWriteError("");
     setStaleDraft(null);
+    setEditing(null);
   }, [classId, data]);
 
   const canEdit = data?.canManage === true && !offlineAt;
   const classroom = data?.classrooms.find((room) => room.id === classId) ?? null;
   const staffList = data?.staff ?? [];
   const subjectsList = data?.subjects ?? [];
+
+  const classOptions = useMemo(
+    () =>
+      (data?.classrooms ?? []).map((room) => {
+        const stored = data?.timetables.find(
+          (timetable) => timetable.classroomId === room.id
+        );
+        return {
+          value: room.id,
+          label: `${room.label}${
+            stored ? (stored.published ? " · published" : " · draft") : ""
+          }`,
+        };
+      }),
+    [data]
+  );
 
   const dirty = useMemo(() => {
     if (!draft) return false;
@@ -545,11 +842,7 @@ export function TimetableView() {
     return draft?.entries.find((entry) => entry.day === day && entry.periodId === periodId) ?? null;
   }
 
-  function setEntry(
-    day: number,
-    periodId: string,
-    patch: Partial<ClassTimetable["entries"][number]>
-  ) {
+  function setEntry(day: number, periodId: string, patch: Partial<TimetableEntry>) {
     patchDraft((timetable) => {
       const existing = timetable.entries.find(
         (entry) => entry.day === day && entry.periodId === periodId
@@ -621,6 +914,18 @@ export function TimetableView() {
     toast.info(`Cleared ${dayLabel(day)} lessons`);
   }
 
+  /** Step 2: turn the numbers in the setup card into real periods. */
+  function createDay() {
+    if (!draft) return;
+    const periods = buildBellSchedule(generator);
+    patchDraft((timetable) => ({ ...timetable, periods, entries: [] }));
+    toast.success("School day created", {
+      description: `${periods[0]?.startsAt ?? ""}–${
+        periods[periods.length - 1]?.endsAt ?? ""
+      } · ${lessonPeriods(periods).length} lessons. Click a cell to add the first lesson.`,
+    });
+  }
+
   function applyDayTemplate() {
     if (!draft) return;
     const periods = buildBellSchedule(generator);
@@ -632,11 +937,21 @@ export function TimetableView() {
           periods.some((period) => period.id === entry.periodId && period.kind === "lesson")
       ),
     }));
-    toast.success("Day built", {
+    toast.success("Day rebuilt", {
       description: `${periods.length} periods from ${periods[0]?.startsAt ?? "?"} to ${
         periods[periods.length - 1]?.endsAt ?? "?"
       }, including breaks.`,
     });
+  }
+
+  function openBell() {
+    setBellSnapshot(draft ? clone(draft) : null);
+    setBellOpen(true);
+  }
+
+  function openCopy() {
+    setCopySourceId(data?.classrooms.find((room) => room.id !== classId)?.id ?? "");
+    setCopyOpen(true);
   }
 
   function copyFromSource() {
@@ -657,6 +972,7 @@ export function TimetableView() {
       notes: draft.notes,
     };
     setDraft(copied);
+    setEditing(null);
     setCopyOpen(false);
     toast.info("Copied into this class as a draft", {
       description: "Review the grid, then Save to apply the clash check.",
@@ -695,6 +1011,7 @@ export function TimetableView() {
     );
     setWriteError("");
     setStaleDraft(null);
+    setEditing(null);
   }
 
   async function save() {
@@ -712,7 +1029,7 @@ export function TimetableView() {
   }
 
   async function togglePublished() {
-    if (!saved || !draft) return;
+    if (!saved) return;
     setBusy("publish");
     try {
       const result = await setTimetablePublished(
@@ -738,11 +1055,12 @@ export function TimetableView() {
     try {
       await deleteTimetable(saved.classroomId);
       setSaved(null);
-      const room = classroom;
       if (data) {
         setData({
           ...data,
-          timetables: data.timetables.filter((timetable) => timetable.classroomId !== room.id),
+          timetables: data.timetables.filter(
+            (timetable) => timetable.classroomId !== classroom.id
+          ),
         });
       }
       if (draft) {
@@ -753,6 +1071,7 @@ export function TimetableView() {
           )
         );
       }
+      setEditing(null);
       toast.success(`Timetable for ${classroom.label} deleted`);
     } catch (error) {
       handleWriteFailure(error);
@@ -760,138 +1079,6 @@ export function TimetableView() {
       setBusy("");
     }
   }
-
-  /* ------------------------------ derived render data ------------------------------ */
-
-  const grades = useMemo(() => {
-    const values = Array.from(
-      new Set((data?.classrooms ?? []).map((room) => room.grade).filter(Boolean))
-    );
-    return values.sort((a, b) => Number(a) - Number(b) || String(a).localeCompare(String(b)));
-  }, [data]);
-
-  const visibleClassrooms = useMemo(() => {
-    const rooms = data?.classrooms ?? [];
-    return gradeFilter === "all"
-      ? rooms
-      : rooms.filter((room) => room.grade === gradeFilter);
-  }, [data, gradeFilter]);
-
-  // Keep the selection inside the visible cohort; nobody enjoys a blank grid.
-  useEffect(() => {
-    if (visibleClassrooms.length === 0) return;
-    if (!visibleClassrooms.some((room) => room.id === classId)) {
-      setClassId(visibleClassrooms[0].id);
-    }
-  }, [visibleClassrooms, classId]);
-
-  const activeDays = draft?.days ?? [];
-  const modals = (
-    <>
-      {slotModal && draft && (
-        <SlotEditorModal
-          key={`${slotModal.day}-${slotModal.periodId}`}
-          day={slotModal.day}
-          periodId={slotModal.periodId}
-          entry={draft.entries.find(
-            (entry) => entry.day === slotModal.day && entry.periodId === slotModal.periodId
-          )}
-          period={draft.periods.find((period) => period.id === slotModal.periodId) ?? null}
-          staffList={staffList}
-          subjectsList={subjectsList}
-          clash={clashCells.has(`${slotModal.day}|${slotModal.periodId}`)}
-          onChange={(patch) => setEntry(slotModal.day, slotModal.periodId, patch)}
-          onClear={() => {
-            clearSlot(slotModal.day, slotModal.periodId);
-            setSlotModal(null);
-          }}
-          onCopyToAll={() => {
-            copySlotToAllDays(slotModal.periodId, slotModal.day);
-            setSlotModal(null);
-          }}
-          onClose={() => setSlotModal(null)}
-        />
-      )}
-
-      {bellOpen && draft && (
-        <Frame
-          title={`Day & Bell Schedule — ${classroom?.label ?? ""}`}
-          eyebrow="Timetable"
-          width={760}
-          onClose={() => setBellOpen(false)}
-        >
-          <BellScheduleEditor
-            draft={draft}
-            generator={generator}
-            onGenerator={setGenerator}
-            onToggleDay={toggleDay}
-            onUpdatePeriod={updatePeriod}
-            onAddPeriod={addPeriod}
-            onRemovePeriod={removePeriod}
-            onMovePeriod={movePeriod}
-            onApplyTemplate={applyDayTemplate}
-            onClose={() => setBellOpen(false)}
-            onDiscard={() => {
-              if (saved) {
-                setDraft(clone(saved));
-                toast.info("Draft changes discarded");
-              }
-              setBellOpen(false);
-            }}
-            canEdit={canEdit}
-          />
-        </Frame>
-      )}
-
-      {copyOpen && data && (
-        <Frame
-          title="Copy from Another Class"
-          eyebrow="Timetable"
-          width={460}
-          onClose={() => setCopyOpen(false)}
-        >
-          <div className="modal-body" style={{ padding: "18px 22px" }}>
-            <label>
-              Source class
-              <FormSelect
-                ariaLabel="Source class"
-                value={copySourceId}
-                onChange={setCopySourceId}
-                options={data.classrooms
-                  .filter((room) => room.id !== classId)
-                  .map((room) => ({
-                    value: room.id,
-                    label: `${room.label}${
-                      data.timetables.some(
-                        (timetable) => timetable.classroomId === room.id
-                      )
-                        ? data.timetables.find((timetable) => timetable.classroomId === room.id)
-                            ?.published
-                          ? " — published"
-                          : " — draft"
-                        : " — no timetable yet"
-                    }`,
-                  }))}
-              />
-            </label>
-            <p className="mt-3 text-xs text-[var(--text-muted)]">
-              The whole week is copied into this class as a draft. Saving runs the school-wide
-              teacher clash check, so shared teachers surface immediately.
-            </p>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="secondary-button" onClick={() => setCopyOpen(false)}>
-              Cancel
-            </button>
-            <button type="button" className="primary-button" onClick={copyFromSource}>
-              <Copy size={14} />
-              <span>Copy</span>
-            </button>
-          </div>
-        </Frame>
-      )}
-    </>
-  );
 
   /* ------------------------------ early states ------------------------------ */
 
@@ -931,17 +1118,18 @@ export function TimetableView() {
     );
   }
 
-  const teachersWithSlots = new Set<string>();
-  for (const timetable of data.timetables) {
-    for (const entry of timetable.entries) {
-      if (entry.teacherId && entry.subject.trim()) teachersWithSlots.add(entry.teacherId);
-    }
-  }
+  const activeDays = draft?.days ?? [];
 
   /* ------------------------------ render ------------------------------ */
 
   return (
     <div className="tt-shell">
+      <datalist id="tt-subject-options">
+        {subjectsList.map((subject) => (
+          <option key={subject.id} value={subject.name} />
+        ))}
+      </datalist>
+
       {offlineAt && (
         <div className="tt-issue warn" style={{ padding: "10px 14px" }}>
           <AlertTriangle size={14} />
@@ -961,15 +1149,15 @@ export function TimetableView() {
       <div className="tt-print-header" style={{ display: "none" }}>
         <h1 style={{ fontSize: 24, margin: 0, fontWeight: 700 }}>Global Kids School</h1>
         <h2 style={{ fontSize: 18, margin: "4px 0 12px", color: "#555" }}>
-          Official Class Timetable — {classroom?.label ?? ""} {classroom?.room ? `(${classroom.room})` : ""}
+          Official Class Timetable — {classroom?.label ?? ""}{" "}
+          {classroom?.room ? `(${classroom.room})` : ""}
         </h2>
         <p style={{ margin: 0, fontSize: 13, color: "#666" }}>
           {data.academicYear ? `Academic year ${data.academicYear}` : "Weekly class timetable"}
         </p>
       </div>
 
-      {/* ------------------------------ toolbar ------------------------------ */}
-      <section className="tt-toolbar-panel">
+      <section className="panel tt-toolbar-panel">
         <div className="tt-toolbar">
           <div className="tt-view-tabs" role="tablist" aria-label="View">
             <button
@@ -977,17 +1165,23 @@ export function TimetableView() {
               role="tab"
               aria-selected={view === "classes"}
               className={`tt-grade-tab${view === "classes" ? " active" : ""}`}
-              onClick={() => setView("classes")}
+              onClick={() => {
+                setView("classes");
+                setEditing(null);
+              }}
             >
               <CalendarDays size={12} style={{ verticalAlign: -1.5, marginRight: 5 }} />
-              Class view
+              Class timetable
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={view === "teachers"}
               className={`tt-grade-tab${view === "teachers" ? " active" : ""}`}
-              onClick={() => setView("teachers")}
+              onClick={() => {
+                setView("teachers");
+                setEditing(null);
+              }}
             >
               <Users size={12} style={{ verticalAlign: -1.5, marginRight: 5 }} />
               Teacher week
@@ -1000,46 +1194,19 @@ export function TimetableView() {
                 <span
                   className={`tt-badge ${saved?.published ? "published" : saved ? "draft" : "draft"}`}
                 >
-                  {saved ? (saved.published ? <Unlock size={12} /> : <Lock size={12} />) : <Lock size={12} />}
+                  {saved?.published ? <Unlock size={12} /> : <Lock size={12} />}
                   {saved?.published ? "Published" : saved ? "Draft" : "Not saved yet"}
                 </span>
                 {dirty && canEdit && <span className="tt-badge unsaved">Unsaved edits</span>}
               </>
             )}
 
-            {canEdit && view === "classes" && (
-              <>
-                <button
-                  type="button"
-                  className="secondary-button compact"
-                  onClick={() => setBellOpen(true)}
-                >
-                  <Clock3 size={14} />
-                  <span>Day & periods</span>
-                </button>
-                <button
-                  type="button"
-                  className="secondary-button compact"
-                  onClick={() => {
-                    setCopySourceId(data.classrooms.find((room) => room.id !== classId)?.id ?? "");
-                    setCopyOpen(true);
-                  }}
-                  disabled={data.classrooms.filter((room) => room.id !== classId).length === 0}
-                >
-                  <Copy size={14} />
-                  <span>Copy from…</span>
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              className="secondary-button compact"
-              onClick={() => window.print()}
-            >
+            <button type="button" className="secondary-button compact" onClick={() => window.print()}>
               <Printer size={14} />
               <span>Print</span>
             </button>
-            {canEdit && view === "classes" && (
+
+            {view === "classes" && canEdit && (
               <>
                 {saved && (
                   <button
@@ -1066,11 +1233,16 @@ export function TimetableView() {
                         : "No unsaved changes"
                   }
                 >
-                  {busy === "save" ? <Loader2 size={14} className="tt-spin" /> : <Save size={14} />}
+                  {busy === "save" ? (
+                    <Loader2 size={14} className="tt-spin" />
+                  ) : (
+                    <Save size={14} />
+                  )}
                   <span>Save</span>
                 </button>
               </>
             )}
+
             {!canEdit && (
               <span className="tt-badge">
                 <Lock size={12} /> View only
@@ -1079,85 +1251,52 @@ export function TimetableView() {
           </div>
         </div>
 
-        {view === "classes" &&
-          (data.classrooms.length === 0 ? (
-            <p className="tt-sub" style={{ marginTop: 12 }}>
-              No classes exist for your school yet — timetables attach to real classes once they
-              are created.
-            </p>
+        <div className="tt-picker-row">
+          {view === "classes" ? (
+            <>
+              <label className="tt-field tt-class-picker">
+                Class
+                <FormSelect
+                  ariaLabel="Choose a class"
+                  value={classId}
+                  onChange={setClassId}
+                  placeholder="Choose a class…"
+                  options={classOptions}
+                />
+              </label>
+              <p className="tt-sub tt-picker-meta">
+                {classroom
+                  ? [
+                      classroom.room ? `Room ${classroom.room}` : "",
+                      draft && draft.periods.length > 0
+                        ? `${stats.lessons} lessons/day · ${formatDuration(
+                            stats.teaching
+                          )} teaching · ${formatDuration(stats.breaks)} breaks`
+                        : "No school day yet",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "No classes exist for your school yet."}
+              </p>
+            </>
           ) : (
-            <div className="tt-classes-wrap">
-              {grades.length > 1 && (
-                <div className="tt-cohort-tabs" aria-label="Grade filter">
-                  {["all", ...grades].map((grade) => {
-                    const count =
-                      grade === "all"
-                        ? data.classrooms.length
-                        : data.classrooms.filter((room) => room.grade === grade).length;
-                    return (
-                      <button
-                        key={grade}
-                        type="button"
-                        className={`tt-grade-tab${gradeFilter === grade ? " active" : ""}`}
-                        onClick={() => setGradeFilter(grade)}
-                      >
-                        {grade === "all" ? "All classes" : `Grade ${grade}`} ({count})
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="tt-classes" role="tablist" aria-label="Select class">
-                {visibleClassrooms.map((room) => {
-                  const stored = data.timetables.find(
-                    (timetable) => timetable.classroomId === room.id
-                  );
-                  return (
-                    <button
-                      key={room.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={room.id === classId}
-                      className={`tt-class${room.id === classId ? " active" : ""}`}
-                      onClick={() => setClassId(room.id)}
-                      title={
-                        stored?.published
-                          ? `${room.label} (published)`
-                          : stored
-                            ? `${room.label} (draft)`
-                            : `${room.label} (empty)`
-                      }
-                    >
-                      <span
-                        className={`tt-dot${
-                          stored?.published ? " published" : stored ? " draft" : ""
-                        }`}
-                      />
-                      <span>{room.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-        {view === "teachers" && (
-          <div className="tt-classes-wrap" style={{ maxWidth: 360 }}>
-            <FormSelect
-              ariaLabel="Choose a teacher"
-              value={teacherId}
-              onChange={setTeacherId}
-              placeholder="Choose a teacher…"
-              options={staffList.map((member) => ({
-                value: member.id,
-                label:
-                  member.department
+            <label className="tt-field tt-class-picker">
+              Teacher
+              <FormSelect
+                ariaLabel="Choose a teacher"
+                value={teacherId}
+                onChange={setTeacherId}
+                placeholder="Choose a teacher…"
+                options={staffList.map((member) => ({
+                  value: member.id,
+                  label: member.department
                     ? `${member.name} · ${member.department}`
                     : member.name,
-              }))}
-            />
-          </div>
-        )}
+                }))}
+              />
+            </label>
+          )}
+        </div>
 
         {writeError && canEdit && (
           <div className="tt-issue error" style={{ marginTop: 12 }}>
@@ -1199,20 +1338,59 @@ export function TimetableView() {
             <section className="panel tt-loading" style={{ padding: 40, textAlign: "center" }}>
               <span>Pick a class to begin.</span>
             </section>
-          ) : data.classrooms.length === 0 ? null : (
+          ) : data.classrooms.length === 0 ? (
+            <section className="panel tt-loading" style={{ padding: 40, textAlign: "center" }}>
+              <CalendarDays size={22} style={{ margin: "0 auto 10px" }} />
+              <strong style={{ display: "block", fontSize: 15 }}>No classes yet</strong>
+              <p className="tt-sub">
+                Timetables attach to real classes. Create a class first, then come back here.
+              </p>
+            </section>
+          ) : draft.periods.length === 0 && canEdit ? (
+            <SetupCard
+              generator={generator}
+              onChange={setGenerator}
+              onCreate={createDay}
+              onCopy={openCopy}
+              copyDisabled={
+                (data.timetables.length === 0) ||
+                data.classrooms.filter((room) => room.id !== classId).length === 0
+              }
+            />
+          ) : (
             <section className="panel tt-grid-panel" style={{ padding: "16px 18px" }}>
-              <div className="tt-grid-head" style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+              <div className="tt-grid-head">
                 <h3 className="tt-title" style={{ fontSize: 16 }}>
                   {classroom?.label ?? "Class"}
                 </h3>
-                {classroom?.room && <span className="tt-sub">Room {classroom.room}</span>}
                 <span className="tt-sub">
                   {draft.periods.length === 0
-                    ? "No periods yet — open “Day & periods” to build the school day."
-                    : `${stats.lessons} lessons/day · ${formatDuration(stats.teaching)} teaching · ${formatDuration(stats.breaks)} breaks`}
+                    ? "No periods yet"
+                    : `${activeDays.length} days · ${stats.lessons} lessons/day`}
                 </span>
+                <span style={{ flex: 1 }} />
                 {canEdit && (
-                  <span style={{ flex: 1 }} />
+                  <>
+                    <button
+                      type="button"
+                      className="secondary-button compact"
+                      onClick={openBell}
+                    >
+                      <Clock3 size={13} />
+                      <span>Edit day</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button compact"
+                      onClick={openCopy}
+                      disabled={
+                        data.classrooms.filter((room) => room.id !== classId).length === 0
+                      }
+                    >
+                      <Copy size={13} />
+                      <span>Copy class</span>
+                    </button>
+                  </>
                 )}
               </div>
 
@@ -1225,10 +1403,10 @@ export function TimetableView() {
                       </th>
                       {activeDays.map((day) => (
                         <th key={day}>
-                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span className="tt-day-head">
                             {dayLabel(day, true)}
                             {canEdit && (
-                              <span style={{ display: "inline-flex", gap: 3 }}>
+                              <span className="tt-day-actions">
                                 <button
                                   type="button"
                                   className="tt-icon"
@@ -1262,9 +1440,7 @@ export function TimetableView() {
                               The day has no periods yet
                             </p>
                             <p className="mt-1 text-xs text-[var(--text-muted)]">
-                              {canEdit
-                                ? "Open “Day & periods” to build the bell schedule, then fill the grid."
-                                : "The weekly schedule has not been set for this class yet."}
+                              The weekly schedule has not been set for this class yet.
                             </p>
                           </div>
                         </td>
@@ -1297,26 +1473,46 @@ export function TimetableView() {
                             {activeDays.map((day) => {
                               const entry = entryFor(day, period.id);
                               const clash = clashCells.has(`${day}|${period.id}`);
+                              const isEditing =
+                                editing?.day === day && editing?.periodId === period.id;
+
                               return (
                                 <td key={`${day}-${period.id}`}>
-                                  {canEdit ? (
+                                  {isEditing ? (
+                                    <CellEditor
+                                      entry={entry}
+                                      staffList={staffList}
+                                      subjectsList={subjectsList}
+                                      clash={clash}
+                                      onPatch={(patch) => setEntry(day, period.id, patch)}
+                                      onDone={() => setEditing(null)}
+                                      onCopyAll={() => {
+                                        copySlotToAllDays(period.id, day);
+                                        setEditing(null);
+                                      }}
+                                      onClear={() => {
+                                        clearSlot(day, period.id);
+                                        setEditing(null);
+                                      }}
+                                    />
+                                  ) : canEdit ? (
                                     <button
                                       type="button"
-                                      className={`tt-cell tt-cell-click${entry?.subject ? " filled" : ""}${
-                                        clash ? " clash" : ""
-                                      }`}
-                                      title="Edit this slot"
-                                      onClick={() => setSlotModal({ day, periodId: period.id })}
-                                      style={{ width: "100%", textAlign: "left", display: "flex" }}
+                                      className={`tt-cell tt-cell-click${
+                                        entry?.subject ? " filled" : ""
+                                      }${clash ? " clash" : ""}`}
+                                      title={
+                                        entry?.subject
+                                          ? `Edit ${entry.subject}`
+                                          : "Add a lesson to this slot"
+                                      }
+                                      onClick={() => setEditing({ day, periodId: period.id })}
                                     >
                                       {entry?.subject ? (
                                         <>
                                           <SubjectChip subject={entry.subject} />
-                                          <span
-                                            className="muted-cell"
-                                            style={{ fontSize: 11.5, marginTop: 2 }}
-                                          >
-                                            {entry.teacherName ?? <em>Teacher unset</em>}
+                                          <span className="tt-cell-meta">
+                                            {entry.teacherName ?? "Teacher not set"}
                                             {entry.room ? ` · ${entry.room}` : ""}
                                           </span>
                                           {clash && (
@@ -1334,8 +1530,8 @@ export function TimetableView() {
                                   ) : entry?.subject ? (
                                     <div className={`tt-cell filled${clash ? " clash" : ""}`}>
                                       <SubjectChip subject={entry.subject} />
-                                      <span className="muted-cell" style={{ fontSize: 11.5 }}>
-                                        {entry.teacherName ?? "Teacher unset"}
+                                      <span className="tt-cell-meta">
+                                        {entry.teacherName ?? "Teacher not set"}
                                         {entry.room ? ` · ${entry.room}` : ""}
                                       </span>
                                       {clash && (
@@ -1368,41 +1564,39 @@ export function TimetableView() {
                 </span>
                 <span className="tt-sub">
                   {activeDays.length} day{activeDays.length === 1 ? "" : "s"} ·{" "}
-                  {stats.lessons * activeDays.length} lesson slots ·{" "}
-                  {unassigned} without a teacher
+                  {stats.lessons * activeDays.length} lesson slots · {unassigned} without a teacher
                 </span>
               </div>
 
               {draft.periods.length > 0 &&
                 (conflicts.length > 0 || validation.errors.length > 0) && (
-                <div className="tt-issues" style={{ marginTop: 8 }}>
-                  {validation.errors.map((message) => (
-                    <div key={message} className="tt-issue error">
-                      <AlertTriangle size={13} />
-                      <span>{message}</span>
-                    </div>
-                  ))}
-                  {conflicts.map((conflict) => (
-                    <div key={conflict.key} className="tt-issue error">
-                      <AlertTriangle size={13} />
-                      <span>
-                        {conflict.teacherName} — {dayLabel(conflict.day)}{" "}
-                        {conflict.startsAt}–{conflict.endsAt} wanted by{" "}
-                        {conflict.classrooms.join(" & ")}
-                      </span>
-                    </div>
-                  ))}
-                  {validation.warnings.slice(0, 2).map((message) => (
-                    <div key={message} className="tt-issue warn">
-                      <Clock3 size={13} />
-                      <span>{message}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                  <div className="tt-issues" style={{ marginTop: 8 }}>
+                    {validation.errors.map((message) => (
+                      <div key={message} className="tt-issue error">
+                        <AlertTriangle size={13} />
+                        <span>{message}</span>
+                      </div>
+                    ))}
+                    {conflicts.map((conflict) => (
+                      <div key={conflict.key} className="tt-issue error">
+                        <AlertTriangle size={13} />
+                        <span>
+                          {conflict.teacherName} — {dayLabel(conflict.day)} {conflict.startsAt}–
+                          {conflict.endsAt} wanted by {conflict.classrooms.join(" & ")}
+                        </span>
+                      </div>
+                    ))}
+                    {validation.warnings.slice(0, 2).map((message) => (
+                      <div key={message} className="tt-issue warn">
+                        <Clock3 size={13} />
+                        <span>{message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
               {canEdit && (
-                <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+                <div className="tt-grid-foot-actions">
                   <button
                     type="button"
                     className="secondary-button compact"
@@ -1435,9 +1629,7 @@ export function TimetableView() {
             <div className="empty-state" style={{ padding: "40px 20px" }}>
               <Users size={22} />
               <p className="text-sm font-semibold text-[var(--text-primary)]">
-                {staffList.length === 0
-                  ? "No staff records yet"
-                  : "Pick a teacher to see their week"}
+                {staffList.length === 0 ? "No staff records yet" : "Pick a teacher to see their week"}
               </p>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {staffList.length === 0
@@ -1452,24 +1644,21 @@ export function TimetableView() {
                 {teacherWeek.teacher.name} has no lessons on any class timetable yet
               </p>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Assign{teacherWeek.teacher.name} to slots in the class view; the week fills in
-                here automatically.
+                Assign {teacherWeek.teacher.name} to slots in the class timetable; the week fills
+                in here automatically.
               </p>
             </div>
           ) : (
             <>
-              <div className="tt-grid-head" style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+              <div className="tt-grid-head">
                 <h3 className="tt-title" style={{ fontSize: 16 }}>
                   {teacherWeek.teacher.name}'s week
                 </h3>
                 <span className="tt-sub">
-                  {teacherWeek.slots.length} lessons · {formatDuration(teacherWeek.minutes)} /
-                  week · {teacherWeek.classes.size} classes
+                  {teacherWeek.slots.length} lessons · {formatDuration(teacherWeek.minutes)} / week
+                  · {teacherWeek.classes.size} classes
                 </span>
               </div>
-              {teacherId && staffList.some((member) => member.id === teacherId) === false && (
-                <span className="tt-sub">Teacher record not found.</span>
-              )}
               <div className="tt-grid-wrap">
                 <table className="tt-grid">
                   <thead>
@@ -1519,14 +1708,14 @@ export function TimetableView() {
                                           flexWrap: "wrap",
                                         }}
                                       >
-                                        <span
-                                          className="grade-chip"
-                                          style={{ fontSize: 11 }}
-                                        >
+                                        <span className="grade-chip" style={{ fontSize: 11 }}>
                                           {slot.classLabel}
                                         </span>
                                         {!slot.published && (
-                                          <span className="status-pill neutral" style={{ fontSize: 10, padding: "2px 8px" }}>
+                                          <span
+                                            className="status-pill neutral"
+                                            style={{ fontSize: 10, padding: "2px 8px" }}
+                                          >
                                             draft
                                           </span>
                                         )}
@@ -1559,179 +1748,92 @@ export function TimetableView() {
         </section>
       )}
 
-      {modals}
+      {/* ------------------------------ dialogs ------------------------------ */}
+      {bellOpen && draft && (
+        <Frame
+          title={`School day — ${classroom?.label ?? ""}`}
+          eyebrow="Timetable"
+          width={760}
+          onClose={() => setBellOpen(false)}
+        >
+          <BellScheduleEditor
+            draft={draft}
+            generator={generator}
+            onGenerator={setGenerator}
+            onToggleDay={toggleDay}
+            onUpdatePeriod={updatePeriod}
+            onAddPeriod={addPeriod}
+            onRemovePeriod={removePeriod}
+            onMovePeriod={movePeriod}
+            onApplyTemplate={applyDayTemplate}
+            onClose={() => {
+              setBellOpen(false);
+              setBellSnapshot(null);
+            }}
+            onDiscard={() => {
+              if (bellSnapshot) {
+                setDraft(clone(bellSnapshot));
+                toast.info("School-day changes discarded");
+              }
+              setBellOpen(false);
+              setBellSnapshot(null);
+            }}
+            canEdit={canEdit}
+          />
+        </Frame>
+      )}
+
+      {copyOpen && data && (
+        <Frame
+          title="Copy from another class"
+          eyebrow="Timetable"
+          width={460}
+          onClose={() => setCopyOpen(false)}
+        >
+          <div className="modal-body" style={{ padding: "18px 22px" }}>
+            <label className="tt-field">
+              Source class
+              <FormSelect
+                ariaLabel="Source class"
+                value={copySourceId}
+                onChange={setCopySourceId}
+                options={data.classrooms
+                  .filter((room) => room.id !== classId)
+                  .map((room) => {
+                    const stored = data.timetables.find(
+                      (timetable) => timetable.classroomId === room.id
+                    );
+                    return {
+                      value: room.id,
+                      label: `${room.label}${
+                        stored ? (stored.published ? " — published" : " — draft") : " — no timetable"
+                      }`,
+                    };
+                  })}
+              />
+            </label>
+            <p className="mt-3 text-xs text-[var(--text-muted)]">
+              The whole week is copied into this class as a draft. Saving runs the school-wide
+              teacher clash check, so shared teachers surface immediately.
+            </p>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="secondary-button" onClick={() => setCopyOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="primary-button" onClick={copyFromSource}>
+              <Copy size={14} />
+              <span>Copy</span>
+            </button>
+          </div>
+        </Frame>
+      )}
     </div>
   );
 }
 
 /* =========================================================================
-   SLOT EDITOR — one modal per grid cell
-   ========================================================================= */
-
-function SlotEditorModal({
-  day,
-  periodId,
-  period,
-  entry,
-  staffList,
-  subjectsList,
-  clash,
-  onChange,
-  onClear,
-  onCopyToAll,
-  onClose,
-}: {
-  day: number;
-  periodId: string;
-  period: BellPeriod | null;
-  entry: ClassTimetable["entries"][number] | undefined;
-  staffList: { id: string; name: string; department: string }[];
-  subjectsList: { id: string; name: string }[];
-  clash: boolean;
-  onChange: (patch: Partial<ClassTimetable["entries"][number]>) => void;
-  onClear: () => void;
-  onCopyToAll: () => void;
-  onClose: () => void;
-}) {
-  const [subject, setSubject] = useState(entry?.subject ?? "");
-  const [teacherId, setTeacherId] = useState(entry?.teacherId ?? "");
-  const [room, setRoom] = useState(entry?.room ?? "");
-
-  const subjectKnown = (key: string) =>
-    subjectsList.some((candidate) => candidate.name.toLowerCase() === key.trim().toLowerCase());
-
-  const commit = (next: {
-    subject?: string;
-    teacherId?: string;
-    room?: string;
-  }) => {
-    const patch: Partial<ClassTimetable["entries"][number]> = {};
-    if (next.subject !== undefined) patch.subject = next.subject;
-    if (next.room !== undefined) patch.room = next.room;
-    if (next.teacherId !== undefined) {
-      const teacher = staffList.find((member) => member.id === next.teacherId);
-      patch.teacherId = teacher?.id ?? null;
-      patch.teacherName = teacher?.name ?? null;
-    }
-    onChange(patch);
-  };
-
-  return (
-    <Frame
-      title={`${dayLabel(day)} · ${period?.label ?? "Period"}${period ? ` (${formatRange(period)})` : ""}`}
-      eyebrow="Lesson slot"
-      width={480}
-      onClose={onClose}
-    >
-      <datalist id="tt-subject-options">
-        {subjectsList.map((subjectOption) => (
-          <option key={subjectOption.id} value={subjectOption.name} />
-        ))}
-      </datalist>
-
-      <div className="modal-body" style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
-        <label className="tt-field">
-          Subject
-          <input
-            className="tt-input"
-            type="text"
-            list="tt-subject-options"
-            placeholder={
-              subjectsList.length > 0 ? "e.g. Mathematics" : "e.g. Mathematics — add subjects in Academics to get suggestions"
-            }
-            value={subject}
-            onChange={(event) => {
-              setSubject(event.target.value);
-              commit({ subject: event.target.value });
-            }}
-            autoFocus
-          />
-        </label>
-        {subjectsList.length === 0 && (
-          <p className="text-xs text-[var(--text-muted)]" style={{ marginTop: -8 }}>
-            The subject catalog is empty, so type the subject here. Names that exist in the catalog
-            stay consistent across classes.
-          </p>
-        )}
-        {subject.trim() && !subjectKnown(subject) && (
-          <p className="text-xs text-[var(--warning)]" style={{ marginTop: -8 }}>
-            Not a catalog subject — it is saved exactly as typed.
-          </p>
-        )}
-
-        <label className="tt-field">
-          Teacher
-          <select
-            className="tt-select"
-            value={teacherId}
-            onChange={(event) => {
-              setTeacherId(event.target.value);
-              commit({ teacherId: event.target.value });
-            }}
-          >
-            <option value="">Not assigned</option>
-            {staffList.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name}
-                {member.department ? ` · ${member.department}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        {staffList.length === 0 && (
-          <p className="text-xs text-[var(--text-muted)]" style={{ marginTop: -8 }}>
-            No staff records available, so the teacher is left unset — the slot counts as unfilled
-            until staff exist.
-          </p>
-        )}
-
-        <label className="tt-field">
-          Room
-          <input
-            className="tt-input"
-            type="text"
-            placeholder="e.g. Room 204"
-            value={room}
-            onChange={(event) => {
-              setRoom(event.target.value);
-              commit({ room: event.target.value });
-            }}
-          />
-        </label>
-
-        {clash && (
-          <div className="tt-issue error" style={{ fontSize: 12 }}>
-            <AlertTriangle size={13} />
-            <span>
-              The assigned teacher is booked in another class at this time. Saving is allowed —
-              the clash is listed so it can be fixed deliberately.
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="modal-footer" style={{ justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" className="secondary-button compact" onClick={onCopyToAll}>
-            <Copy size={13} />
-            <span>To all days</span>
-          </button>
-          <button type="button" className="secondary-button compact" onClick={onClear}>
-            <Undo2 size={13} />
-            <span>Clear</span>
-          </button>
-        </div>
-        <button type="button" className="primary-button compact" onClick={onClose}>
-          <Check size={14} />
-          <span>Done</span>
-        </button>
-      </div>
-    </Frame>
-  );
-}
-
-/* =========================================================================
-   DAY & BELL SCHEDULE
+   SCHOOL DAY EDITOR — working days, period times, and a template
    ========================================================================= */
 
 function BellScheduleEditor({
@@ -1763,11 +1865,12 @@ function BellScheduleEditor({
 }) {
   return (
     <>
-      <div className="modal-body" style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div
+        className="modal-body"
+        style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: 16 }}
+      >
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]" style={{ marginBottom: 8 }}>
-            Working days
-          </p>
+          <p className="tt-modal-label">Working days</p>
           <div className="flex items-center gap-2 flex-wrap">
             {DAYS.map((day) => {
               const value = Number(day.value ?? day);
@@ -1790,11 +1893,11 @@ function BellScheduleEditor({
 
         <div>
           <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-            <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">
+            <p className="tt-modal-label" style={{ margin: 0 }}>
               Periods of the day
             </p>
             {canEdit && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {PERIOD_KINDS.map((kind) => (
                   <button
                     key={kind}
@@ -1894,19 +1997,10 @@ function BellScheduleEditor({
         </div>
 
         {canEdit && (
-          <div
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: "12px 14px",
-              background: "var(--bg-subtle)",
-            }}
-          >
-            <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]" style={{ marginBottom: 8 }}>
-              Build a whole day from numbers
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(90px, 1fr))", gap: 10 }}>
-              <label>
+          <div className="tt-template">
+            <p className="tt-modal-label">Build the day from numbers</p>
+            <div className="tt-template-grid">
+              <label className="tt-field">
                 Day starts
                 <input
                   type="time"
@@ -1915,7 +2009,7 @@ function BellScheduleEditor({
                   onChange={(event) => onGenerator({ ...generator, dayStart: event.target.value })}
                 />
               </label>
-              <label>
+              <label className="tt-field">
                 Lesson minutes
                 <input
                   type="number"
@@ -1928,7 +2022,7 @@ function BellScheduleEditor({
                   }
                 />
               </label>
-              <label>
+              <label className="tt-field">
                 Lessons
                 <input
                   type="number"
@@ -1941,7 +2035,7 @@ function BellScheduleEditor({
                   }
                 />
               </label>
-              <label>
+              <label className="tt-field">
                 Break after lesson #
                 <input
                   type="number"
@@ -1954,7 +2048,7 @@ function BellScheduleEditor({
                   }
                 />
               </label>
-              <label>
+              <label className="tt-field">
                 Break minutes
                 <input
                   type="number"
@@ -1967,7 +2061,7 @@ function BellScheduleEditor({
                   }
                 />
               </label>
-              <label>
+              <label className="tt-field">
                 Lunch after lesson #
                 <input
                   type="number"
@@ -1981,7 +2075,7 @@ function BellScheduleEditor({
                 />
               </label>
             </div>
-            <div className="flex items-center justify-between mt-3" style={{ gap: 8 }}>
+            <div className="tt-template-actions">
               <p className="tt-sub" style={{ margin: 0 }}>
                 Replacing the period list also removes entries of deleted periods.
               </p>
