@@ -126,3 +126,4 @@ supabase/.temp/
 webflow-site/*
 !webflow-site/index.html
 .env*.local
+faceless-shorts-skill.zip
