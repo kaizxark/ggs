@@ -42,6 +42,7 @@ import {
   attendancePercent,
   countsAsPresent,
   isAttendanceStatus,
+  type AttendanceAbsenteeItem,
   type AttendanceBootstrap,
   type AttendanceClassOption,
   type AttendanceDaySummary,
@@ -121,9 +122,25 @@ async function restAllRows<T = Json>(
     );
   }
   const contentRange = countRes.headers.get("content-range") ?? "";
-  await countRes.text();
-  const total = Number.parseInt(contentRange.split("/")[1] ?? "", 10);
-  if (!Number.isFinite(total) || total <= 0) return [];
+  const headerTotal = Number.parseInt(contentRange.split("/")[1] ?? "", 10);
+
+  if (!Number.isFinite(headerTotal)) {
+    // When the backend or mock environment does not supply a Content-Range header,
+    // fetch all rows directly without pagination.
+    const fallbackRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/${table}?${base}`,
+      { headers: serviceHeaders() }
+    );
+    if (!fallbackRes.ok) {
+      throw new Error(
+        `${table} fallback: ${fallbackRes.status} ${(await fallbackRes.text()).slice(0, 200)}`
+      );
+    }
+    return (await fallbackRes.json()) as T[];
+  }
+
+  const total = headerTotal;
+  if (total <= 0) return [];
 
   const pages = Math.min(Math.ceil(total / PAGE_SIZE), MAX_PAGES);
   const results = await Promise.all(
@@ -381,13 +398,14 @@ function summariseDay(date: string, rows: AttendanceRow[]): AttendanceDaySummary
 
 function buildOverview(
   rows: AttendanceRow[],
-  today: string,
-  studentIds: string[]
+  date: string,
+  studentIds: string[],
+  classes: AttendanceClassOption[]
 ): AttendanceOverview {
   const dates = Array.from(new Set(rows.map((row) => row.attendance_date))).sort();
-  const recent = dates.slice(-7).map((date) => summariseDay(date, rows));
+  const recent = dates.slice(-7).map((d) => summariseDay(d, rows));
 
-  const todaySummary = summariseDay(today, rows);
+  const daySummary = summariseDay(date, rows);
 
   const perStudent = new Map<string, { total: number; present: number }>();
   for (const row of rows) {
@@ -404,12 +422,24 @@ function buildOverview(
     }
   }
 
+  const classesTotal = classes.length;
+  const classesMarked = classes.filter((c) => Boolean(c.isMarked)).length;
+  const classesPending = classes.filter((c) => (c.markedToday ?? 0) === 0).length;
+  const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount ?? 0), 0);
+
   return {
     daily: recent,
-    todayPresent: todaySummary.present + todaySummary.late,
-    todayMarked: todaySummary.marked,
-    todayPercent: todaySummary.percent,
+    todayPresent: daySummary.present + daySummary.late,
+    todayMarked: daySummary.marked,
+    todayPercent: daySummary.percent,
+    todayAbsent: daySummary.absent,
+    todayLate: daySummary.late,
+    todayLeave: daySummary.leave,
     belowThreshold,
+    totalStudents,
+    classesMarked,
+    classesPending,
+    classesTotal,
   };
 }
 
@@ -471,20 +501,56 @@ function buildClassOptions(
   classrooms: ClassroomRecord[],
   staffById: Map<string, StaffRecord>,
   enrollments: EnrollmentRecord[],
+  students: StudentRecord[],
   rows: AttendanceRow[],
+  dayMarks: AttendanceMarkRow[],
+  date: string,
   today: string,
   staffId: string,
   managerView: boolean
 ): AttendanceClassOption[] {
+  const studentById = new Map(students.map((student) => [student.id, student]));
+
   return classrooms.map((room) => {
     const classRows = rows.filter((row) => row.classroom_id === room.id);
     const total = classRows.length;
     const present = classRows.filter((row) => countsAsPresent(row.status)).length;
-    const todayRows = classRows.filter((row) => row.attendance_date === today);
-    const todayPresent = todayRows.filter((row) => countsAsPresent(row.status)).length;
+
+    // Daily marks for this classroom on the queried date:
+    const classDayMarks = dayMarks.filter((row) => row.classroom_id === room.id);
+    const markedToday = classDayMarks.length;
+    const presentToday = classDayMarks.filter((row) => countsAsPresent(row.status)).length;
+    const absentToday = classDayMarks.filter((row) => row.status === "absent").length;
+    const lateToday = classDayMarks.filter((row) => row.status === "late").length;
+    const leaveToday = classDayMarks.filter((row) => row.status === "leave").length;
+
+    const studentCount = enrollments.filter(
+      (enrollment) => enrollment.classroom_id === room.id
+    ).length;
+
     const teacher = room.class_teacher_id
       ? staffById.get(room.class_teacher_id)
       : undefined;
+
+    const absentees: AttendanceAbsenteeItem[] = [];
+    for (const mark of classDayMarks) {
+      if (mark.status === "absent" || mark.status === "leave" || mark.status === "late") {
+        const student = studentById.get(mark.student_id);
+        const enrollment = enrollments.find(
+          (e) => e.student_id === mark.student_id && e.classroom_id === room.id
+        );
+        if (student) {
+          absentees.push({
+            id: student.id,
+            name: `${student.first_name} ${student.last_name}`.trim(),
+            rollNo: enrollment?.roll_no ? String(enrollment.roll_no) : null,
+            status: mark.status,
+            notes: String(mark.notes ?? "").trim(),
+          });
+        }
+      }
+    }
+
     return {
       id: room.id,
       label: classLabel(room),
@@ -493,17 +559,21 @@ function buildClassOptions(
       room: room.room ?? "",
       classTeacherId: room.class_teacher_id,
       classTeacherName: teacher?.name ?? null,
-      studentCount: enrollments.filter(
-        (enrollment) => enrollment.classroom_id === room.id
-      ).length,
+      studentCount,
       // Administrators review; only the assigned class teacher marks.
       canMark:
         !managerView &&
         Boolean(staffId) &&
         room.class_teacher_id === staffId,
       termPercent: attendancePercent(present, total),
-      presentToday: todayPresent,
-      markedToday: todayRows.length,
+      presentToday,
+      markedToday,
+      absentToday,
+      lateToday,
+      leaveToday,
+      todayPercent: attendancePercent(presentToday, markedToday),
+      isMarked: studentCount > 0 && markedToday >= studentCount,
+      absentees,
     };
   });
 }
@@ -548,7 +618,10 @@ async function bootstrap(caller: Caller, orgId: string, url: URL): Promise<Atten
     visible,
     staffById,
     enrollments,
+    students,
     rows,
+    dayMarks,
+    requestedDate,
     today,
     staffId,
     managerView
@@ -585,7 +658,7 @@ async function bootstrap(caller: Caller, orgId: string, url: URL): Promise<Atten
     selectedClassroomId: selected?.id ?? null,
     selectedClass: selected,
     roster,
-    overview: buildOverview(rows, today, studentIds),
+    overview: buildOverview(rows, requestedDate, studentIds, classes),
     message,
   };
 }

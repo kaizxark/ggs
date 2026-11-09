@@ -5,6 +5,7 @@ import {
   Activity,
   AlertCircle,
   ArrowRight,
+  ArrowLeft,
   ArrowUpRight,
   Award,
   BarChart3,
@@ -62,6 +63,9 @@ import {
   UserCheck,
   UserCog,
   Users,
+  UserX,
+  Radio,
+  Eye,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -158,9 +162,12 @@ import {
   attendanceToday,
   loadAttendance,
   saveClassAttendance,
+  type AttendanceAbsenteeItem,
   type AttendanceBootstrap,
+  type AttendanceClassOption,
   type AttendanceStatus,
 } from "../lib/attendance";
+import { useRealtimeInvalidation } from "../lib/use-realtime";
 import { ApiError } from "../lib/student-directory";
 import {
   SkeletonChart,
@@ -2557,19 +2564,39 @@ function AttendanceStatusPicker({
  * Save stays disabled until every pupil has a status. There is no localStorage
  * copy and no generated cohort: an empty school renders as an empty school.
  */
+function formatSyncTime(d: Date): string {
+  return d.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 function AttendanceView({ onBack }: { onBack: () => void }) {
-  const [activeTab, setActiveTab] = useState<"register" | "overview">("register");
+  const [activeTab, setActiveTab] = useState<"overview" | "register">("overview");
   const [date, setDate] = useState<string>(() => attendanceToday());
   const [classroomId, setClassroomId] = useState<string>("");
   const [data, setData] = useState<AttendanceBootstrap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date>(() => new Date());
   const [draft, setDraft] = useState<
     Record<string, { status: AttendanceStatus | null; notes: string }>
   >({});
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Live overview filters & drill-down state:
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "marked" | "low_attendance">("all");
+  const [gradeFilter, setGradeFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [sortBy, setSortBy] = useState<"grade" | "attendance_asc" | "attendance_desc" | "pending_first">("grade");
+  const [inspectClassId, setInspectClassId] = useState<string | null>(null);
+
+  // Real-time listener: invalidates whenever any client updates attendance or classrooms
+  const realtimeRev = useRealtimeInvalidation(["attendance", "classrooms"]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2580,6 +2607,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
       .then((next) => {
         if (cancelled) return;
         setData(next);
+        setLastSyncedAt(new Date());
         // The chosen class disappeared (or was never visible to this caller).
         // Follow the route's choice rather than leaving a picker with no match.
         if (classroomId && next.selectedClassroomId !== classroomId) {
@@ -2610,7 +2638,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [date, classroomId, reloadKey]);
+  }, [date, classroomId, reloadKey, realtimeRev]);
 
   const classes = data?.classes ?? [];
   const roster = data?.roster ?? [];
@@ -2619,6 +2647,120 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   const managerView = data?.managerView ?? false;
   const canMark = Boolean(data && !managerView && selectedClass?.canMark);
   const activeClassId = classroomId || data?.selectedClassroomId || "";
+
+  // Summary figures across all visible classes for this date:
+  const executiveMetrics = useMemo(() => {
+    let totalEnrolled = 0;
+    let totalPresent = 0;
+    let totalAbsent = 0;
+    let totalLate = 0;
+    let totalLeave = 0;
+    let totalMarkedPupils = 0;
+    let markedClasses = 0;
+    let pendingClasses = 0;
+    let lowAttendanceClasses = 0;
+
+    for (const c of classes) {
+      totalEnrolled += c.studentCount;
+      const marked = c.markedToday ?? 0;
+      const present = c.presentToday ?? 0;
+      const absent = c.absentToday ?? 0;
+      const late = c.lateToday ?? 0;
+      const leave = c.leaveToday ?? 0;
+
+      totalMarkedPupils += marked;
+      totalPresent += present;
+      totalAbsent += absent;
+      totalLate += late;
+      totalLeave += leave;
+
+      const isMarked = c.isMarked ?? (marked >= c.studentCount && c.studentCount > 0);
+      if (isMarked) {
+        markedClasses += 1;
+      }
+      if (marked === 0) {
+        pendingClasses += 1;
+      }
+      const rate = c.todayPercent ?? (marked > 0 ? attendancePercent(present, marked) : 0);
+      if (marked > 0 && rate < 85) {
+        lowAttendanceClasses += 1;
+      }
+    }
+
+    const schoolAttendanceRate =
+      totalMarkedPupils > 0
+        ? attendancePercent(totalPresent, totalMarkedPupils)
+        : 0;
+
+    return {
+      totalEnrolled,
+      totalPresent,
+      totalAbsent,
+      totalLate,
+      totalLeave,
+      totalMarkedPupils,
+      markedClasses,
+      pendingClasses,
+      lowAttendanceClasses,
+      totalClasses: classes.length,
+      schoolAttendanceRate,
+    };
+  }, [classes]);
+
+  const filteredClasses = useMemo(() => {
+    return classes
+      .filter((c) => {
+        const marked = c.markedToday ?? 0;
+        const isMarked = c.isMarked ?? (marked >= c.studentCount && c.studentCount > 0);
+        const isPending = marked === 0;
+        const rate = c.todayPercent ?? (marked > 0 ? attendancePercent(c.presentToday ?? 0, marked) : 0);
+
+        if (statusFilter === "pending" && !isPending) return false;
+        if (statusFilter === "marked" && !isMarked) return false;
+        if (statusFilter === "low_attendance" && (rate >= 85 || isPending)) return false;
+
+        if (gradeFilter !== "all") {
+          const g = Number.parseInt(c.grade, 10);
+          if (gradeFilter === "primary" && (Number.isNaN(g) || g < 1 || g > 5)) return false;
+          if (gradeFilter === "middle" && (Number.isNaN(g) || g < 6 || g > 8)) return false;
+          if (gradeFilter === "high" && (Number.isNaN(g) || g < 9 || g > 12)) return false;
+        }
+
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const matchLabel = c.label.toLowerCase().includes(q);
+          const matchTeacher = (c.classTeacherName ?? "").toLowerCase().includes(q);
+          const matchRoom = (c.room ?? "").toLowerCase().includes(q);
+          if (!matchLabel && !matchTeacher && !matchRoom) return false;
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        const rateA = a.todayPercent ?? ((a.markedToday ?? 0) > 0 ? attendancePercent(a.presentToday ?? 0, a.markedToday ?? 0) : 0);
+        const rateB = b.todayPercent ?? ((b.markedToday ?? 0) > 0 ? attendancePercent(b.presentToday ?? 0, b.markedToday ?? 0) : 0);
+
+        if (sortBy === "attendance_asc") {
+          return rateA - rateB;
+        }
+        if (sortBy === "attendance_desc") {
+          return rateB - rateA;
+        }
+        if (sortBy === "pending_first") {
+          const pendA = (a.markedToday ?? 0) === 0 ? 0 : 1;
+          const pendB = (b.markedToday ?? 0) === 0 ? 0 : 1;
+          if (pendA !== pendB) return pendA - pendB;
+        }
+        const ga = Number.parseInt(a.grade, 10);
+        const gb = Number.parseInt(b.grade, 10);
+        if (Number.isFinite(ga) && Number.isFinite(gb) && ga !== gb) return ga - gb;
+        return a.grade.localeCompare(b.grade) || a.section.localeCompare(b.section);
+      });
+  }, [classes, statusFilter, gradeFilter, searchQuery, sortBy]);
+
+  const inspectedClass = useMemo(() => {
+    return classes.find((c) => c.id === inspectClassId) ?? null;
+  }, [classes, inspectClassId]);
 
   const counts = useMemo(() => {
     let present = 0;
@@ -2710,50 +2852,858 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="page-stack">
-      <div className="page-intro">
+      <div className="page-intro" style={{ alignItems: "flex-start", flexWrap: "wrap", gap: "16px" }}>
         <div>
           <Breadcrumb
             parent="Global Kids School"
             current="Attendance"
             onParentClick={onBack}
           />
-          <h1 className="page-title">Attendance</h1>
-          <p className="page-subtitle">
-            {activeTab === "register"
-              ? `${managerView ? "Read-only register" : "Daily register"} · ${readableDate(
-                  data?.date ?? date
-                )}`
-              : "Term-to-date attendance, built from saved registers."}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <h1 className="page-title" style={{ margin: 0 }}>Attendance</h1>
+            <span className="live-pulse-badge" title="Live synchronized across all classrooms in realtime">
+              <span className="live-pulse-dot" />
+              LIVE
+            </span>
+          </div>
+          <p className="page-subtitle" style={{ marginTop: "4px" }}>
+            {activeTab === "overview"
+              ? `Real-time operational overview across all classrooms · ${readableDate(data?.date ?? date)}`
+              : `${managerView ? "Class register review" : "Daily register"} · ${readableDate(data?.date ?? date)}`}
           </p>
         </div>
 
-        <SegmentedControl
-          ariaLabel="Attendance view tabs"
-          layoutId="attendanceMainViewTabs"
-          value={activeTab}
-          onChange={(val) => setActiveTab(val as "register" | "overview")}
-          indicatorVariant="brand"
-          style={{ marginLeft: "auto", display: "inline-flex" }}
-          options={[
-            {
-              value: "register",
-              label: "Daily Register",
-              icon: <ClipboardCheck size={14} />,
-            },
-            {
-              value: "overview",
-              label: "Cohort Overview",
-              icon: <BarChart3 size={14} />,
-            },
-          ]}
-        />
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          {/* Real-time status / manual sync */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 12px",
+              borderRadius: "8px",
+              background: "var(--bg-raised)",
+              border: "1px solid var(--border-subtle)",
+              fontSize: "11.5px",
+              color: "var(--text-muted)",
+            }}
+          >
+            <Radio size={12} style={{ color: "var(--success)" }} />
+            <span>Synced {formatSyncTime(lastSyncedAt)}</span>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              style={{
+                background: "none",
+                border: "none",
+                padding: "2px",
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+              title="Refresh live data now"
+            >
+              <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
+            </button>
+          </div>
+
+          <SegmentedControl
+            ariaLabel="Attendance view tabs"
+            layoutId="attendanceMainViewTabs"
+            value={activeTab}
+            onChange={(val) => setActiveTab(val as "register" | "overview")}
+            indicatorVariant="brand"
+            options={[
+              {
+                value: "overview",
+                label: "Live Overview",
+                icon: <Activity size={14} />,
+              },
+              {
+                value: "register",
+                label: "Class Register",
+                icon: <ClipboardCheck size={14} />,
+              },
+            ]}
+          />
+        </div>
       </div>
 
       {/* ------------------------------------------------------------ */}
-      {/* Daily register                                                */}
+      {/* Live Overview Tab                                             */}
+      {/* ------------------------------------------------------------ */}
+      {activeTab === "overview" &&
+        (loading && !data ? (
+          <div className="panel" style={{ padding: "18px 22px" }}>
+            <SkeletonRegion label="Loading live attendance overview">
+              <SkeletonHealthGrid count={4} />
+              <div style={{ marginTop: "20px" }}>
+                <SkeletonList rows={6} avatar={false} />
+              </div>
+            </SkeletonRegion>
+          </div>
+        ) : error ? (
+          <div className="panel" style={{ padding: "34px 24px" }}>
+            <div className="empty-state">
+              <AlertCircle size={22} />
+              <p style={{ maxWidth: "520px", textAlign: "center" }}>{error}</p>
+              {retry}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Top Date Selection & Quick State */}
+            <div
+              className="panel"
+              style={{
+                padding: "14px 18px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "14px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                  Date:
+                </span>
+                <DateDropdowns
+                  value={date}
+                  onChange={setDate}
+                  defaultToToday
+                  minYear={2020}
+                  maxYear={2030}
+                />
+                {date !== attendanceToday() && (
+                  <button
+                    className="secondary-button compact"
+                    style={{ padding: "4px 10px", fontSize: "11.5px" }}
+                    onClick={() => setDate(attendanceToday())}
+                  >
+                    Jump to Today
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  {classes.length} active classes · {executiveMetrics.totalEnrolled} enrolled pupils
+                </span>
+              </div>
+            </div>
+
+            {/* Executive KPI Grid */}
+            <div className="metric-grid">
+              <MetricBlock
+                className="overview-metric"
+                label="Overall Attendance"
+                value={
+                  executiveMetrics.totalMarkedPupils > 0
+                    ? `${executiveMetrics.schoolAttendanceRate}%`
+                    : "—"
+                }
+                comparison={
+                  executiveMetrics.totalMarkedPupils > 0
+                    ? `${executiveMetrics.totalPresent} of ${executiveMetrics.totalEnrolled} pupils present`
+                    : "No registers marked yet"
+                }
+                icon={Activity}
+                trend={false}
+              />
+              <MetricBlock
+                className="overview-metric"
+                label="Register Completion"
+                value={`${executiveMetrics.markedClasses} / ${executiveMetrics.totalClasses}`}
+                comparison={
+                  executiveMetrics.pendingClasses > 0
+                    ? `${executiveMetrics.pendingClasses} classes pending marking`
+                    : "All class registers marked"
+                }
+                icon={ClipboardCheck}
+                trend={false}
+              />
+              <MetricBlock
+                className="overview-metric"
+                label="Absentees Today"
+                value={executiveMetrics.totalAbsent.toLocaleString("en-IN")}
+                comparison={
+                  executiveMetrics.totalLeave > 0 || executiveMetrics.totalLate > 0
+                    ? `${executiveMetrics.totalLeave} on leave · ${executiveMetrics.totalLate} late arrival`
+                    : "0 on leave"
+                }
+                icon={UserX}
+                trend={false}
+              />
+              <MetricBlock
+                className="overview-metric"
+                label="Total Enrolled"
+                value={executiveMetrics.totalEnrolled.toLocaleString("en-IN")}
+                comparison={`Across ${executiveMetrics.totalClasses} classrooms`}
+                icon={Users}
+                trend={false}
+              />
+            </div>
+
+            {/* Pending Classes Alert Banner (Leadership Triage) */}
+            {executiveMetrics.pendingClasses > 0 && (
+              <div
+                className="panel"
+                style={{
+                  padding: "16px 20px",
+                  background: "rgba(255, 159, 10, 0.08)",
+                  border: "1px solid rgba(255, 159, 10, 0.28)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <AlertCircle size={20} style={{ color: "var(--warning)", flexShrink: 0 }} />
+                    <div>
+                      <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                        {executiveMetrics.pendingClasses} of {executiveMetrics.totalClasses} classes have not submitted attendance
+                      </span>
+                      <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "2px 0 0" }}>
+                        Attendance registers are pending from the assigned class teachers below.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button compact"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "12px",
+                      borderColor: statusFilter === "pending" ? "var(--warning)" : undefined,
+                      background: statusFilter === "pending" ? "rgba(255, 159, 10, 0.15)" : undefined,
+                    }}
+                    onClick={() => setStatusFilter(statusFilter === "pending" ? "all" : "pending")}
+                  >
+                    <Filter size={12} />
+                    {statusFilter === "pending" ? "Show all classes" : "Filter pending classes only"}
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "2px" }}>
+                  {classes
+                    .filter((c) => (c.markedToday ?? 0) === 0)
+                    .map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setClassroomId(c.id);
+                          setActiveTab("register");
+                        }}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "5px 11px",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(255, 159, 10, 0.35)",
+                          background: "var(--bg-card)",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          color: "var(--text-secondary)",
+                        }}
+                        title={`Open register for ${c.label}`}
+                      >
+                        <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{c.label}</span>
+                        <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>
+                          ({c.classTeacherName || "No teacher"})
+                        </span>
+                        <ArrowRight size={12} style={{ color: "var(--warning)" }} />
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Filter, Search & View Controls */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "12px",
+              }}
+            >
+              {/* Status Filters */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className={`status-pill ${statusFilter === "all" ? "brand" : "neutral"}`}
+                  onClick={() => setStatusFilter("all")}
+                  style={{ cursor: "pointer" }}
+                >
+                  All Classes ({classes.length})
+                </button>
+                <button
+                  type="button"
+                  className={`status-pill ${statusFilter === "pending" ? "warning" : "neutral"}`}
+                  onClick={() => setStatusFilter("pending")}
+                  style={{ cursor: "pointer" }}
+                >
+                  Pending ({executiveMetrics.pendingClasses})
+                </button>
+                <button
+                  type="button"
+                  className={`status-pill ${statusFilter === "marked" ? "success" : "neutral"}`}
+                  onClick={() => setStatusFilter("marked")}
+                  style={{ cursor: "pointer" }}
+                >
+                  Marked ({executiveMetrics.markedClasses})
+                </button>
+                {executiveMetrics.lowAttendanceClasses > 0 && (
+                  <button
+                    type="button"
+                    className={`status-pill ${statusFilter === "low_attendance" ? "danger" : "neutral"}`}
+                    onClick={() => setStatusFilter("low_attendance")}
+                    style={{ cursor: "pointer" }}
+                  >
+                    Below 85% ({executiveMetrics.lowAttendanceClasses})
+                  </button>
+                )}
+              </div>
+
+              {/* Search, Sort & View Mode */}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <div style={{ position: "relative", minWidth: "190px" }}>
+                  <Search
+                    size={13}
+                    style={{
+                      position: "absolute",
+                      left: "10px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "var(--text-muted)",
+                    }}
+                  />
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search class or teacher..."
+                    style={{
+                      padding: "6px 10px 6px 30px",
+                      fontSize: "12px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border-strong)",
+                      background: "var(--bg-input)",
+                      color: "var(--text-primary)",
+                      outline: "none",
+                      width: "100%",
+                    }}
+                  />
+                </div>
+
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                  style={{
+                    padding: "6px 10px",
+                    fontSize: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border-strong)",
+                    background: "var(--bg-input)",
+                    color: "var(--text-primary)",
+                    outline: "none",
+                  }}
+                  aria-label="Sort classes"
+                >
+                  <option value="grade">Sort: Grade (Default)</option>
+                  <option value="pending_first">Sort: Pending First</option>
+                  <option value="attendance_asc">Sort: Lowest Attendance</option>
+                  <option value="attendance_desc">Sort: Highest Attendance</option>
+                </select>
+
+                <div
+                  style={{
+                    display: "inline-flex",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border-strong)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <button
+                    type="button"
+                    style={{
+                      padding: "6px 10px",
+                      background: viewMode === "grid" ? "var(--brand)" : "var(--bg-card)",
+                      color: viewMode === "grid" ? "#ffffff" : "var(--text-muted)",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                    }}
+                    onClick={() => setViewMode("grid")}
+                    title="Grid view"
+                  >
+                    <Layers size={13} /> Cards
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      padding: "6px 10px",
+                      background: viewMode === "table" ? "var(--brand)" : "var(--bg-card)",
+                      color: viewMode === "table" ? "#ffffff" : "var(--text-muted)",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                    }}
+                    onClick={() => setViewMode("table")}
+                    title="Table view"
+                  >
+                    <BarChart3 size={13} /> Table
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* All-Classes Live Grid or Table */}
+            {filteredClasses.length === 0 ? (
+              <div className="panel" style={{ padding: "40px 24px", textAlign: "center" }}>
+                <p className="text-[var(--text-muted)] text-sm">
+                  No classes match your current search and filter settings.
+                </p>
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  style={{ marginTop: "10px" }}
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setGradeFilter("all");
+                    setSearchQuery("");
+                  }}
+                >
+                  Reset filters
+                </button>
+              </div>
+            ) : viewMode === "grid" ? (
+              <div className="attendance-grid">
+                {filteredClasses.map((option) => {
+                  const marked = option.markedToday ?? 0;
+                  const isMarked = option.isMarked ?? (marked >= option.studentCount && option.studentCount > 0);
+                  const isPending = marked === 0;
+                  const rate = option.todayPercent ?? (marked > 0 ? attendancePercent(option.presentToday ?? 0, marked) : 0);
+
+                  const rateToneColor = isPending
+                    ? "var(--text-muted)"
+                    : rate < 75
+                    ? "var(--danger-strong)"
+                    : rate < ATTENDANCE_THRESHOLD
+                    ? "var(--warning)"
+                    : "var(--success)";
+
+                  return (
+                    <div key={option.id} className="attendance-class-card">
+                      <div>
+                        {/* Card Header */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: "10px",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                                {option.label}
+                              </h3>
+                              {option.room && (
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    padding: "1px 6px",
+                                    borderRadius: "4px",
+                                    background: "var(--bg-raised)",
+                                    color: "var(--text-muted)",
+                                  }}
+                                >
+                                  Rm {option.room}
+                                </span>
+                              )}
+                            </div>
+                            <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "3px 0 0" }}>
+                              {option.classTeacherName ? `Teacher: ${option.classTeacherName}` : "No teacher assigned"}
+                            </p>
+                          </div>
+
+                          <div>
+                            {isPending ? (
+                              <span className="status-pill warning" style={{ fontSize: "11px", padding: "3px 8px" }}>
+                                <AlertCircle size={11} /> Pending
+                              </span>
+                            ) : isMarked ? (
+                              <span className="status-pill success" style={{ fontSize: "11px", padding: "3px 8px" }}>
+                                <CheckCircle2 size={11} /> Marked ({marked}/{option.studentCount})
+                              </span>
+                            ) : (
+                              <span className="status-pill neutral" style={{ fontSize: "11px", padding: "3px 8px" }}>
+                                Partial ({marked}/{option.studentCount})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Attendance Rate & Gauge */}
+                        <div style={{ margin: "14px 0 10px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "baseline",
+                              justifyContent: "space-between",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <span style={{ fontSize: "20px", fontWeight: 700, color: rateToneColor }}>
+                              {isPending ? "—" : `${rate}%`}
+                            </span>
+                            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                              {isPending
+                                ? `${option.studentCount} pupils`
+                                : `${option.presentToday} / ${option.studentCount} present`}
+                            </span>
+                          </div>
+
+                          <div className="progress-bar" style={{ height: "6px", borderRadius: "999px" }}>
+                            <span
+                              style={{
+                                width: isPending ? "0%" : `${Math.min(100, Math.max(0, rate))}%`,
+                                background: isPending
+                                  ? "var(--border-strong)"
+                                  : rate < 75
+                                  ? "var(--danger-strong)"
+                                  : rate < ATTENDANCE_THRESHOLD
+                                  ? "var(--warning)"
+                                  : "var(--success)",
+                                transition: "width 0.4s ease",
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Status Breakdown Pills */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "10px 0" }}>
+                          <span className="attendance-stat-pill" style={{ color: "var(--success)" }}>
+                            <Check size={11} /> {option.presentToday} Present
+                          </span>
+                          {(option.absentToday ?? 0) > 0 && (
+                            <span
+                              className="attendance-stat-pill"
+                              style={{ color: "var(--danger-strong)", background: "rgba(255, 69, 58, 0.08)" }}
+                            >
+                              <X size={11} /> {option.absentToday} Absent
+                            </span>
+                          )}
+                          {(option.lateToday ?? 0) > 0 && (
+                            <span className="attendance-stat-pill" style={{ color: "var(--warning)" }}>
+                              <Clock3 size={11} /> {option.lateToday} Late
+                            </span>
+                          )}
+                          {(option.leaveToday ?? 0) > 0 && (
+                            <span className="attendance-stat-pill" style={{ color: "var(--brand-strong)" }}>
+                              <CalendarDays size={11} /> {option.leaveToday} Leave
+                            </span>
+                          )}
+                          {isPending && (
+                            <span className="attendance-stat-pill">
+                              {option.studentCount} Unmarked
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Absentees Quick Inspector Chip */}
+                        {((option.absentToday ?? 0) > 0 || (option.leaveToday ?? 0) > 0) && (
+                          <button
+                            type="button"
+                            className="attendance-absentee-chip"
+                            onClick={() => setInspectClassId(option.id)}
+                            style={{ marginTop: "4px", width: "100%", justifyContent: "space-between" }}
+                          >
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                              <UserX size={12} />
+                              <span>
+                                {(option.absentToday ?? 0) + (option.leaveToday ?? 0)} Absent / On Leave
+                              </span>
+                            </span>
+                            <span style={{ fontSize: "11px", opacity: 0.8 }}>Inspect →</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Card Footer */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          marginTop: "14px",
+                          paddingTop: "12px",
+                          borderTop: "1px solid var(--border-subtle)",
+                        }}
+                      >
+                        <span style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>
+                          {option.termPercent > 0 ? `Term: ${option.termPercent}%` : "No term history"}
+                        </span>
+                        <button
+                          type="button"
+                          className="secondary-button compact"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            fontSize: "11.5px",
+                            padding: "4px 10px",
+                          }}
+                          onClick={() => {
+                            setClassroomId(option.id);
+                            setActiveTab("register");
+                          }}
+                        >
+                          <ClipboardCheck size={12} />
+                          {option.canMark ? "Mark Register" : "Open Register"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <section className="panel">
+                <div className="table-scroll">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Class</th>
+                        <th>Class Teacher</th>
+                        <th>Room</th>
+                        <th>Enrolled</th>
+                        <th>Status</th>
+                        <th>Present</th>
+                        <th>Absent</th>
+                        <th>Late</th>
+                        <th>Leave</th>
+                        <th>Attendance %</th>
+                        <th style={{ width: "130px", textAlign: "right" }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredClasses.map((option) => {
+                        const marked = option.markedToday ?? 0;
+                        const isMarked = option.isMarked ?? (marked >= option.studentCount && option.studentCount > 0);
+                        const isPending = marked === 0;
+                        const rate = option.todayPercent ?? (marked > 0 ? attendancePercent(option.presentToday ?? 0, marked) : 0);
+
+                        return (
+                          <tr key={option.id}>
+                            <td>
+                              <span className="font-medium text-[var(--text-primary)]">
+                                {option.label}
+                              </span>
+                            </td>
+                            <td className="muted-cell">
+                              {option.classTeacherName || "Unassigned"}
+                            </td>
+                            <td className="muted-cell">{option.room || "—"}</td>
+                            <td className="muted-cell">{option.studentCount}</td>
+                            <td>
+                              {isPending ? (
+                                <span className="status-pill warning">Pending</span>
+                              ) : isMarked ? (
+                                <span className="status-pill success">Marked</span>
+                              ) : (
+                                <span className="status-pill neutral">Partial</span>
+                              )}
+                            </td>
+                            <td className="muted-cell">{option.presentToday}</td>
+                            <td className="muted-cell" style={{ color: (option.absentToday ?? 0) > 0 ? "var(--danger-strong)" : undefined }}>
+                              {option.absentToday ?? 0}
+                            </td>
+                            <td className="muted-cell">{option.lateToday ?? 0}</td>
+                            <td className="muted-cell">{option.leaveToday ?? 0}</td>
+                            <td>
+                              {!isPending ? (
+                                <div className="flex items-center gap-3">
+                                  <span className="progress-bar" style={{ width: "60px" }}>
+                                    <span
+                                      style={{
+                                        width: `${rate}%`,
+                                        background:
+                                          rate < 75
+                                            ? "var(--danger-strong)"
+                                            : rate < ATTENDANCE_THRESHOLD
+                                            ? "var(--warning)"
+                                            : "var(--success)",
+                                      }}
+                                    />
+                                  </span>
+                                  <span className="font-medium text-[var(--text-hover)]">
+                                    {rate}%
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="muted-cell">—</span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: "right" }}>
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                {((option.absentToday ?? 0) > 0 || (option.leaveToday ?? 0) > 0) && (
+                                  <button
+                                    type="button"
+                                    className="secondary-button compact"
+                                    style={{ fontSize: "11px", padding: "3px 7px" }}
+                                    onClick={() => setInspectClassId(option.id)}
+                                    title="Inspect absentees"
+                                  >
+                                    <UserX size={12} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="secondary-button compact"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "5px",
+                                    fontSize: "11.5px",
+                                    padding: "4px 10px",
+                                  }}
+                                  onClick={() => {
+                                    setClassroomId(option.id);
+                                    setActiveTab("register");
+                                  }}
+                                >
+                                  <ClipboardCheck size={12} />
+                                  {option.canMark ? "Mark" : "Open"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {/* School-wide 7-Day History */}
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2 className="panel-title">Recent 7-day attendance trend</h2>
+                  <p style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "3px" }}>
+                    The last recorded school days across all classrooms.
+                  </p>
+                </div>
+              </div>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Marked</th>
+                      <th>Present</th>
+                      <th>Late</th>
+                      <th>Leave</th>
+                      <th>Absent</th>
+                      <th>Attendance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!overview || overview.daily.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: "center", padding: "36px" }}>
+                          <p className="text-[var(--text-muted)] text-sm">
+                            No attendance has been recorded yet.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      [...overview.daily].reverse().map((day) => (
+                        <tr key={day.date}>
+                          <td className="font-medium text-[var(--text-primary)]">
+                            {readableDate(day.date)}
+                          </td>
+                          <td className="muted-cell">{day.marked}</td>
+                          <td className="muted-cell">{day.present}</td>
+                          <td className="muted-cell">{day.late}</td>
+                          <td className="muted-cell">{day.leave}</td>
+                          <td className="muted-cell">{day.absent}</td>
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <span className="progress-bar">
+                                <span
+                                  style={{
+                                    width: `${day.percent}%`,
+                                    background:
+                                      day.percent < ATTENDANCE_THRESHOLD
+                                        ? "var(--warning)"
+                                        : "var(--brand)",
+                                  }}
+                                />
+                              </span>
+                              <span className="font-medium text-[var(--text-hover)]">
+                                {day.percent}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        ))}
+
+      {/* ------------------------------------------------------------ */}
+      {/* Daily Register Tab                                            */}
       {/* ------------------------------------------------------------ */}
       {activeTab === "register" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Quick jump back to live overview */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+            <button
+              type="button"
+              className="secondary-button compact"
+              onClick={() => setActiveTab("overview")}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", padding: "6px 12px" }}
+            >
+              <ArrowLeft size={13} />
+              Back to Live Overview
+            </button>
+            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              Viewing class register for {selectedClass?.label ?? "Selected Class"}
+            </span>
+          </div>
+
           <div className="panel" style={{ padding: "18px 22px" }}>
             <div
               style={{
@@ -3153,262 +4103,200 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
       )}
 
       {/* ------------------------------------------------------------ */}
-      {/* Cohort overview                                               */}
+      {/* Absentee & Exceptions Drill-Down Drawer                       */}
       {/* ------------------------------------------------------------ */}
-      {activeTab === "overview" &&
-        (loading && !data ? (
-          <div className="panel" style={{ padding: "18px 22px" }}>
-            <SkeletonRegion label="Loading attendance overview">
-              <SkeletonList rows={6} avatar={false} />
-            </SkeletonRegion>
-          </div>
-        ) : error ? (
-          <div className="panel" style={{ padding: "34px 24px" }}>
-            <div className="empty-state">
-              <AlertCircle size={22} />
-              <p style={{ maxWidth: "520px", textAlign: "center" }}>{error}</p>
-              {retry}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            <div className="metric-grid">
-              <MetricBlock
-                className="overview-metric"
-                label="Today's attendance"
-                value={
-                  overview && overview.todayMarked > 0
-                    ? `${overview.todayPercent}%`
-                    : "—"
-                }
-                comparison={
-                  overview && overview.todayMarked > 0
-                    ? `${overview.todayMarked} pupils marked today`
-                    : "No register marked today"
-                }
-                icon={ClipboardCheck}
-                trend={false}
-              />
-              <MetricBlock
-                className="overview-metric"
-                label="Present today"
-                value={
-                  overview && overview.todayMarked > 0
-                    ? overview.todayPresent.toLocaleString("en-IN")
-                    : "—"
-                }
-                comparison="Present + late"
-                icon={UserCheck}
-                trend={false}
-              />
-              <MetricBlock
-                className="overview-metric"
-                label={`Below ${ATTENDANCE_THRESHOLD}%`}
-                value={
-                  overview && overview.belowThreshold > 0
-                    ? overview.belowThreshold.toLocaleString("en-IN")
-                    : "0"
-                }
-                comparison="Pupils needing follow-up"
-                icon={AlertCircle}
-                trend={false}
-              />
-              <MetricBlock
-                className="overview-metric"
-                label="Classes tracked"
-                value={classes.length.toLocaleString("en-IN")}
-                comparison={
-                  classes.length > 0
-                    ? `${classes.filter((option) => option.markedToday > 0).length} marked today`
-                    : "No classes yet"
-                }
-                icon={Users}
-                trend={false}
-              />
+      {inspectClassId && inspectedClass && (
+        <>
+          <div
+            className="drawer-scrim"
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0, 0, 0, 0.45)",
+              backdropFilter: "blur(2px)",
+              zIndex: 9998,
+            }}
+            onClick={() => setInspectClassId(null)}
+          />
+          <div
+            className="drawer"
+            style={{
+              position: "fixed",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: "min(460px, 100vw)",
+              background: "var(--bg-card)",
+              borderLeft: "1px solid var(--border-strong)",
+              zIndex: 9999,
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "-8px 0 24px rgba(0, 0, 0, 0.14)",
+              animation: "drawer-slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            {/* Drawer Header */}
+            <div
+              style={{
+                padding: "18px 20px",
+                borderBottom: "1px solid var(--border-subtle)",
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                    {inspectedClass.label}
+                  </h2>
+                  {inspectedClass.room && (
+                    <span className="status-pill neutral" style={{ fontSize: "11px", padding: "2px 6px" }}>
+                      Rm {inspectedClass.room}
+                    </span>
+                  )}
+                </div>
+                <p style={{ fontSize: "12.5px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+                  {inspectedClass.classTeacherName ? `Teacher: ${inspectedClass.classTeacherName}` : "No teacher assigned"} · {readableDate(data?.date ?? date)}
+                </p>
+              </div>
+              <button
+                className="secondary-button compact"
+                style={{ padding: "6px", borderRadius: "8px" }}
+                onClick={() => setInspectClassId(null)}
+                aria-label="Close drawer"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            <section className="panel">
-              <div className="panel-header">
-                <div>
-                  <h2 className="panel-title">Recent registers</h2>
-                  <p style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "3px" }}>
-                    The last seven recorded school days.
-                  </p>
+            {/* Drawer Body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Quick summary metrics */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+                <div className="panel" style={{ padding: "12px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block" }}>Present</span>
+                  <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--success)" }}>{inspectedClass.presentToday}</span>
+                </div>
+                <div className="panel" style={{ padding: "12px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block" }}>Absent</span>
+                  <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--danger-strong)" }}>{inspectedClass.absentToday ?? 0}</span>
+                </div>
+                <div className="panel" style={{ padding: "12px", textAlign: "center" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block" }}>On Leave</span>
+                  <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--brand-strong)" }}>{inspectedClass.leaveToday ?? 0}</span>
                 </div>
               </div>
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Marked</th>
-                      <th>Present</th>
-                      <th>Late</th>
-                      <th>Leave</th>
-                      <th>Absent</th>
-                      <th>Attendance</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {!overview || overview.daily.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: "center", padding: "36px" }}>
-                          <p className="text-[var(--text-muted)] text-sm">
-                            No attendance has been recorded yet.
-                          </p>
-                        </td>
-                      </tr>
-                    ) : (
-                      [...overview.daily].reverse().map((day) => (
-                        <tr key={day.date}>
-                          <td className="font-medium text-[var(--text-primary)]">
-                            {readableDate(day.date)}
-                          </td>
-                          <td className="muted-cell">{day.marked}</td>
-                          <td className="muted-cell">{day.present}</td>
-                          <td className="muted-cell">{day.late}</td>
-                          <td className="muted-cell">{day.leave}</td>
-                          <td className="muted-cell">{day.absent}</td>
-                          <td>
-                            <div className="flex items-center gap-3">
-                              <span className="progress-bar">
-                                <span
-                                  style={{
-                                    width: `${day.percent}%`,
-                                    background:
-                                      day.percent < ATTENDANCE_THRESHOLD
-                                        ? "var(--warning)"
-                                        : "var(--brand)",
-                                  }}
-                                />
-                              </span>
-                              <span className="font-medium text-[var(--text-hover)]">
-                                {day.percent}%
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
 
-            <section className="panel">
-              <div className="panel-header">
-                <div>
-                  <h2 className="panel-title">Class attendance</h2>
-                  <p style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "3px" }}>
-                    Term-to-date, present and late counted as attending.
-                  </p>
-                </div>
-              </div>
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Class</th>
-                      <th>Class teacher</th>
-                      <th>Pupils</th>
-                      <th>Today</th>
-                      <th>Term attendance</th>
-                      <th>Signal</th>
-                      <th style={{ width: "130px", textAlign: "right" }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {classes.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: "center", padding: "36px" }}>
-                          <p className="text-[var(--text-muted)] text-sm">
-                            No classes are available to show.
-                          </p>
-                        </td>
-                      </tr>
-                    ) : (
-                      classes.map((option) => (
-                        <tr key={option.id}>
-                          <td>
-                            <span className="font-medium text-[var(--text-primary)]">
-                              {option.label}
+              {/* Absentees list */}
+              <div>
+                <h3
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    marginBottom: "10px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <UserX size={14} style={{ color: "var(--danger-strong)" }} />
+                  Absentees & Exceptions ({inspectedClass.absentees?.length ?? 0})
+                </h3>
+
+                {(!inspectedClass.absentees || inspectedClass.absentees.length === 0) ? (
+                  <div className="panel" style={{ padding: "28px 16px", textAlign: "center" }}>
+                    <CheckCircle2 size={24} style={{ color: "var(--success)", margin: "0 auto 8px" }} />
+                    <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
+                      100% Attendance Recorded!
+                    </p>
+                    <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                      No pupils were marked absent, late, or on leave for this class on {readableDate(data?.date ?? date)}.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {inspectedClass.absentees.map((pupil) => (
+                      <div
+                        key={pupil.id}
+                        className="panel"
+                        style={{
+                          padding: "12px 14px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                          <div>
+                            <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
+                              {pupil.name}
                             </span>
-                          </td>
-                          <td className="muted-cell">
-                            {option.classTeacherName || "Unassigned"}
-                          </td>
-                          <td className="muted-cell">{option.studentCount}</td>
-                          <td className="muted-cell">
-                            {option.markedToday > 0
-                              ? `${option.presentToday} / ${option.markedToday}`
-                              : "Not marked"}
-                          </td>
-                          <td>
-                            {option.termPercent > 0 ? (
-                              <div className="flex items-center gap-3">
-                                <span className="progress-bar">
-                                  <span
-                                    style={{
-                                      width: `${option.termPercent}%`,
-                                      background:
-                                        option.termPercent < ATTENDANCE_THRESHOLD
-                                          ? "var(--warning)"
-                                          : "var(--brand)",
-                                    }}
-                                  />
-                                </span>
-                                <span className="font-medium text-[var(--text-hover)]">
-                                  {option.termPercent}%
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="muted-cell">No history</span>
+                            {pupil.rollNo && (
+                              <span style={{ fontSize: "11.5px", color: "var(--text-muted)", marginLeft: "8px" }}>
+                                Roll #{pupil.rollNo}
+                              </span>
                             )}
-                          </td>
-                          <td>
-                            <span
-                              className={`status-pill ${
-                                option.termPercent > 0 &&
-                                option.termPercent < ATTENDANCE_THRESHOLD
-                                  ? "warning"
-                                  : "neutral"
-                              }`}
-                            >
-                              {option.termPercent === 0
-                                ? "No data"
-                                : option.termPercent < ATTENDANCE_THRESHOLD
-                                  ? "Follow-up"
-                                  : "On track"}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: "right" }}>
-                            <button
-                              className="secondary-button compact"
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "5px",
-                                fontSize: "11.5px",
-                                padding: "4px 10px",
-                              }}
-                              onClick={() => {
-                                setClassroomId(option.id);
-                                setActiveTab("register");
-                              }}
-                            >
-                              <ClipboardCheck size={12} />
-                              {option.canMark ? "Take register" : "Review"}
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                          </div>
+                          <span className={`status-pill ${attendanceTone(pupil.status)}`}>
+                            {ATTENDANCE_STATUS_LABELS[pupil.status]}
+                          </span>
+                        </div>
+
+                        {pupil.notes ? (
+                          <div
+                            style={{
+                              fontSize: "12px",
+                              color: "var(--text-secondary)",
+                              background: "var(--bg-raised)",
+                              padding: "6px 10px",
+                              borderRadius: "6px",
+                            }}
+                          >
+                            <span style={{ fontWeight: 500, color: "var(--text-muted)" }}>Remark: </span>
+                            {pupil.notes}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: "11.5px", color: "var(--text-muted)", fontStyle: "italic" }}>
+                            No remarks entered by teacher
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </section>
+            </div>
+
+            {/* Drawer Footer */}
+            <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border-subtle)", display: "flex", gap: "10px" }}>
+              <button
+                type="button"
+                className="primary-button"
+                style={{
+                  flex: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  fontSize: "13px",
+                  padding: "10px 16px",
+                }}
+                onClick={() => {
+                  setClassroomId(inspectedClass.id);
+                  setActiveTab("register");
+                  setInspectClassId(null);
+                }}
+              >
+                <ClipboardCheck size={14} />
+                Open Full Class Register
+              </button>
+            </div>
           </div>
-        ))}
+        </>
+      )}
     </div>
   );
 }

@@ -75,6 +75,14 @@ export interface AttendanceRosterStudent {
   termPercent: number;
 }
 
+export interface AttendanceAbsenteeItem {
+  id: string;
+  name: string;
+  rollNo: string | null;
+  status: "absent" | "late" | "leave";
+  notes: string;
+}
+
 export interface AttendanceClassOption {
   id: string;
   label: string;
@@ -90,6 +98,12 @@ export interface AttendanceClassOption {
   termPercent: number;
   presentToday: number;
   markedToday: number;
+  absentToday?: number;
+  lateToday?: number;
+  leaveToday?: number;
+  todayPercent?: number;
+  isMarked?: boolean;
+  absentees?: AttendanceAbsenteeItem[];
 }
 
 export interface AttendanceDaySummary {
@@ -108,6 +122,13 @@ export interface AttendanceOverview {
   todayMarked: number;
   todayPercent: number;
   belowThreshold: number;
+  totalStudents?: number;
+  classesMarked?: number;
+  classesPending?: number;
+  classesTotal?: number;
+  todayAbsent?: number;
+  todayLate?: number;
+  todayLeave?: number;
 }
 
 export interface AttendanceBootstrap {

@@ -23,6 +23,7 @@ import type {
 } from "@shared/attendance";
 
 export type {
+  AttendanceAbsenteeItem,
   AttendanceBootstrap,
   AttendanceClassOption,
   AttendanceDaySummary,
