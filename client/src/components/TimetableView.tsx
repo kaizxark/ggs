@@ -1415,9 +1415,11 @@ export function TimetableView() {
                   <span className="tt-sub">
                     {dirty
                       ? "Changes are in this browser until you Save."
-                      : saved?.published
-                        ? "Published — visible to pupils and parents."
-                        : "Saved as a draft."}
+                      : !saved
+                        ? "Nothing saved for this class yet."
+                        : saved.published
+                          ? "Published — visible to pupils and parents."
+                          : "Saved as a draft."}
                   </span>
                 </div>
               )}
