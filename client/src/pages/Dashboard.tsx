@@ -151,10 +151,17 @@ import {
   getAnnualFeeForGrade,
 } from "../lib/school-data";
 import {
-  recordClassAttendance,
-  getSavedClassAttendance,
+  ATTENDANCE_STATUSES,
+  ATTENDANCE_STATUS_LABELS,
+  ATTENDANCE_THRESHOLD,
+  attendancePercent,
+  attendanceToday,
+  loadAttendance,
+  saveClassAttendance,
+  type AttendanceBootstrap,
   type AttendanceStatus,
 } from "../lib/attendance";
+import { ApiError } from "../lib/student-directory";
 import {
   SkeletonChart,
   SkeletonCircle,
@@ -2453,307 +2460,256 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
   );
 }
 
-const DEFAULT_COHORT_CLASSES = [
-  { id: "class-g6-a", label: "Grade 6 — A", grade: "Grade 6", section: "A", teacher: "Neha Kulkarni" },
-  { id: "class-g6-b", label: "Grade 6 — B", grade: "Grade 6", section: "B", teacher: "Ravi Menon" },
-  { id: "class-g7-a", label: "Grade 7 — A", grade: "Grade 7", section: "A", teacher: "Sonia Joseph" },
-  { id: "class-g7-b", label: "Grade 7 — B", grade: "Grade 7", section: "B", teacher: "Arvind Iyer" },
-  { id: "class-g8-a", label: "Grade 8 — A", grade: "Grade 8", section: "A", teacher: "Meera Shah" },
-  { id: "class-g8-b", label: "Grade 8 — B", grade: "Grade 8", section: "B", teacher: "Daniel Thomas" },
-  { id: "class-g9-a", label: "Grade 9 — A", grade: "Grade 9", section: "A", teacher: "Karthik Rao" },
-  { id: "class-g9-b", label: "Grade 9 — B", grade: "Grade 9", section: "B", teacher: "Priya Nair" },
-  { id: "class-g10-a", label: "Grade 10 — A", grade: "Grade 10", section: "A", teacher: "Rohan Mehta" },
-  { id: "class-g10-b", label: "Grade 10 — B", grade: "Grade 10", section: "B", teacher: "Ananya Sen" },
-];
+/* ------------------------------------------------------------------ */
+/* Attendance                                                          */
+/* ------------------------------------------------------------------ */
 
-function AttendanceView({ onBack }: { onBack: () => void }) {
-  const currentUser = useCurrentUser();
-  const isFacultyOrTeacher =
-    currentUser?.role === "teacher" || currentUser?.role === "faculty";
-
-  const [activeTab, setActiveTab] = useState<"register" | "overview">("register");
-
-  const { rows: classAttendance, loading: classAttendanceLoading } =
-    useClassAttendance();
-  const { rows: dailyAttendance, loading: dailyAttendanceLoading } =
-    useAttendanceDaily();
-  const { rows: enrolledStudents } = useStudents();
-
-  // Cohort classes list
-  const availableClasses = useMemo(() => {
-    const list: Array<{ id: string; label: string; grade: string; section: string; teacher: string }> = [];
-    const seen = new Set<string>();
-
-    if (Array.isArray(classAttendance)) {
-      for (const c of classAttendance) {
-        if (!c || !c.label) continue;
-        if (!seen.has(c.label)) {
-          seen.add(c.label);
-          const parts = String(c.label).split("—").map(p => p.trim());
-          const grade = parts[0] || "Grade 6";
-          const section = parts[1]?.replace(/^Section\s*/i, "").trim() || "A";
-          list.push({
-            id: String(c.id || `cls-${c.label}`),
-            label: c.label,
-            grade,
-            section,
-            teacher: c.teacher || "Faculty",
-          });
-        }
-      }
-    }
-
-    // Also extract from enrolled students
-    if (Array.isArray(enrolledStudents)) {
-      for (const s of enrolledStudents) {
-        if (s && s.grade && s.section) {
-          const lbl = `${s.grade} — ${s.section}`;
-          if (!seen.has(lbl)) {
-            seen.add(lbl);
-            list.push({
-              id: `class-${s.grade.replace(/\s+/g, "").toLowerCase()}-${s.section.toLowerCase()}`,
-              label: lbl,
-              grade: s.grade,
-              section: s.section,
-              teacher: "Faculty",
-            });
-          }
-        }
-      }
-    }
-
-    return list.length > 0 ? list : DEFAULT_COHORT_CLASSES;
-  }, [classAttendance, enrolledStudents]);
-
-  const [selectedClassId, setSelectedClassId] = useState<string>(() => {
-    return availableClasses[0]?.id || "class-g6-a";
+/** "2026-11-09" -> "9 Nov 2026", without pulling in a date library. */
+function readableDate(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+  const parsed = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return parsed.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   });
+}
 
-  /* The class list is built from data that arrives after first paint. When the
-     real list replaces the fallback, the previously selected id can stop
-     existing — and FormSelect then renders the raw id ("class-g6-a") in the
-     trigger because it has no matching option. Snap to the first real class. */
-  useEffect(() => {
-    if (!availableClasses.length) return;
-    if (!availableClasses.some(c => c.id === selectedClassId)) {
-      setSelectedClassId(availableClasses[0].id);
-    }
-  }, [availableClasses, selectedClassId]);
+/** The pill tone that matches each stored status. */
+function attendanceTone(status: AttendanceStatus): string {
+  if (status === "present") return "success";
+  if (status === "late") return "warning";
+  if (status === "leave") return "neutral";
+  return "danger";
+}
 
-  const currentClass = useMemo(() => {
-    return (
-      availableClasses.find(c => c && c.id === selectedClassId) ||
-      availableClasses[0] ||
-      DEFAULT_COHORT_CLASSES[0]
-    );
-  }, [availableClasses, selectedClassId]);
+const ATTENDANCE_STATUS_ICONS: Record<AttendanceStatus, React.ElementType> = {
+  present: Check,
+  late: Clock3,
+  leave: CalendarDays,
+  absent: X,
+};
 
-  // Indian standard date helpers
-  const getTodayIso = () => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
+/**
+ * One pupil's status selector.
+ *
+ * Four pills, one per value the database's `attendance_status` enum accepts.
+ * The chosen pill takes the tone of its meaning; the rest stay neutral, so a
+ * row reads at a glance instead of turning into four competing colours.
+ */
+function AttendanceStatusPicker({
+  value,
+  onChange,
+  label,
+}: {
+  value: AttendanceStatus | null;
+  onChange: (status: AttendanceStatus) => void;
+  label: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}
+    >
+      {ATTENDANCE_STATUSES.map((status) => {
+        const Icon = ATTENDANCE_STATUS_ICONS[status];
+        const active = value === status;
+        return (
+          <button
+            key={status}
+            type="button"
+            className={`status-pill ${active ? attendanceTone(status) : "neutral"}`}
+            aria-pressed={active}
+            onClick={() => onChange(status)}
+            style={{
+              cursor: "pointer",
+              opacity: active ? 1 : 0.72,
+              border: "1px solid",
+              boxShadow: active ? "0 0 0 2px var(--brand-soft)" : "none",
+            }}
+          >
+            <Icon size={12} />
+            {ATTENDANCE_STATUS_LABELS[status]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayIso);
-
-  const formattedIndianDate = useMemo(() => {
-    try {
-      const [y, m, d] = selectedDate.split("-").map(Number);
-      const dateObj = new Date(y, m - 1, d);
-      const dayStr = String(dateObj.getDate()).padStart(2, "0");
-      const monthStr = dateObj.toLocaleDateString("en-IN", { month: "short" });
-      const yearStr = dateObj.getFullYear();
-      const weekday = dateObj.toLocaleDateString("en-IN", { weekday: "long" });
-      return `${dayStr} ${monthStr} ${yearStr} (${weekday})`;
-    } catch {
-      return selectedDate;
-    }
-  }, [selectedDate]);
-
-  const dayOfWeek = useMemo(() => {
-    try {
-      const [y, m, d] = selectedDate.split("-").map(Number);
-      return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long" });
-    } catch {
-      return "Monday";
-    }
-  }, [selectedDate]);
-
-  // Timetable integration
-  const classPeriods = useMemo(() => {
-    if (!currentClass) return [];
-    const periods = [
-      { period: "Period 1", time: "08:45 – 09:30", subject: "Roll Call & Assembly" },
-      { period: "Period 2", time: "09:30 – 10:15", subject: "Core Subject" },
-      { period: "Period 3", time: "10:30 – 11:15", subject: "Core Subject" },
-      { period: "Period 4", time: "11:15 – 12:00", subject: "Core Subject" },
-      { period: "Period 5", time: "12:45 – 01:30", subject: "Lab / Practical" },
-      { period: "Period 6", time: "01:30 – 02:15", subject: "Language" },
-      { period: "Period 7", time: "02:30 – 03:15", subject: "Activities & Sports" },
-    ];
-    return periods.map(p => ({
-      id: `${currentClass.id}-${p.period}`,
-      period: p.period,
-      time: p.time,
-      subject: p.subject,
-    }));
-  }, [currentClass]);
-
-  const [selectedPeriod, setSelectedPeriod] = useState<string>("Period 1");
-
-  // Roster of students for selected class — strictly 100% real enrolled pupils
-  const classStudents = useMemo(() => {
-    if (!currentClass) return [];
-    return enrolledStudents.filter(s => {
-      if (!s.grade || !s.section) return false;
-      const sGrade = s.grade.toLowerCase().replace(/\s+/g, "");
-      const cGrade = currentClass.grade.toLowerCase().replace(/\s+/g, "");
-      const sSec = s.section.toLowerCase().trim();
-      const cSec = currentClass.section.toLowerCase().trim();
-      return sGrade === cGrade && sSec === cSec;
-    });
-  }, [currentClass, enrolledStudents]);
-
-  // Attendance state map: student_id -> { status, notes }
-  const [attendanceMap, setAttendanceMap] = useState<
-    Record<string, { status: AttendanceStatus; notes?: string }>
+/**
+ * The attendance register.
+ *
+ * ## Who marks, who reviews
+ *
+ * A register is marked by the teacher assigned to that class, and by nobody
+ * else. `/api/attendance` enforces that from the session token; this screen
+ * only reflects the answer. An administrator, the principal or the super admin
+ * opens the same screen read-only: they can pick any class and any date and
+ * see exactly what was saved, but the Save button does not exist for them.
+ *
+ * ## Nothing is invented
+ *
+ * The roster comes from `enrollments` and the marks from `attendance`. A pupil
+ * with no row for the chosen date is *unmarked* — not assumed present — and
+ * Save stays disabled until every pupil has a status. There is no localStorage
+ * copy and no generated cohort: an empty school renders as an empty school.
+ */
+function AttendanceView({ onBack }: { onBack: () => void }) {
+  const [activeTab, setActiveTab] = useState<"register" | "overview">("register");
+  const [date, setDate] = useState<string>(() => attendanceToday());
+  const [classroomId, setClassroomId] = useState<string>("");
+  const [data, setData] = useState<AttendanceBootstrap | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [draft, setDraft] = useState<
+    Record<string, { status: AttendanceStatus | null; notes: string }>
   >({});
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  // Sync attendance whenever date or class changes
   useEffect(() => {
-    if (!currentClass) return;
-    const saved = getSavedClassAttendance(selectedDate, currentClass.label);
-    if (saved && Object.keys(saved).length > 0) {
-      setAttendanceMap(saved);
-    } else {
-      const defaults: Record<string, { status: AttendanceStatus; notes?: string }> = {};
-      for (const s of classStudents) {
-        defaults[s.id] = { status: "present", notes: "" };
-      }
-      setAttendanceMap(defaults);
-    }
-  }, [selectedDate, currentClass?.label, classStudents]);
+    let cancelled = false;
+    setLoading(true);
+    setError("");
 
-  const setStudentStatus = (studentId: string, status: AttendanceStatus) => {
-    setAttendanceMap(prev => ({
-      ...prev,
-      [studentId]: {
-        status,
-        notes: prev[studentId]?.notes,
-      },
-    }));
-  };
+    loadAttendance({ date, classroomId: classroomId || undefined })
+      .then((next) => {
+        if (cancelled) return;
+        setData(next);
+        // The chosen class disappeared (or was never visible to this caller).
+        // Follow the route's choice rather than leaving a picker with no match.
+        if (classroomId && next.selectedClassroomId !== classroomId) {
+          setClassroomId(next.selectedClassroomId ?? "");
+        }
+        const nextDraft: Record<
+          string,
+          { status: AttendanceStatus | null; notes: string }
+        > = {};
+        for (const pupil of next.roster) {
+          nextDraft[pupil.id] = { status: pupil.status, notes: pupil.notes };
+        }
+        setDraft(nextDraft);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setData(null);
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "The attendance register could not be loaded. Check your connection and try again."
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  const setStudentNotes = (studentId: string, notes: string) => {
-    setAttendanceMap(prev => ({
-      ...prev,
-      [studentId]: {
-        status: prev[studentId]?.status || "present",
-        notes,
-      },
-    }));
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [date, classroomId, reloadKey]);
 
-  const markAll = (status: AttendanceStatus) => {
-    setAttendanceMap(prev => {
-      const updated: Record<string, { status: AttendanceStatus; notes?: string }> = {};
-      for (const s of classStudents) {
-        updated[s.id] = {
-          ...prev[s.id],
-          status,
-        };
-      }
-      return updated;
-    });
-    toast.info(`Marked all ${classStudents.length} students as ${status.toUpperCase()}`);
-  };
+  const classes = data?.classes ?? [];
+  const roster = data?.roster ?? [];
+  const selectedClass = data?.selectedClass ?? null;
+  const overview = data?.overview ?? null;
+  const managerView = data?.managerView ?? false;
+  const canMark = Boolean(data && !managerView && selectedClass?.canMark);
+  const activeClassId = classroomId || data?.selectedClassroomId || "";
 
-  // Live tallies (strictly binary: Present vs Absent)
   const counts = useMemo(() => {
     let present = 0;
     let absent = 0;
-
-    for (const s of classStudents) {
-      const st = attendanceMap[s.id]?.status || "present";
-      if (st === "present") present++;
-      else absent++;
+    let late = 0;
+    let leave = 0;
+    let unmarked = 0;
+    for (const pupil of roster) {
+      const status = draft[pupil.id]?.status ?? null;
+      if (status === "present") present += 1;
+      else if (status === "absent") absent += 1;
+      else if (status === "late") late += 1;
+      else if (status === "leave") leave += 1;
+      else unmarked += 1;
     }
+    const marked = present + absent + late + leave;
+    return {
+      present,
+      absent,
+      late,
+      leave,
+      unmarked,
+      marked,
+      percent: attendancePercent(present + late, marked),
+    };
+  }, [draft, roster]);
 
-    const total = classStudents.length;
-    const pct = total > 0 ? Math.round((present / total) * 1000) / 10 : 0;
+  const allMarked = roster.length > 0 && counts.unmarked === 0;
 
-    return { present, absent, total, pct };
-  }, [classStudents, attendanceMap]);
+  function setStatus(studentId: string, status: AttendanceStatus) {
+    setDraft((prev) => ({
+      ...prev,
+      [studentId]: { status, notes: prev[studentId]?.notes ?? "" },
+    }));
+  }
 
-  // Search filter inside register
-  const [registerSearch, setRegisterSearch] = useState("");
-  const filteredStudents = useMemo(() => {
-    if (!registerSearch.trim()) return classStudents;
-    const q = registerSearch.toLowerCase();
-    return classStudents.filter(
-      s => s.name.toLowerCase().includes(q) || (s.usn && s.usn.toLowerCase().includes(q))
-    );
-  }, [classStudents, registerSearch]);
+  function setNotes(studentId: string, notes: string) {
+    setDraft((prev) => ({
+      ...prev,
+      [studentId]: { status: prev[studentId]?.status ?? null, notes },
+    }));
+  }
 
-  const [saving, setSaving] = useState(false);
+  function markAllPresent() {
+    const next: Record<string, { status: AttendanceStatus | null; notes: string }> = {};
+    for (const pupil of roster) {
+      next[pupil.id] = { status: "present", notes: draft[pupil.id]?.notes ?? "" };
+    }
+    setDraft(next);
+  }
 
-  const handleSaveAttendance = async () => {
-    if (!currentClass) return;
+  async function handleSave() {
+    if (!selectedClass || !allMarked || saving) return;
     setSaving(true);
     try {
-      const items = classStudents.map(s => ({
-        student_id: String(s.id),
-        student_name: s.name,
-        status: attendanceMap[s.id]?.status || "present",
-        notes: attendanceMap[s.id]?.notes,
+      const items = roster.map((pupil) => ({
+        studentId: pupil.id,
+        status: (draft[pupil.id]?.status ?? "present") as AttendanceStatus,
+        notes: (draft[pupil.id]?.notes ?? "").trim() || undefined,
       }));
-
-      const res = await recordClassAttendance({
-        classLabel: currentClass.label,
-        grade: currentClass.grade,
-        section: currentClass.section,
-        date: selectedDate,
+      const result = await saveClassAttendance({
+        classroomId: selectedClass.id,
+        date: data?.date ?? date,
         items,
-        teacherName: currentUser?.username || currentClass.teacher,
+        reason: reason.trim() || undefined,
       });
-
-      if (res.ok) {
-        toast.success("Attendance register saved", {
-          description: `${currentClass.label} · ${counts.present} Present, ${counts.absent} Absent on ${formattedIndianDate}`,
-        });
-      } else {
-        toast.error("Could not save attendance", { description: res.message });
-      }
-    } catch {
-      toast.error("Failed to save register");
+      toast.success(result.message);
+      setReason("");
+      setReloadKey((key) => key + 1);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "The register could not be saved."
+      );
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  // Overview metrics (strictly binary: Present vs Absent)
-  const latest = dailyAttendance[dailyAttendance.length - 1];
-  const latestPresent = latest?.present ?? 0;
-  const latestAbsent = latest?.absent ?? 0;
-  const latestMarked = latest ? latestPresent + latestAbsent : 0;
-  const latestPct =
-    latestMarked > 0
-      ? Math.round((latestPresent / latestMarked) * 1000) / 10
-      : 0;
-  const absentFollowUp = enrolledStudents.filter(
-    student => student.status === "Active" && student.attendance < 90
-  ).length;
-  const presentSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.present) : undefined;
-  const absentSpark = dailyAttendance.length >= 2 ? dailyAttendance.map(d => d.absent) : undefined;
-  const classPager = usePagination(classAttendance);
-  const pageClasses = classPager.pageRows;
+  const retry = (
+    <button
+      className="secondary-button compact"
+      style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+      onClick={() => setReloadKey((key) => key + 1)}
+    >
+      <RefreshCw size={14} />
+      Try again
+    </button>
+  );
 
   return (
     <div className="page-stack">
-      {/* Page Header */}
       <div className="page-intro">
         <div>
           <Breadcrumb
@@ -2764,14 +2720,13 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
           <h1 className="page-title">Attendance</h1>
           <p className="page-subtitle">
             {activeTab === "register"
-              ? `Daily roll call register · ${formattedIndianDate}`
-              : latest
-                ? `${latest.day} · ${latestPct}% school-wide attendance.`
-                : "No attendance recorded yet."}
+              ? `${managerView ? "Read-only register" : "Daily register"} · ${readableDate(
+                  data?.date ?? date
+                )}`
+              : "Term-to-date attendance, built from saved registers."}
           </p>
         </div>
 
-        {/* View Switcher Tabs with horizontal sliding motion */}
         <SegmentedControl
           ariaLabel="Attendance view tabs"
           layoutId="attendanceMainViewTabs"
@@ -2794,540 +2749,666 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
         />
       </div>
 
-      {/* VIEW 1: DAILY REGISTER (TAKE ATTENDANCE) */}
+      {/* ------------------------------------------------------------ */}
+      {/* Daily register                                                */}
+      {/* ------------------------------------------------------------ */}
       {activeTab === "register" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          {/* Controls Panel */}
           <div className="panel" style={{ padding: "18px 22px" }}>
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
                 gap: "18px",
                 alignItems: "end",
               }}
             >
-              {/* Class Selector */}
               <div>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", marginBottom: "6px" }}>
-                  Class & Cohort
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Class
                 </label>
                 <FormSelect
-                  value={selectedClassId}
-                  onChange={setSelectedClassId}
-                  options={availableClasses.map(c => ({
-                    value: c.id,
-                    label: `${c.label} · ${c.teacher}`,
+                  value={activeClassId}
+                  onChange={setClassroomId}
+                  disabled={loading || classes.length === 0}
+                  options={classes.map((option) => ({
+                    value: option.id,
+                    label: `${option.label} · ${option.studentCount} pupils`,
                   }))}
-                  ariaLabel="Select Class"
+                  placeholder={
+                    classes.length === 0 ? "No classes available" : "Select a class"
+                  }
+                  ariaLabel="Select class"
                 />
               </div>
 
-              {/* Indian Standard Date Selector (DD-MM-YYYY) */}
               <div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)" }}>
-                    Date (DD-MM-YYYY)
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "6px",
+                  }}
+                >
+                  <label
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    Date
                   </label>
-                  {selectedDate !== getTodayIso() && (
+                  {date !== attendanceToday() && (
                     <button
                       className="secondary-button compact"
                       style={{ padding: "2px 8px", fontSize: "11px" }}
-                      onClick={() => setSelectedDate(getTodayIso())}
+                      onClick={() => setDate(attendanceToday())}
                     >
-                      Reset to Today
+                      Today
                     </button>
                   )}
                 </div>
                 <DateDropdowns
-                  value={selectedDate}
-                  onChange={setSelectedDate}
+                  value={date}
+                  onChange={setDate}
                   defaultToToday
                   minYear={2020}
                   maxYear={2030}
                 />
               </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", justifyContent: "flex-end" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  justifyContent: "flex-end",
+                  flexWrap: "wrap",
+                }}
+              >
+                {canMark && (
+                  <button
+                    className="secondary-button"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "9px 14px",
+                      fontSize: "12.5px",
+                    }}
+                    onClick={markAllPresent}
+                    disabled={roster.length === 0}
+                    title="Mark every pupil in this class present"
+                  >
+                    <Check size={14} />
+                    All present
+                  </button>
+                )}
                 <button
                   className="secondary-button"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 14px", fontSize: "12.5px" }}
-                  onClick={() => markAll("present")}
-                  title="Mark all enrolled students as present"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "9px 14px",
+                    fontSize: "12.5px",
+                  }}
+                  onClick={() => setReloadKey((key) => key + 1)}
+                  disabled={loading}
                 >
-                  <Check size={14} className="text-[var(--success)]" />
-                  All Present
-                </button>
-                <button
-                  className="secondary-button"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 14px", fontSize: "12.5px" }}
-                  onClick={() => markAll("absent")}
-                  title="Mark all enrolled students as absent"
-                >
-                  <X size={14} className="text-[var(--danger)]" />
-                  All Absent
-                </button>
-                <button
-                  className="primary-button"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 18px", fontSize: "13px" }}
-                  onClick={handleSaveAttendance}
-                  disabled={saving}
-                >
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  {saving ? "Saving..." : "Save Register"}
+                  <RefreshCw size={14} />
+                  Refresh
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* Timetable Slot Context Banner */}
+          {managerView && !loading && !error && (
             <div
+              className="panel"
               style={{
-                marginTop: "16px",
-                padding: "12px 16px",
-                borderRadius: "10px",
-                background: "var(--bg-raised)",
-                border: "1px solid var(--border)",
+                padding: "14px 18px",
                 display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
+                alignItems: "flex-start",
                 gap: "12px",
-                flexWrap: "wrap",
+                background: "var(--bg-raised)",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "8px",
-                    background: "var(--violet-soft)",
-                    color: "var(--brand-strong)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <CalendarDays size={16} />
-                </div>
-                <div>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
-                    {dayOfWeek} Timetable · {currentClass?.label || "Grade 6 — A"}
-                  </div>
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                    {classPeriods.length > 0 ? (
-                      <>
-                        Active Period: <span style={{ color: "var(--brand-strong)", fontWeight: 500 }}>
-                          {classPeriods.find(p => p.period === selectedPeriod)?.subject || "Daily Roll Call"} ({classPeriods.find(p => p.period === selectedPeriod)?.time || "08:00 – 08:45"})
-                        </span> · Faculty in charge: {currentClass?.teacher || "Faculty"}
-                      </>
-                    ) : (
-                      `Cohort handled by ${currentClass?.teacher || "Faculty"}`
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {classPeriods.length > 0 && (
-                <SegmentedControl
-                  ariaLabel="Select timetable period"
-                  layoutId="attendancePeriodTabs"
-                  style={{ overflowX: "auto" }}
-                  value={selectedPeriod}
-                  onChange={setSelectedPeriod}
-                  options={classPeriods.map(p => ({
-                    value: p.period,
-                    label: p.period,
-                  }))}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Live Metrics Grid (Strictly Binary: Present vs Absent) */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
-            <div className="metric-card">
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500 }}>Enrolled Pupils</div>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-primary)", margin: "4px 0" }}>
-                {counts.total}
-              </div>
-              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>{currentClass?.label || "Grade 6 — A"} cohort</div>
-            </div>
-
-            <div className="metric-card">
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--success)" }} />
-                Present Today
-              </div>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--success)", margin: "4px 0" }}>
-                {counts.present} <span style={{ fontSize: "14px", fontWeight: 500, opacity: 0.85 }}>({counts.pct}%)</span>
-              </div>
-              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Attending roll call</div>
-            </div>
-
-            <div className="metric-card">
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)" }} />
-                Absent
-              </div>
-              <div style={{ fontSize: "26px", fontWeight: 700, color: "var(--danger)", margin: "4px 0" }}>
-                {counts.absent} <span style={{ fontSize: "14px", fontWeight: 500, opacity: 0.85 }}>({counts.total > 0 ? Math.round((counts.absent / counts.total) * 1000) / 10 : 0}%)</span>
-              </div>
-              <div style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Marked absent</div>
-            </div>
-          </div>
-
-          {/* Student Register Table */}
-          <div className="panel table-panel">
-            <div className="panel-header">
+              <ShieldCheck
+                size={18}
+                style={{ color: "var(--brand-strong)", flexShrink: 0, marginTop: "2px" }}
+              />
               <div>
-                <h2 className="panel-title">Roll Call Register · {currentClass?.label || "Grade 6 — A"}</h2>
-                <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
-                  Select attendance status for each pupil. Changes are saved to the school database.
+                <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-secondary)" }}>
+                  Read-only review
+                </p>
+                <p style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "2px" }}>
+                  Registers are marked by each class&apos;s own teacher. You can review any
+                  class and date here, but only the assigned class teacher can save a mark.
                 </p>
               </div>
+            </div>
+          )}
 
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div className="search-field" style={{ minWidth: "220px" }}>
-                  <Search size={14} className="search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search pupil or USN..."
-                    value={registerSearch}
-                    onChange={(e) => setRegisterSearch(e.target.value)}
-                    className="search-input"
-                  />
-                  {registerSearch && (
-                    <button className="search-clear" onClick={() => setRegisterSearch("")}>
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
+          {loading ? (
+            <div className="panel" style={{ padding: "18px 22px" }}>
+              <SkeletonRegion label="Loading the attendance register">
+                <SkeletonList rows={6} avatar />
+              </SkeletonRegion>
+            </div>
+          ) : error ? (
+            <div className="panel" style={{ padding: "34px 24px" }}>
+              <div className="empty-state">
+                <AlertCircle size={22} />
+                <p style={{ maxWidth: "520px", textAlign: "center" }}>{error}</p>
+                {retry}
               </div>
             </div>
+          ) : classes.length === 0 ? (
+            <div className="panel" style={{ padding: "38px 24px" }}>
+              <div className="empty-state">
+                <ClipboardCheck size={24} />
+                <p style={{ maxWidth: "540px", textAlign: "center" }}>
+                  {data?.message || "No classes are available to mark."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2 className="panel-title">
+                    {selectedClass?.label ?? "Class register"}
+                  </h2>
+                  <p style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "3px" }}>
+                    {selectedClass?.classTeacherName
+                      ? `Class teacher · ${selectedClass.classTeacherName}`
+                      : "No class teacher assigned"}
+                    {selectedClass ? ` · ${selectedClass.studentCount} pupils` : ""}
+                  </p>
+                </div>
+                <span
+                  className={`status-pill ${
+                    counts.unmarked > 0 ? "warning" : "success"
+                  }`}
+                >
+                  {counts.unmarked > 0
+                    ? `${counts.unmarked} unmarked`
+                    : `${counts.percent}% attending`}
+                </span>
+              </div>
 
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "45px" }}>#</th>
-                    <th>Pupil</th>
-                    <th style={{ width: "130px" }}>USN / Roll</th>
-                    <th style={{ width: "130px" }}>Term Attendance</th>
-                    <th style={{ minWidth: "360px" }}>Attendance Status</th>
-                    <th>Remarks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.length === 0 ? (
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
                     <tr>
-                      <td colSpan={6} style={{ textAlign: "center", padding: "40px" }}>
-                        <p className="text-[var(--text-muted)] text-sm">No pupils found in this cohort.</p>
-                      </td>
+                      <th style={{ width: "45px" }}>#</th>
+                      <th>Pupil</th>
+                      <th style={{ width: "120px" }}>USN / Roll</th>
+                      <th style={{ width: "130px" }}>Term attendance</th>
+                      <th style={{ minWidth: "330px" }}>Status</th>
+                      <th style={{ minWidth: "180px" }}>Remarks</th>
                     </tr>
-                  ) : (
-                    filteredStudents.map((student, idx) => {
-                      const curStatus = attendanceMap[student.id]?.status || "present";
-                      const curNotes = attendanceMap[student.id]?.notes || "";
-
-                      return (
-                        <tr key={student.id}>
-                          <td className="muted-cell" style={{ fontSize: "12px" }}>
-                            {idx + 1}
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-3">
-                              <span className={`avatar ${avatarTones[student.tone] || ""}`}>
-                                {student.initials}
-                              </span>
-                              <div>
-                                <span className="font-medium text-[var(--text-primary)] block">
-                                  {student.name}
-                                </span>
-                                <span className="text-[11.5px] text-[var(--text-muted)]">
-                                  {student.grade} — Section {student.section}
-                                </span>
+                  </thead>
+                  <tbody>
+                    {roster.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: "center", padding: "40px" }}>
+                          <p className="text-[var(--text-muted)] text-sm">
+                            This class has no active pupils to mark.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      roster.map((pupil, index) => {
+                        const entry = draft[pupil.id];
+                        const status = entry?.status ?? null;
+                        return (
+                          <tr key={pupil.id}>
+                            <td className="muted-cell" style={{ fontSize: "12px" }}>
+                              {index + 1}
+                            </td>
+                            <td>
+                              <div className="flex items-center gap-3">
+                                <span className="avatar">{pupil.initials}</span>
+                                <div>
+                                  <span className="font-medium text-[var(--text-primary)] block">
+                                    {pupil.name}
+                                  </span>
+                                  <span className="text-[11.5px] text-[var(--text-muted)]">
+                                    {pupil.rollNo ? `Roll ${pupil.rollNo}` : "No roll number"}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="muted-cell" style={{ fontSize: "12px", fontFamily: "monospace" }}>
-                            {student.usn || student.id}
-                          </td>
-                          <td>
-                            <div className="flex items-center gap-2">
-                              <span className="progress-bar" style={{ width: "50px" }}>
-                                <span
+                            </td>
+                            <td
+                              className="muted-cell"
+                              style={{ fontSize: "12px", fontFamily: "monospace" }}
+                            >
+                              {pupil.usn || "—"}
+                            </td>
+                            <td>
+                              {pupil.termTotal > 0 ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="progress-bar" style={{ width: "50px" }}>
+                                    <span
+                                      style={{
+                                        width: `${pupil.termPercent}%`,
+                                        background:
+                                          pupil.termPercent < ATTENDANCE_THRESHOLD
+                                            ? "var(--warning)"
+                                            : "var(--brand)",
+                                      }}
+                                    />
+                                  </span>
+                                  <span className="font-medium text-[12px] text-[var(--text-hover)]">
+                                    {pupil.termPercent}%
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="muted-cell text-[12px]">No history</span>
+                              )}
+                            </td>
+                            <td>
+                              {canMark ? (
+                                <AttendanceStatusPicker
+                                  value={status}
+                                  onChange={(next) => setStatus(pupil.id, next)}
+                                  label={`Attendance for ${pupil.name}`}
+                                />
+                              ) : status ? (
+                                <span className={`status-pill ${attendanceTone(status)}`}>
+                                  {ATTENDANCE_STATUS_LABELS[status]}
+                                </span>
+                              ) : (
+                                <span className="status-pill neutral">Not marked</span>
+                              )}
+                            </td>
+                            <td>
+                              {canMark ? (
+                                <input
+                                  value={entry?.notes ?? ""}
+                                  onChange={(event) => setNotes(pupil.id, event.target.value)}
+                                  placeholder="Optional"
+                                  aria-label={`Remarks for ${pupil.name}`}
+                                  maxLength={500}
                                   style={{
-                                    width: `${student.attendance || 90}%`,
-                                    background:
-                                      (student.attendance || 90) < 90
-                                        ? "var(--warning)"
-                                        : "var(--brand)",
+                                    width: "100%",
+                                    border: "1px solid var(--border-strong)",
+                                    borderRadius: "8px",
+                                    background: "var(--bg-input)",
+                                    padding: "7px 10px",
+                                    color: "var(--text-secondary)",
+                                    fontSize: "12.5px",
+                                    outline: "none",
                                   }}
                                 />
-                              </span>
-                              <span className="font-medium text-[12px] text-[var(--text-hover)]">
-                                {student.attendance || 90}%
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            {/* 4 Interactive Tactile Attendance Status Pills */}
-                            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-                              {/* Present */}
-                              <button
-                                type="button"
-                                onClick={() => setStudentStatus(String(student.id), "present")}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "4px",
-                                  padding: "5px 10px",
-                                  borderRadius: "8px",
-                                  fontSize: "12px",
-                                  fontWeight: curStatus === "present" ? 700 : 500,
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                  background: curStatus === "present" ? "var(--success-soft)" : "var(--bg-raised)",
-                                  borderColor: curStatus === "present" ? "var(--success-border)" : "var(--border)",
-                                  borderWidth: "1px",
-                                  borderStyle: "solid",
-                                  color: curStatus === "present" ? "var(--success)" : "var(--text-muted)",
-                                  boxShadow: curStatus === "present" ? "0 0 10px var(--success-soft)" : "none",
-                                }}
-                              >
-                                <Check size={12} />
-                                Present
-                              </button>
-
-                              {/* Absent */}
-                              <button
-                                type="button"
-                                onClick={() => setStudentStatus(String(student.id), "absent")}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "4px",
-                                  padding: "5px 10px",
-                                  borderRadius: "8px",
-                                  fontSize: "12px",
-                                  fontWeight: curStatus === "absent" ? 700 : 500,
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                  background: curStatus === "absent" ? "var(--danger-soft)" : "var(--bg-raised)",
-                                  borderColor: curStatus === "absent" ? "var(--danger-border)" : "var(--border)",
-                                  borderWidth: "1px",
-                                  borderStyle: "solid",
-                                  color: curStatus === "absent" ? "var(--danger)" : "var(--text-muted)",
-                                  boxShadow: curStatus === "absent" ? "0 0 10px var(--danger-soft)" : "none",
-                                }}
-                              >
-                                <X size={12} />
-                                Absent
-                              </button>
-                            </div>
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              placeholder="Add remark..."
-                              value={curNotes}
-                              onChange={(e) => setStudentNotes(String(student.id), e.target.value)}
-                              style={{
-                                width: "100%",
-                                minWidth: "140px",
-                                maxWidth: "220px",
-                                padding: "4px 8px",
-                                fontSize: "12px",
-                                background: "var(--bg-raised)",
-                                border: "1px solid var(--border)",
-                                borderRadius: "6px",
-                                color: "var(--text-primary)",
-                              }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Bottom Register Action Bar */}
-            <div
-              style={{
-                padding: "16px 22px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                borderTop: "1px solid var(--border)",
-                background: "transparent",
-              }}
-            >
-              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                Summary: <strong style={{ color: "var(--success)" }}>{counts.present} Present</strong> · <strong style={{ color: "var(--danger)" }}>{counts.absent} Absent</strong> ({counts.pct}% attendance)
+                              ) : (
+                                <span className="muted-cell text-[12.5px]">
+                                  {entry?.notes?.trim() || "—"}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
 
-              <button
-                className="primary-button"
-                style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 22px", fontSize: "13px" }}
-                onClick={handleSaveAttendance}
-                disabled={saving}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "14px",
+                  padding: "16px 24px",
+                  borderTop: "1px solid var(--border-subtle)",
+                }}
               >
-                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-                {saving ? "Synchronizing..." : "Save Attendance Register"}
-              </button>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  <span className="status-pill success">Present {counts.present}</span>
+                  <span className="status-pill warning">Late {counts.late}</span>
+                  <span className="status-pill neutral">Leave {counts.leave}</span>
+                  <span className="status-pill danger">Absent {counts.absent}</span>
+                  {counts.unmarked > 0 && (
+                    <span className="status-pill neutral">{counts.unmarked} unmarked</span>
+                  )}
+                </div>
+
+                {canMark ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <input
+                      value={reason}
+                      onChange={(event) => setReason(event.target.value)}
+                      placeholder="Reason for changes (optional)"
+                      aria-label="Reason for attendance changes"
+                      maxLength={500}
+                      style={{
+                        minWidth: "240px",
+                        border: "1px solid var(--border-strong)",
+                        borderRadius: "10px",
+                        background: "var(--bg-input)",
+                        padding: "9px 12px",
+                        color: "var(--text-secondary)",
+                        fontSize: "12.5px",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      className="primary-button"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "9px 16px",
+                        fontSize: "13px",
+                      }}
+                      onClick={handleSave}
+                      disabled={!allMarked || saving}
+                      title={
+                        allMarked
+                          ? "Save this register"
+                          : "Mark every pupil before saving"
+                      }
+                    >
+                      {saving ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Save size={14} />
+                      )}
+                      {allMarked ? "Save register" : `Mark ${counts.unmarked} more`}
+                    </button>
+                  </div>
+                ) : (
+                  <span style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
+                    {managerView
+                      ? "Read-only — the class teacher saves this register."
+                      : "You are not the class teacher for this class."}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* VIEW 2: COHORT OVERVIEW */}
-      {activeTab === "overview" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div className="metric-grid three">
-            {classAttendanceLoading || dailyAttendanceLoading ? (
-              <>
-                <SkeletonMetric />
-                <SkeletonMetric />
-                <SkeletonMetric />
-              </>
-            ) : (
-              <>
-                <MetricBlock
-                  label="Present today"
-                  value={latestPresent.toLocaleString("en-IN")}
-                  comparison={`${latestPct}% marked`}
-                  icon={Check}
-                  spark={presentSpark}
-                />
-                <MetricBlock
-                  label="Absent today"
-                  value={`${latestAbsent}`}
-                  comparison={`${absentFollowUp} need follow-up`}
-                  icon={AlertCircle}
-                  spark={absentSpark}
-                  positive={false}
-                />
-                <MetricBlock
-                  label="School Attendance"
-                  value={`${latestPct}%`}
-                  comparison={`${latestMarked > 0 ? latestPresent.toLocaleString("en-IN") : 0} of ${latestMarked.toLocaleString("en-IN")} attending`}
-                  icon={TrendingUp}
-                  spark={presentSpark}
-                />
-              </>
-            )}
+      {/* ------------------------------------------------------------ */}
+      {/* Cohort overview                                               */}
+      {/* ------------------------------------------------------------ */}
+      {activeTab === "overview" &&
+        (loading && !data ? (
+          <div className="panel" style={{ padding: "18px 22px" }}>
+            <SkeletonRegion label="Loading attendance overview">
+              <SkeletonList rows={6} avatar={false} />
+            </SkeletonRegion>
           </div>
-
-          <div className="panel table-panel">
-            <div className="panel-header" style={{ padding: "18px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)" }}>
-              <div>
-                <h2 className="panel-title">Class attendance</h2>
-                <p className="panel-subtitle" style={{ margin: "2px 0 0" }}>
-                  Daily presence and roll call metrics across active grade cohorts.
-                </p>
-              </div>
-              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
-                <button
-                  className="secondary-button"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 16px", fontSize: "13px" }}
-                  onClick={() => toast.success("Attendance CSV exported")}
-                >
-                  <Download size={14} />
-                  Export
-                </button>
-                <button
-                  className="primary-button"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "8px 16px", fontSize: "13px" }}
-                  onClick={() => setActiveTab("register")}
-                >
-                  <Plus size={14} />
-                  Take Register
-                </button>
-              </div>
+        ) : error ? (
+          <div className="panel" style={{ padding: "34px 24px" }}>
+            <div className="empty-state">
+              <AlertCircle size={22} />
+              <p style={{ maxWidth: "520px", textAlign: "center" }}>{error}</p>
+              {retry}
             </div>
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Class</th>
-                    <th>Present</th>
-                    <th>Attendance</th>
-                    <th>Signal</th>
-                    <th>Teacher</th>
-                    <th style={{ width: "130px", textAlign: "right" }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classAttendanceLoading ? (
-                    <SkeletonTableRows rows={5} columns={6} />
-                  ) : (
-                    pageClasses.map((row, idx) => {
-                      if (!row) return null;
-                      const rowLabel = row.label || `Class ${idx + 1}`;
-                      return (
-                        <tr key={row.id || rowLabel || idx}>
-                          <td>
-                            <span className="font-medium text-[var(--text-primary)]">
-                              {rowLabel}
-                            </span>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div className="metric-grid">
+              <MetricBlock
+                className="overview-metric"
+                label="Today's attendance"
+                value={
+                  overview && overview.todayMarked > 0
+                    ? `${overview.todayPercent}%`
+                    : "—"
+                }
+                comparison={
+                  overview && overview.todayMarked > 0
+                    ? `${overview.todayMarked} pupils marked today`
+                    : "No register marked today"
+                }
+                icon={ClipboardCheck}
+                trend={false}
+              />
+              <MetricBlock
+                className="overview-metric"
+                label="Present today"
+                value={
+                  overview && overview.todayMarked > 0
+                    ? overview.todayPresent.toLocaleString("en-IN")
+                    : "—"
+                }
+                comparison="Present + late"
+                icon={UserCheck}
+                trend={false}
+              />
+              <MetricBlock
+                className="overview-metric"
+                label={`Below ${ATTENDANCE_THRESHOLD}%`}
+                value={
+                  overview && overview.belowThreshold > 0
+                    ? overview.belowThreshold.toLocaleString("en-IN")
+                    : "0"
+                }
+                comparison="Pupils needing follow-up"
+                icon={AlertCircle}
+                trend={false}
+              />
+              <MetricBlock
+                className="overview-metric"
+                label="Classes tracked"
+                value={classes.length.toLocaleString("en-IN")}
+                comparison={
+                  classes.length > 0
+                    ? `${classes.filter((option) => option.markedToday > 0).length} marked today`
+                    : "No classes yet"
+                }
+                icon={Users}
+                trend={false}
+              />
+            </div>
+
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2 className="panel-title">Recent registers</h2>
+                  <p style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "3px" }}>
+                    The last seven recorded school days.
+                  </p>
+                </div>
+              </div>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Marked</th>
+                      <th>Present</th>
+                      <th>Late</th>
+                      <th>Leave</th>
+                      <th>Absent</th>
+                      <th>Attendance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!overview || overview.daily.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: "center", padding: "36px" }}>
+                          <p className="text-[var(--text-muted)] text-sm">
+                            No attendance has been recorded yet.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      [...overview.daily].reverse().map((day) => (
+                        <tr key={day.date}>
+                          <td className="font-medium text-[var(--text-primary)]">
+                            {readableDate(day.date)}
                           </td>
-                          <td className="muted-cell">
-                            {row.present ?? 0} / {row.total ?? 0}
-                          </td>
+                          <td className="muted-cell">{day.marked}</td>
+                          <td className="muted-cell">{day.present}</td>
+                          <td className="muted-cell">{day.late}</td>
+                          <td className="muted-cell">{day.leave}</td>
+                          <td className="muted-cell">{day.absent}</td>
                           <td>
                             <div className="flex items-center gap-3">
                               <span className="progress-bar">
                                 <span
                                   style={{
-                                    width: `${row.value ?? 0}%`,
+                                    width: `${day.percent}%`,
                                     background:
-                                      (row.value ?? 0) < 92
+                                      day.percent < ATTENDANCE_THRESHOLD
                                         ? "var(--warning)"
                                         : "var(--brand)",
                                   }}
                                 />
                               </span>
                               <span className="font-medium text-[var(--text-hover)]">
-                                {row.value ?? 0}%
+                                {day.percent}%
                               </span>
                             </div>
                           </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2 className="panel-title">Class attendance</h2>
+                  <p style={{ fontSize: "12.5px", color: "var(--text-muted)", marginTop: "3px" }}>
+                    Term-to-date, present and late counted as attending.
+                  </p>
+                </div>
+              </div>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Class</th>
+                      <th>Class teacher</th>
+                      <th>Pupils</th>
+                      <th>Today</th>
+                      <th>Term attendance</th>
+                      <th>Signal</th>
+                      <th style={{ width: "130px", textAlign: "right" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classes.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ textAlign: "center", padding: "36px" }}>
+                          <p className="text-[var(--text-muted)] text-sm">
+                            No classes are available to show.
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      classes.map((option) => (
+                        <tr key={option.id}>
                           <td>
-                            <span
-                              className={`status-pill ${(row.value ?? 0) < 92 ? "warning" : "success"}`}
-                            >
-                              {(row.value ?? 0) < 92 ? "Follow-up" : "On track"}
+                            <span className="font-medium text-[var(--text-primary)]">
+                              {option.label}
                             </span>
                           </td>
-                          <td className="muted-cell">{row.teacher || "Faculty"}</td>
+                          <td className="muted-cell">
+                            {option.classTeacherName || "Unassigned"}
+                          </td>
+                          <td className="muted-cell">{option.studentCount}</td>
+                          <td className="muted-cell">
+                            {option.markedToday > 0
+                              ? `${option.presentToday} / ${option.markedToday}`
+                              : "Not marked"}
+                          </td>
+                          <td>
+                            {option.termPercent > 0 ? (
+                              <div className="flex items-center gap-3">
+                                <span className="progress-bar">
+                                  <span
+                                    style={{
+                                      width: `${option.termPercent}%`,
+                                      background:
+                                        option.termPercent < ATTENDANCE_THRESHOLD
+                                          ? "var(--warning)"
+                                          : "var(--brand)",
+                                    }}
+                                  />
+                                </span>
+                                <span className="font-medium text-[var(--text-hover)]">
+                                  {option.termPercent}%
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="muted-cell">No history</span>
+                            )}
+                          </td>
+                          <td>
+                            <span
+                              className={`status-pill ${
+                                option.termPercent > 0 &&
+                                option.termPercent < ATTENDANCE_THRESHOLD
+                                  ? "warning"
+                                  : "neutral"
+                              }`}
+                            >
+                              {option.termPercent === 0
+                                ? "No data"
+                                : option.termPercent < ATTENDANCE_THRESHOLD
+                                  ? "Follow-up"
+                                  : "On track"}
+                            </span>
+                          </td>
                           <td style={{ textAlign: "right" }}>
                             <button
                               className="secondary-button compact"
-                              style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "11.5px", padding: "4px 10px" }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                fontSize: "11.5px",
+                                padding: "4px 10px",
+                              }}
                               onClick={() => {
-                                const found = availableClasses.find(c => c && c.label === rowLabel);
-                                if (found) setSelectedClassId(found.id);
+                                setClassroomId(option.id);
                                 setActiveTab("register");
                               }}
                             >
                               <ClipboardCheck size={12} />
-                              Take Register
+                              {option.canMark ? "Take register" : "Review"}
                             </button>
                           </td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <Pager pagination={classPager} noun="classes" />
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
-        </div>
-      )}
+        ))}
     </div>
   );
 }

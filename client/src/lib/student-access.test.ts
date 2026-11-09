@@ -92,6 +92,11 @@ describe("write permissions", () => {
 
   it("lets teachers take a register but not approve leave", () => {
     expect(canRecordAttendance("teacher")).toBe(true);
+    expect(canRecordAttendance("staff")).toBe(true);
+    // Managers review a register; the class teacher marks it.
+    expect(canRecordAttendance("admin")).toBe(false);
+    expect(canRecordAttendance("principal")).toBe(false);
+    expect(canRecordAttendance("super_admin")).toBe(false);
     expect(canDecideLeave("teacher")).toBe(false);
     expect(canDecideLeave("admin")).toBe(true);
   });

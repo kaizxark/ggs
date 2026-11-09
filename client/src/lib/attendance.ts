@@ -1,180 +1,133 @@
-import { supabase } from "./supabase";
+/**
+ * The browser side of the attendance register.
+ *
+ * `/api/attendance` is the only source of truth. It decides which classes the
+ * signed-in caller may mark (only a class teacher's own class), reads the real
+ * roster from `enrollments`, and writes `attendance` / `attendance_corrections`.
+ * This module is a thin client over that route — no localStorage copy, no
+ * generated rosters, and no optimistic "everyone is present" default.
+ *
+ * The old version wrote to Supabase straight from the browser and read its own
+ * localStorage back, so a saved register existed only on the laptop that saved
+ * it. That is why the screen looked like it worked and the pupil profile still
+ * showed nothing.
+ */
+
+import { ApiError } from "./student-directory";
+import { authHeaders } from "./supabase";
 import { notifyDataChanged } from "./live-data";
+import type {
+  AttendanceBootstrap,
+  AttendanceSaveItem,
+  AttendanceSaveResult,
+} from "@shared/attendance";
 
-export type AttendanceStatus = "present" | "absent";
+export type {
+  AttendanceBootstrap,
+  AttendanceClassOption,
+  AttendanceDaySummary,
+  AttendanceOverview,
+  AttendanceRosterStudent,
+  AttendanceSaveItem,
+  AttendanceSaveResult,
+  AttendanceStatus,
+} from "@shared/attendance";
 
-export interface AttendanceItem {
-  student_id: string;
-  student_name: string;
-  status: AttendanceStatus;
-  notes?: string;
+export {
+  ATTENDANCE_STATUSES,
+  ATTENDANCE_STATUS_LABELS,
+  ATTENDANCE_THRESHOLD,
+  attendancePercent,
+  countsAsPresent,
+} from "@shared/attendance";
+
+/** Today in the school's timezone, as the route defines it. */
+export function attendanceToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
-export interface SaveAttendanceParams {
-  classLabel: string;
-  grade: string;
-  section: string;
-  date: string; // YYYY-MM-DD
-  items: AttendanceItem[];
-  teacherName?: string;
-}
-
-/**
- * Persists classroom attendance records to Supabase and updates
- * aggregate dashboard tables so the changes reflect across all roles.
- */
-export async function recordClassAttendance(
-  params: SaveAttendanceParams
-): Promise<{ ok: boolean; message?: string }> {
-  const { classLabel, grade, section, date, items, teacherName } = params;
-
-  if (!items.length) {
-    return { ok: false, message: "No students in register." };
-  }
-
-  // Count tallies (strictly binary: Present vs Absent)
-  let present = 0;
-  let absent = 0;
-
-  for (const item of items) {
-    if (item.status === "present") present += 1;
-    else absent += 1;
-  }
-
-  const total = items.length;
-  const pct = total > 0 ? Math.round((present / total) * 100) : 0;
-
-  // 1. Save to localStorage backup for instant retrieval
+async function request<T>(init: RequestInit, path = "/api/attendance"): Promise<T> {
+  const auth = await authHeaders();
+  let response: Response;
   try {
-    const storageKey = `ggs_attendance_${date}_${classLabel.replace(/\s+/g, "_")}`;
-    const payload = {
-      date,
-      classLabel,
-      grade,
-      section,
-      teacherName: teacherName || "Faculty",
-      total,
-      present,
-      absent,
-      pct,
-      items,
-      savedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(storageKey, JSON.stringify(payload));
-
-    // Also update a index of recent registrations
-    const recentIndexKey = "ggs_attendance_recent_records";
-    const existing = JSON.parse(localStorage.getItem(recentIndexKey) || "[]");
-    const updated = [
-      payload,
-      ...existing.filter(
-        (r: { date: string; classLabel: string }) =>
-          !(r.date === date && r.classLabel === classLabel)
-      ),
-    ].slice(0, 50);
-    localStorage.setItem(recentIndexKey, JSON.stringify(updated));
-  } catch {
-    // ignore localStorage quota errors
-  }
-
-  // 2. Persist to Supabase if session is available
-  try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const userId = sessionData.session?.user?.id;
-
-    let orgId: string | undefined;
-    if (userId) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organisation_id")
-        .eq("id", userId)
-        .maybeSingle();
-      if (profile?.organisation_id) {
-        orgId = profile.organisation_id;
-      }
-    }
-
-    // Upsert individual pupil rows into public.attendance
-    const attendanceRows = items.map((item) => ({
-      student_id: item.student_id,
-      attendance_date: date,
-      status: item.status,
-      notes: item.notes?.trim() || null,
-      ...(orgId ? { organisation_id: orgId } : {}),
-    }));
-
-    try {
-      await supabase
-        .from("attendance")
-        .upsert(attendanceRows, { onConflict: "student_id,attendance_date" });
-    } catch {
-      // ignore
-    }
-
-    // Update class_attendance summary row
-    const classId = `class-${grade.replace(/\s+/g, "").toLowerCase()}-${section.toLowerCase()}`;
-    try {
-      await supabase
-        .from("class_attendance")
-        .upsert({
-          id: classId,
-          label: classLabel,
-          value: pct,
-          present,
-          total,
-          teacher: teacherName || "Faculty",
-        });
-    } catch {
-      // ignore
-    }
-
-    // Update attendance_daily summary row for today
-    const dayName = new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
-      weekday: "short",
+    response = await fetch(path, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...auth,
+        ...(init.headers ?? {}),
+      },
     });
-    try {
-      await supabase
-        .from("attendance_daily")
-        .upsert({
-          id: `daily-${date}`,
-          day: dayName,
-          present,
-          absent,
-        });
-    } catch {
-      // ignore
-    }
-  } catch (err) {
-    console.warn("Could not sync attendance to Supabase:", err);
+  } catch {
+    throw new ApiError(
+      0,
+      "network",
+      "The attendance register could not be reached. Check your connection and try again."
+    );
   }
 
-  // 3. Trigger live revision bump across all views
-  notifyDataChanged();
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
 
-  return { ok: true };
+  if (!response.ok) {
+    const body = (payload ?? {}) as {
+      error?: string;
+      message?: string;
+      fieldErrors?: Record<string, string>;
+    };
+    throw new ApiError(
+      response.status,
+      String(body.error ?? "error"),
+      String(body.message ?? "The attendance register could not be loaded."),
+      body.fieldErrors ?? {}
+    );
+  }
+
+  return payload as T;
 }
 
 /**
- * Retrieve saved attendance for a class on a given date from local store
+ * Load the register for one date (and, optionally, one class).
+ *
+ * The response carries only classes the caller may see: a class teacher gets
+ * their own, an administrator gets every class read-only.
  */
-export function getSavedClassAttendance(
-  date: string,
-  classLabel: string
-): Record<string, { status: AttendanceStatus; notes?: string }> | null {
-  try {
-    const storageKey = `ggs_attendance_${date}_${classLabel.replace(/\s+/g, "_")}`;
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed.items || !Array.isArray(parsed.items)) return null;
-    const map: Record<string, { status: AttendanceStatus; notes?: string }> = {};
-    for (const item of parsed.items) {
-      if (item.student_id && item.status) {
-        map[item.student_id] = { status: item.status, notes: item.notes };
-      }
-    }
-    return map;
-  } catch {
-    return null;
-  }
+export async function loadAttendance(params: {
+  date?: string;
+  classroomId?: string;
+} = {}): Promise<AttendanceBootstrap> {
+  const search = new URLSearchParams();
+  if (params.date) search.set("date", params.date);
+  if (params.classroomId) search.set("classroomId", params.classroomId);
+  const query = search.toString();
+  return request<AttendanceBootstrap>({ method: "GET" }, `/api/attendance${query ? `?${query}` : ""}`);
+}
+
+/**
+ * Save a complete register. The route refuses a partial one, so the screen must
+ * collect a status for every pupil before enabling Save.
+ */
+export async function saveClassAttendance(params: {
+  classroomId: string;
+  date: string;
+  items: AttendanceSaveItem[];
+  reason?: string;
+}): Promise<AttendanceSaveResult> {
+  const result = await request<AttendanceSaveResult>({
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  // Attendance changes the dashboard tiles, pupil profiles and reports. Let the
+  // rest of the app know rather than waiting for the next full reload.
+  notifyDataChanged();
+  return result;
 }

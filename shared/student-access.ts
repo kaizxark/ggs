@@ -135,10 +135,18 @@ export function canManageGuardians(role: string): boolean {
   return SCHOOL_MANAGERS.has(norm(role));
 }
 
-/** May this role record attendance? Teachers take their own register. */
+/**
+ * May this role record attendance?
+ *
+ * Teaching staff only — and, even then, only for a class they are the assigned
+ * teacher of. A role cannot express that last part, so this is a coarse gate:
+ * the actual check lives in `api/attendance.ts`, which reads
+ * `classrooms.class_teacher_id`. Administrators and the principal review
+ * registers; they never mark them.
+ */
 export function canRecordAttendance(role: string): boolean {
   const r = norm(role);
-  return SCHOOL_MANAGERS.has(r) || TEACHERS.has(r);
+  return TEACHERS.has(r) || r === "staff";
 }
 
 /** May this role read a child's fee position? */
