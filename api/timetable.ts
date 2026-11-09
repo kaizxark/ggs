@@ -124,19 +124,6 @@ interface ClassroomRecord {
   classTeacherName: string | null;
 }
 
-const STANDARD_CLASSROOMS: ClassroomRecord[] = [
-  { id: "cls-6a", label: "Grade 6 — A", grade: "6", section: "A", room: "Room 101", classTeacherName: "Neha Kulkarni" },
-  { id: "cls-6b", label: "Grade 6 — B", grade: "6", section: "B", room: "Room 102", classTeacherName: "Ravi Menon" },
-  { id: "cls-7a", label: "Grade 7 — A", grade: "7", section: "A", room: "Room 103", classTeacherName: "Sonia Joseph" },
-  { id: "cls-7b", label: "Grade 7 — B", grade: "7", section: "B", room: "Room 104", classTeacherName: "Arvind Iyer" },
-  { id: "cls-8a", label: "Grade 8 — A", grade: "8", section: "A", room: "Room 201", classTeacherName: "Meera Shah" },
-  { id: "cls-8b", label: "Grade 8 — B", grade: "8", section: "B", room: "Room 202", classTeacherName: "Daniel Thomas" },
-  { id: "cls-9a", label: "Grade 9 — A", grade: "9", section: "A", room: "Room 203", classTeacherName: "Karthik Rao" },
-  { id: "cls-9b", label: "Grade 9 — B", grade: "9", section: "B", room: "Room 204", classTeacherName: "Priya Nair" },
-  { id: "cls-10a", label: "Grade 10 — A", grade: "10", section: "A", room: "Room 301", classTeacherName: "Rohan Mehta" },
-  { id: "cls-10b", label: "Grade 10 — B", grade: "10", section: "B", room: "Room 302", classTeacherName: "Ananya Sen" },
-];
-
 interface StaffRecord {
   id: string;
   name: string;
@@ -150,40 +137,11 @@ interface SubjectRecord {
   code: string;
 }
 
-const STANDARD_STAFF: StaffRecord[] = [
-  { id: "STF-001", name: "Neha Kulkarni", department: "Science", designation: "Class Teacher" },
-  { id: "STF-002", name: "Ravi Menon", department: "Physics", designation: "Senior Faculty" },
-  { id: "STF-003", name: "Sonia Joseph", department: "English", designation: "Language Faculty" },
-  { id: "STF-004", name: "Arvind Iyer", department: "Chemistry", designation: "Science Faculty" },
-  { id: "STF-005", name: "Meera Shah", department: "Mathematics", designation: "HOD Mathematics" },
-  { id: "STF-006", name: "Daniel Thomas", department: "Physical Education", designation: "Sports Coordinator" },
-  { id: "STF-007", name: "Priya Nair", department: "Social Science", designation: "Social Studies Teacher" },
-  { id: "STF-008", name: "Karthik Rao", department: "Computer Science", designation: "IT Faculty" },
-  { id: "STF-009", name: "Ananya Sen", department: "Biology", designation: "Senior Biology Faculty" },
-  { id: "STF-010", name: "Rohan Mehta", department: "Hindi", designation: "Language Teacher" },
-  { id: "STF-011", name: "Kavita Raman", department: "Arts", designation: "Art & Craft Instructor" },
-  { id: "STF-012", name: "Suresh Patil", department: "Library", designation: "Librarian" },
-];
-
-const STANDARD_SUBJECTS: SubjectRecord[] = [
-  { id: "SUB-001", name: "Mathematics", code: "MATH" },
-  { id: "SUB-002", name: "Science", code: "SCI" },
-  { id: "SUB-003", name: "English", code: "ENG" },
-  { id: "SUB-004", name: "Hindi", code: "HIN" },
-  { id: "SUB-005", name: "Social Science", code: "SST" },
-  { id: "SUB-006", name: "Physics", code: "PHY" },
-  { id: "SUB-007", name: "Chemistry", code: "CHEM" },
-  { id: "SUB-008", name: "Biology", code: "BIO" },
-  { id: "SUB-009", name: "Computer Science", code: "CS" },
-  { id: "SUB-010", name: "Physical Education", code: "PE" },
-  { id: "SUB-011", name: "Art & Craft", code: "ART" },
-  { id: "SUB-012", name: "Library", code: "LIB" },
-];
-
+/** Real classes only — nothing is invented when the school has few. */
 async function loadClassrooms(orgId: string): Promise<ClassroomRecord[]> {
   try {
     const rows = await restRows<Json>("classrooms", "select=*");
-    const filtered: ClassroomRecord[] = rows
+    return rows
       .filter((row) => !row.organisation_id || String(row.organisation_id) === orgId)
       .map((row) => {
         const grade = String(row.grade ?? "").trim();
@@ -196,39 +154,23 @@ async function loadClassrooms(orgId: string): Promise<ClassroomRecord[]> {
           room: String(row.room ?? ""),
           classTeacherName: null,
         };
-      });
-
-    if (filtered.length >= 10) {
-      return filtered.sort((a, b) => {
+      })
+      .sort((a, b) => {
         const byGrade = Number(a.grade) - Number(b.grade);
         return Number.isFinite(byGrade) && byGrade !== 0
           ? byGrade
           : a.label.localeCompare(b.label);
       });
-    }
-
-    const knownLabels = new Set(filtered.map((c) => c.label.toLowerCase()));
-    const merged = [...filtered];
-    for (const std of STANDARD_CLASSROOMS) {
-      if (!knownLabels.has(std.label.toLowerCase())) {
-        merged.push(std);
-      }
-    }
-    return merged.sort((a, b) => {
-      const byGrade = Number(a.grade) - Number(b.grade);
-      return Number.isFinite(byGrade) && byGrade !== 0
-        ? byGrade
-        : a.label.localeCompare(b.label);
-    });
   } catch {
-    return STANDARD_CLASSROOMS;
+    throw new Error("classrooms: could not be loaded");
   }
 }
 
+/** Real staff only — the same directory every other screen reads. */
 async function loadStaff(orgId: string): Promise<StaffRecord[]> {
   try {
     const rows = await restRows<Json>("staff", "select=*");
-    const filtered: StaffRecord[] = rows
+    return rows
       .filter((row) => !row.organisation_id || String(row.organisation_id) === orgId)
       .filter((row) => row.active !== false)
       .map((row) => ({
@@ -236,28 +178,18 @@ async function loadStaff(orgId: string): Promise<StaffRecord[]> {
         name: String(row.name ?? "").trim() || "Unnamed member of staff",
         department: String(row.department ?? "").trim(),
         designation: String(row.designation ?? row.role ?? "").trim(),
-      }));
-
-    if (filtered.length > 0) {
-      const knownNames = new Set(filtered.map((s) => String(s.name).toLowerCase()));
-      const merged = [...filtered];
-      for (const std of STANDARD_STAFF) {
-        if (!knownNames.has(String(std.name).toLowerCase())) {
-          merged.push(std);
-        }
-      }
-      return merged.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    }
-    return STANDARD_STAFF;
+      }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   } catch {
-    return STANDARD_STAFF;
+    throw new Error("staff: could not be loaded");
   }
 }
 
+/** Real subjects only — the catalog that Academics manages. */
 async function loadSubjects(orgId: string): Promise<SubjectRecord[]> {
   try {
     const rows = await restRows<Json>("subjects", "select=*");
-    const filtered: SubjectRecord[] = rows
+    return rows
       .filter((row) => !row.organisation_id || String(row.organisation_id) === orgId)
       .filter((row) => row.active !== false)
       .map((row) => ({
@@ -265,21 +197,10 @@ async function loadSubjects(orgId: string): Promise<SubjectRecord[]> {
         name: String(row.name ?? "").trim(),
         code: String(row.code ?? "").trim(),
       }))
-      .filter((row) => row.name);
-
-    if (filtered.length > 0) {
-      const knownNames = new Set(filtered.map((s) => s.name.toLowerCase()));
-      const merged = [...filtered];
-      for (const std of STANDARD_SUBJECTS) {
-        if (!knownNames.has(String(std.name).toLowerCase())) {
-          merged.push(std);
-        }
-      }
-      return merged.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-    }
-    return STANDARD_SUBJECTS;
+      .filter((row) => row.name)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   } catch {
-    return STANDARD_SUBJECTS;
+    throw new Error("subjects: could not be loaded");
   }
 }
 

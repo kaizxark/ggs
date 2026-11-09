@@ -86,7 +86,6 @@ import {
 import { toast } from "@/lib/toast";
 import { notifyDataChanged } from "../lib/live-data";
 import { useLocation } from "wouter";
-import { TimetableView } from "@/components/TimetableView";
 import {
   changePortalCredentials,
   requestSignInCode,
