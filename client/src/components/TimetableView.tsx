@@ -1902,8 +1902,8 @@ export function TimetableView() {
             </section>
           </>
         )}
-        </>
-      )}
+      </>
+    )}
 
       {/* ------------------------------ teacher view ------------------------------ */}
       {view === "teachers" && (
