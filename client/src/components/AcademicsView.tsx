@@ -1,11 +1,8 @@
 /**
- * Academics — the timetable.
+ * Timetable — weekly class schedules and bell timings.
  *
- * The curriculum catalog, faculty allocation, homework board and performance
- * tabs were removed by request. The underlying tables (`subjects`,
- * `subject_teachers`, `assignments`, exam results) are untouched — other
- * screens and the database still use them — but this screen now does one job:
- * the class timetable, built and checked against the real school data.
+ * The screen is dedicated to the class timetable, period bell timings, breaks,
+ * and teacher allocations, verified against real school classrooms and staff.
  */
 
 import { Breadcrumb } from "./Breadcrumb";
@@ -18,12 +15,15 @@ export interface AcademicsViewProps {
 export function AcademicsView({ onBack }: AcademicsViewProps) {
   return (
     <div className="space-y-6">
-      <Breadcrumb parent="Global Kids School" current="Academics" onParentClick={onBack} />
+      <Breadcrumb parent="Global Kids School" current="Timetable" onParentClick={onBack} />
 
       <div className="page-intro">
         <div>
-          <p className="eyebrow">Timetable</p>
-          <h1 className="page-title">Academics</h1>
+          <p className="eyebrow">Academic Schedule</p>
+          <h1 className="page-title">Timetable</h1>
+          <p className="page-sub">
+            Weekly class schedules, period bell timings, breaks, and teacher allocations across classes.
+          </p>
         </div>
       </div>
 

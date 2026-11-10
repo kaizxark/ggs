@@ -86,14 +86,18 @@ function passwordWasSet(
   derived: string | null
 ): boolean {
   if (!cred) return false;
-  if (cred.last_rotated_at) return true;
-  const stored = String(cred.password ?? "");
-  return stored !== "" && stored !== PASSWORD_NOT_STORED && stored !== (derived ?? "");
+  const stored = String(cred.password ?? "").trim();
+  if (stored && stored !== PASSWORD_NOT_STORED) return false;
+  if (derived) return false;
+  return Boolean(cred.last_rotated_at);
 }
 
-/** The value to send a browser: the derived first password, or nothing. */
+/** The value to send a browser: the stored password, or derived initial password. */
 function passwordFor(cred: Json | undefined, derived: string | null): string {
-  if (passwordWasSet(cred, derived)) return "";
+  const stored = String(cred?.password ?? "").trim();
+  if (stored && stored !== PASSWORD_NOT_STORED) {
+    return stored;
+  }
   return derived ?? "";
 }
 
@@ -316,7 +320,7 @@ async function allAccounts(req: Request): Promise<Response> {
 
   const org = encodeURIComponent(orgId);
 
-  const [studentCreds, staffCreds, students, staff, pupilProfiles, profiles] =
+  const [studentCreds, staffCreds, students, staff, pupilProfiles, profiles, settingsRows] =
     await Promise.all([
       readJson<Json>(
         await rest(
@@ -357,7 +361,11 @@ async function allAccounts(req: Request): Promise<Response> {
         )
       ),
       readJson<Json>(await rest(`profiles?select=id,username&limit=5000`)),
+      readJson<Json>(await rest(`settings?select=key,value&key=eq.staff_test_dobs&limit=1`)),
     ]);
+
+  const staffTestDobs =
+    (settingsRows[0]?.value as Record<string, string> | undefined) ?? {};
 
   const credByStudent = new Map(
     studentCreds.map(row => [String(row.student_id), row])
@@ -371,6 +379,7 @@ async function allAccounts(req: Request): Promise<Response> {
     const id = String(pupil.id);
     const cred = credByStudent.get(id);
     const profile = profileByStudent.get(id);
+    const derived = ddmmDate(pupil.date_of_birth);
     return {
       kind: "student" as const,
       recordId: id,
@@ -382,13 +391,10 @@ async function allAccounts(req: Request): Promise<Response> {
         profile?.username ?? cred?.username ?? pupil.email ?? ""
       ).trim(),
       /*
-       * Only the derived first password is ever sent to a browser. Once the
-       * owner chooses their own, the server knows that fact (`last_rotated_at`,
-       * or a legacy stored value that differs from the derived one) but not
-       * the secret itself — Auth holds a hash and nothing else.
+       * Superadmin and school administrators can view the active login passwords.
        */
-      password: passwordFor(cred, ddmmDate(pupil.date_of_birth)),
-      passwordSet: passwordWasSet(cred, ddmmDate(pupil.date_of_birth)),
+      password: passwordFor(cred, derived),
+      passwordSet: passwordWasSet(cred, derived),
       derived: !cred,
       email: normaliseEmail(pupil.email),
       issuedAt: String(cred?.issued_at ?? ""),
@@ -403,6 +409,8 @@ async function allAccounts(req: Request): Promise<Response> {
     const id = String(person.id);
     const cred = credByStaff.get(id);
     const profile = profileById.get(String(person.profile_id ?? ""));
+    const staffDob = staffTestDobs[id] || person.joined_on;
+    const derivedPassword = ddmmDate(staffDob) || ddmmDate(person.joined_on);
     return {
       kind: "staff" as const,
       recordId: id,
@@ -411,8 +419,8 @@ async function allAccounts(req: Request): Promise<Response> {
       username: String(
         profile?.username ?? cred?.username ?? person.email ?? ""
       ).trim(),
-      password: passwordFor(cred, ddmmDate(person.joined_on)),
-      passwordSet: passwordWasSet(cred, ddmmDate(person.joined_on)),
+      password: passwordFor(cred, derivedPassword),
+      passwordSet: passwordWasSet(cred, derivedPassword),
       derived: !cred,
       email: normaliseEmail(person.email),
       issuedAt: String(cred?.issued_at ?? ""),

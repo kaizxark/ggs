@@ -71,9 +71,9 @@ export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
       "teaching and non-teaching staff: names, designations, departments, email addresses",
   },
   academics: {
-    label: "Academics",
+    label: "Timetable",
     blurb:
-      "subjects on offer, who teaches what, today's timetable and term progress",
+      "class schedules, weekly period allocations, teacher assignments, bell timings and breaks",
   },
   examinations: {
     label: "Examinations",

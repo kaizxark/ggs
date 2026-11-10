@@ -167,6 +167,7 @@ import {
   type AttendanceClassOption,
   type AttendanceStatus,
 } from "../lib/attendance";
+import type { AttendanceRosterStudent } from "@shared/attendance";
 import { useRealtimeInvalidation } from "../lib/use-realtime";
 import { ApiError } from "../lib/student-directory";
 import {
@@ -233,7 +234,11 @@ function initialsFor(name: string): string {
  * screen the server would refuse to route to.
  */
 function VISIBLE_SCREENS_FOR_ROLE(role: string): string[] {
-  return screensForRole(role).map(key => screenLabelByName(key) ?? key);
+  const screens = screensForRole(role).map(key => screenLabelByName(key) ?? key);
+  if (screens.includes("Timetable") && !screens.includes("Academics")) {
+    screens.push("Academics");
+  }
+  return screens;
 }
 
 /**
@@ -373,6 +378,11 @@ const SCREEN_PROMPTS: Record<string, string[]> = {
     "Which staff are on campus today?",
     "Who is in the accounts department?",
   ],
+  Timetable: [
+    "What is on the timetable today?",
+    "Which teachers have free periods?",
+    "Show me the schedule for Class 10-A",
+  ],
   Academics: [
     "What is on the timetable today?",
     "Which exams are coming up?",
@@ -434,7 +444,7 @@ const navGroups = [
       { label: "Overview", icon: LayoutDashboard },
       { label: "Students", icon: GraduationCap },
       { label: "Staff", icon: Users },
-      { label: "Academics", icon: BookOpen },
+      { label: "Timetable", icon: CalendarDays },
     ],
   },
   {
@@ -645,11 +655,11 @@ function CommandPaletteBody({
         keywords: ["analytics", "performance", "trends", "metrics", "grades", "statistics", "wellness", "insights"],
       },
       {
-        view: "Academics",
-        label: "Academics",
-        detail: "Subjects, curriculum, weekly timetable & syllabus coverage",
-        icon: BookOpen,
-        keywords: ["academics", "curriculum", "subjects", "timetable", "schedule", "syllabus", "classes", "courses"],
+        view: "Timetable",
+        label: "Timetable",
+        detail: "Class timetables, weekly schedules, bell timings & teacher allocations",
+        icon: CalendarDays,
+        keywords: ["timetable", "schedule", "academics", "periods", "bell timings", "classes", "slots", "routine"],
       },
       {
         view: "Examinations",
@@ -825,7 +835,7 @@ function CommandPaletteBody({
       : [];
 
     // 7. Subjects
-    const matchingSubjects = allowedScreenSet.has("Academics")
+    const matchingSubjects = (allowedScreenSet.has("Timetable") || allowedScreenSet.has("Academics"))
       ? subjects
           .filter(sub =>
             `${sub.name} ${sub.teacher ?? ""} ${sub.classList.join(" ")}`
@@ -845,7 +855,7 @@ function CommandPaletteBody({
       .slice(0, 2);
 
     // 9. Library Books
-    const matchingBooks = allowedScreenSet.has("Academics")
+    const matchingBooks = (allowedScreenSet.has("Timetable") || allowedScreenSet.has("Academics"))
       ? libraryBooks
           .filter(b =>
             `${b.title} ${b.author} ${b.category}`
@@ -1013,7 +1023,7 @@ function CommandPaletteBody({
       out.push({
         key: `sub-${sub.id}`,
         run: () => {
-          onNavigate("Academics");
+          onNavigate("Timetable");
           onClose();
         },
       });
@@ -1035,7 +1045,7 @@ function CommandPaletteBody({
       out.push({
         key: `lib-${b.id}`,
         run: () => {
-          onNavigate("Academics");
+          onNavigate("Timetable");
           onClose();
         },
       });
@@ -1980,7 +1990,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
             detail: `${criticalStudentsCount} pupil${criticalStudentsCount === 1 ? "" : "s"} below 50% average`,
             icon: AlertCircle,
             tone: "coral",
-            view: "Academics",
+            view: "Analytics",
           },
         ]
       : []),
@@ -2573,6 +2583,7 @@ function formatSyncTime(d: Date): string {
 }
 
 function AttendanceView({ onBack }: { onBack: () => void }) {
+  const currentUser = useCurrentUser();
   const [activeTab, setActiveTab] = useState<"overview" | "register">("overview");
   const [date, setDate] = useState<string>(() => attendanceToday());
   const [classroomId, setClassroomId] = useState<string>("");
@@ -2594,6 +2605,9 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [sortBy, setSortBy] = useState<"grade" | "attendance_asc" | "attendance_desc" | "pending_first">("grade");
   const [inspectClassId, setInspectClassId] = useState<string | null>(null);
+  const [inspectRoster, setInspectRoster] = useState<AttendanceRosterStudent[] | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+  const [drawerRosterFilter, setDrawerRosterFilter] = useState<"all" | "absent" | "present">("all");
 
   // Real-time listener: invalidates whenever any client updates attendance or classrooms
   const realtimeRev = useRealtimeInvalidation(["attendance", "classrooms"]);
@@ -2645,8 +2659,14 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
   const selectedClass = data?.selectedClass ?? null;
   const overview = data?.overview ?? null;
   const managerView = data?.managerView ?? false;
-  const canMark = Boolean(data && !managerView && selectedClass?.canMark);
+  const isManager =
+    currentUser?.role === "super_admin" ||
+    currentUser?.role === "admin" ||
+    currentUser?.role === "principal" ||
+    managerView;
+  const canMark = Boolean(data && !isManager && selectedClass?.canMark);
   const activeClassId = classroomId || data?.selectedClassroomId || "";
+  const currentTab = isManager ? "overview" : activeTab;
 
   // Summary figures across all visible classes for this date:
   const executiveMetrics = useMemo(() => {
@@ -2762,6 +2782,48 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
     return classes.find((c) => c.id === inspectClassId) ?? null;
   }, [classes, inspectClassId]);
 
+  useEffect(() => {
+    if (!inspectClassId) {
+      setInspectRoster(null);
+      setDrawerRosterFilter("all");
+      return;
+    }
+    let cancelled = false;
+    setInspectLoading(true);
+    loadAttendance({ date, classroomId: inspectClassId })
+      .then((res) => {
+        if (!cancelled) {
+          setInspectRoster(res.roster ?? []);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load class roster details:", err);
+        if (!cancelled) {
+          setInspectRoster([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setInspectLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inspectClassId, date]);
+
+  const drawerStudents = useMemo(() => {
+    if (!inspectRoster) return [];
+    if (drawerRosterFilter === "absent") {
+      return inspectRoster.filter(
+        (s) => s.status === "absent" || s.status === "late" || s.status === "leave"
+      );
+    }
+    if (drawerRosterFilter === "present") {
+      return inspectRoster.filter((s) => s.status === "present");
+    }
+    return inspectRoster;
+  }, [inspectRoster, drawerRosterFilter]);
+
   const counts = useMemo(() => {
     let present = 0;
     let absent = 0;
@@ -2867,9 +2929,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
             </span>
           </div>
           <p className="page-subtitle" style={{ marginTop: "4px" }}>
-            {activeTab === "overview"
+            {isManager
+              ? `Class-by-class attendance overview · ${readableDate(data?.date ?? date)}`
+              : currentTab === "overview"
               ? `Real-time operational overview across all classrooms · ${readableDate(data?.date ?? date)}`
-              : `${managerView ? "Class register review" : "Daily register"} · ${readableDate(data?.date ?? date)}`}
+              : `Daily register · ${readableDate(data?.date ?? date)}`}
           </p>
         </div>
 
@@ -2908,32 +2972,34 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
             </button>
           </div>
 
-          <SegmentedControl
-            ariaLabel="Attendance view tabs"
-            layoutId="attendanceMainViewTabs"
-            value={activeTab}
-            onChange={(val) => setActiveTab(val as "register" | "overview")}
-            indicatorVariant="brand"
-            options={[
-              {
-                value: "overview",
-                label: "Live Overview",
-                icon: <Activity size={14} />,
-              },
-              {
-                value: "register",
-                label: "Class Register",
-                icon: <ClipboardCheck size={14} />,
-              },
-            ]}
-          />
+          {!isManager && (
+            <SegmentedControl
+              ariaLabel="Attendance view tabs"
+              layoutId="attendanceMainViewTabs"
+              value={activeTab}
+              onChange={(val) => setActiveTab(val as "register" | "overview")}
+              indicatorVariant="brand"
+              options={[
+                {
+                  value: "overview",
+                  label: "Live Overview",
+                  icon: <Activity size={14} />,
+                },
+                {
+                  value: "register",
+                  label: "Class Register",
+                  icon: <ClipboardCheck size={14} />,
+                },
+              ]}
+            />
+          )}
         </div>
       </div>
 
       {/* ------------------------------------------------------------ */}
       {/* Live Overview Tab                                             */}
       {/* ------------------------------------------------------------ */}
-      {activeTab === "overview" &&
+      {currentTab === "overview" &&
         (loading && !data ? (
           <div className="panel" style={{ padding: "18px 22px" }}>
             <SkeletonRegion label="Loading live attendance overview">
@@ -3104,10 +3170,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => {
-                          setClassroomId(c.id);
-                          setActiveTab("register");
-                        }}
+                        onClick={() => setInspectClassId(c.id)}
                         style={{
                           display: "inline-flex",
                           alignItems: "center",
@@ -3120,7 +3183,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                           cursor: "pointer",
                           color: "var(--text-secondary)",
                         }}
-                        title={`Open register for ${c.label}`}
+                        title={`View details for ${c.label}`}
                       >
                         <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{c.label}</span>
                         <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>
@@ -3317,7 +3380,12 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                     : "var(--success)";
 
                   return (
-                    <div key={option.id} className="attendance-class-card">
+                    <div
+                      key={option.id}
+                      className="attendance-class-card"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setInspectClassId(option.id)}
+                    >
                       <div>
                         {/* Card Header */}
                         <div
@@ -3442,7 +3510,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                           <button
                             type="button"
                             className="attendance-absentee-chip"
-                            onClick={() => setInspectClassId(option.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInspectClassId(option.id);
+                              setDrawerRosterFilter("absent");
+                            }}
                             style={{ marginTop: "4px", width: "100%", justifyContent: "space-between" }}
                           >
                             <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
@@ -3480,13 +3552,12 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                             fontSize: "11.5px",
                             padding: "4px 10px",
                           }}
-                          onClick={() => {
-                            setClassroomId(option.id);
-                            setActiveTab("register");
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInspectClassId(option.id);
                           }}
                         >
-                          <ClipboardCheck size={12} />
-                          {option.canMark ? "Mark Register" : "Open Register"}
+                          View details →
                         </button>
                       </div>
                     </div>
@@ -3520,7 +3591,11 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                         const rate = option.todayPercent ?? (marked > 0 ? attendancePercent(option.presentToday ?? 0, marked) : 0);
 
                         return (
-                          <tr key={option.id}>
+                          <tr
+                            key={option.id}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => setInspectClassId(option.id)}
+                          >
                             <td>
                               <span className="font-medium text-[var(--text-primary)]">
                                 {option.label}
@@ -3570,19 +3645,8 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                                 <span className="muted-cell">—</span>
                               )}
                             </td>
-                            <td style={{ textAlign: "right" }}>
+                            <td style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                               <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                                {((option.absentToday ?? 0) > 0 || (option.leaveToday ?? 0) > 0) && (
-                                  <button
-                                    type="button"
-                                    className="secondary-button compact"
-                                    style={{ fontSize: "11px", padding: "3px 7px" }}
-                                    onClick={() => setInspectClassId(option.id)}
-                                    title="Inspect absentees"
-                                  >
-                                    <UserX size={12} />
-                                  </button>
-                                )}
                                 <button
                                   type="button"
                                   className="secondary-button compact"
@@ -3593,13 +3657,9 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                                     fontSize: "11.5px",
                                     padding: "4px 10px",
                                   }}
-                                  onClick={() => {
-                                    setClassroomId(option.id);
-                                    setActiveTab("register");
-                                  }}
+                                  onClick={() => setInspectClassId(option.id)}
                                 >
-                                  <ClipboardCheck size={12} />
-                                  {option.canMark ? "Mark" : "Open"}
+                                  Details →
                                 </button>
                               </div>
                             </td>
@@ -3686,7 +3746,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
       {/* ------------------------------------------------------------ */}
       {/* Daily Register Tab                                            */}
       {/* ------------------------------------------------------------ */}
-      {activeTab === "register" && (
+      {!isManager && currentTab === "register" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           {/* Quick jump back to live overview */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
@@ -4125,7 +4185,7 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
               top: 0,
               right: 0,
               bottom: 0,
-              width: "min(460px, 100vw)",
+              width: "min(520px, 100vw)",
               background: "var(--bg-card)",
               borderLeft: "1px solid var(--border-strong)",
               zIndex: 9999,
@@ -4147,8 +4207,8 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
               }}
             >
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
                     {inspectedClass.label}
                   </h2>
                   {inspectedClass.room && (
@@ -4156,16 +4216,29 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
                       Rm {inspectedClass.room}
                     </span>
                   )}
+                  {inspectedClass.isMarked ? (
+                    <span className="status-pill success" style={{ fontSize: "11px", padding: "2px 8px" }}>
+                      <CheckCircle2 size={11} /> Marked
+                    </span>
+                  ) : (inspectedClass.markedToday ?? 0) === 0 ? (
+                    <span className="status-pill warning" style={{ fontSize: "11px", padding: "2px 8px" }}>
+                      <AlertCircle size={11} /> Pending
+                    </span>
+                  ) : (
+                    <span className="status-pill neutral" style={{ fontSize: "11px", padding: "2px 8px" }}>
+                      Partial ({inspectedClass.markedToday}/{inspectedClass.studentCount})
+                    </span>
+                  )}
                 </div>
                 <p style={{ fontSize: "12.5px", color: "var(--text-muted)", margin: "4px 0 0" }}>
-                  {inspectedClass.classTeacherName ? `Teacher: ${inspectedClass.classTeacherName}` : "No teacher assigned"} · {readableDate(data?.date ?? date)}
+                  {inspectedClass.classTeacherName ? `Class Teacher: ${inspectedClass.classTeacherName}` : "No teacher assigned"} · {readableDate(data?.date ?? date)}
                 </p>
               </div>
               <button
                 className="secondary-button compact"
                 style={{ padding: "6px", borderRadius: "8px" }}
                 onClick={() => setInspectClassId(null)}
-                aria-label="Close drawer"
+                aria-label="Close details"
               >
                 <X size={16} />
               </button>
@@ -4173,125 +4246,198 @@ function AttendanceView({ onBack }: { onBack: () => void }) {
 
             {/* Drawer Body */}
             <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              {/* Quick summary metrics */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
-                <div className="panel" style={{ padding: "12px", textAlign: "center" }}>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block" }}>Present</span>
-                  <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--success)" }}>{inspectedClass.presentToday}</span>
+              {/* Quick Summary Metrics Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
+                <div className="panel" style={{ padding: "10px 8px", textAlign: "center" }}>
+                  <span style={{ fontSize: "10.5px", color: "var(--text-muted)", display: "block" }}>Enrolled</span>
+                  <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)" }}>{inspectedClass.studentCount}</span>
                 </div>
-                <div className="panel" style={{ padding: "12px", textAlign: "center" }}>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block" }}>Absent</span>
-                  <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--danger-strong)" }}>{inspectedClass.absentToday ?? 0}</span>
+                <div className="panel" style={{ padding: "10px 8px", textAlign: "center" }}>
+                  <span style={{ fontSize: "10.5px", color: "var(--text-muted)", display: "block" }}>Present</span>
+                  <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--success)" }}>{inspectedClass.presentToday}</span>
                 </div>
-                <div className="panel" style={{ padding: "12px", textAlign: "center" }}>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block" }}>On Leave</span>
-                  <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--brand-strong)" }}>{inspectedClass.leaveToday ?? 0}</span>
+                <div className="panel" style={{ padding: "10px 8px", textAlign: "center" }}>
+                  <span style={{ fontSize: "10.5px", color: "var(--text-muted)", display: "block" }}>Absent</span>
+                  <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--danger-strong)" }}>{inspectedClass.absentToday ?? 0}</span>
+                </div>
+                <div className="panel" style={{ padding: "10px 8px", textAlign: "center" }}>
+                  <span style={{ fontSize: "10.5px", color: "var(--text-muted)", display: "block" }}>Rate</span>
+                  <span style={{ fontSize: "16px", fontWeight: 700, color: "var(--brand-strong)" }}>
+                    {(inspectedClass.markedToday ?? 0) > 0 ? `${inspectedClass.todayPercent}%` : "—"}
+                  </span>
                 </div>
               </div>
 
-              {/* Absentees list */}
-              <div>
-                <h3
+              {/* Notice if attendance has not been recorded yet */}
+              {(inspectedClass.markedToday ?? 0) === 0 && (
+                <div
                   style={{
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "var(--text-primary)",
-                    marginBottom: "10px",
+                    padding: "12px 14px",
+                    borderRadius: "8px",
+                    background: "rgba(255, 159, 10, 0.08)",
+                    border: "1px solid rgba(255, 159, 10, 0.3)",
                     display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                    fontSize: "12px",
+                    color: "var(--text-secondary)",
                   }}
                 >
-                  <UserX size={14} style={{ color: "var(--danger-strong)" }} />
-                  Absentees & Exceptions ({inspectedClass.absentees?.length ?? 0})
-                </h3>
-
-                {(!inspectedClass.absentees || inspectedClass.absentees.length === 0) ? (
-                  <div className="panel" style={{ padding: "28px 16px", textAlign: "center" }}>
-                    <CheckCircle2 size={24} style={{ color: "var(--success)", margin: "0 auto 8px" }} />
-                    <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
-                      100% Attendance Recorded!
+                  <AlertCircle size={16} style={{ color: "var(--warning)", flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>Attendance pending submission</span>
+                    <p style={{ margin: "2px 0 0", color: "var(--text-muted)" }}>
+                      {inspectedClass.classTeacherName
+                        ? `${inspectedClass.classTeacherName} has not submitted the register for this class yet.`
+                        : "No class teacher is currently assigned to submit this register."}
                     </p>
-                    <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
-                      No pupils were marked absent, late, or on leave for this class on {readableDate(data?.date ?? date)}.
+                  </div>
+                </div>
+              )}
+
+              {/* Pupils Details List */}
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    marginBottom: "10px",
+                  }}
+                >
+                  <h3
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      color: "var(--text-primary)",
+                      margin: 0,
+                    }}
+                  >
+                    Pupil Attendance ({inspectRoster ? inspectRoster.length : inspectedClass.studentCount})
+                  </h3>
+
+                  {inspectRoster && inspectRoster.length > 0 && (
+                    <div style={{ display: "flex", gap: "4px" }}>
+                      <button
+                        type="button"
+                        className={`status-pill ${drawerRosterFilter === "all" ? "brand" : "neutral"}`}
+                        onClick={() => setDrawerRosterFilter("all")}
+                        style={{ cursor: "pointer", fontSize: "11px", padding: "2px 7px" }}
+                      >
+                        All
+                      </button>
+                      {(inspectedClass.absentToday ?? 0) + (inspectedClass.leaveToday ?? 0) + (inspectedClass.lateToday ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className={`status-pill ${drawerRosterFilter === "absent" ? "danger" : "neutral"}`}
+                          onClick={() => setDrawerRosterFilter("absent")}
+                          style={{ cursor: "pointer", fontSize: "11px", padding: "2px 7px" }}
+                        >
+                          Exceptions ({(inspectedClass.absentToday ?? 0) + (inspectedClass.leaveToday ?? 0) + (inspectedClass.lateToday ?? 0)})
+                        </button>
+                      )}
+                      {(inspectedClass.presentToday ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className={`status-pill ${drawerRosterFilter === "present" ? "success" : "neutral"}`}
+                          onClick={() => setDrawerRosterFilter("present")}
+                          style={{ cursor: "pointer", fontSize: "11px", padding: "2px 7px" }}
+                        >
+                          Present ({inspectedClass.presentToday})
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {inspectLoading ? (
+                  <SkeletonRegion label="Loading pupils">
+                    <SkeletonList rows={5} avatar />
+                  </SkeletonRegion>
+                ) : !inspectRoster || inspectRoster.length === 0 ? (
+                  <div className="panel" style={{ padding: "28px 16px", textAlign: "center" }}>
+                    <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>
+                      No pupils enrolled in this class.
                     </p>
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {inspectedClass.absentees.map((pupil) => (
-                      <div
-                        key={pupil.id}
-                        className="panel"
-                        style={{
-                          padding: "12px 14px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "6px",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-                          <div>
-                            <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
-                              {pupil.name}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {drawerStudents.length === 0 ? (
+                      <div className="panel" style={{ padding: "20px 16px", textAlign: "center" }}>
+                        <p style={{ fontSize: "12.5px", color: "var(--text-muted)", margin: 0 }}>
+                          No pupils match the selected filter.
+                        </p>
+                      </div>
+                    ) : (
+                      drawerStudents.map((pupil) => (
+                        <div
+                          key={pupil.id}
+                          className="panel"
+                          style={{
+                            padding: "10px 12px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "10px",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                            <span className="avatar" style={{ width: "30px", height: "30px", fontSize: "11px" }}>
+                              {pupil.initials}
                             </span>
-                            {pupil.rollNo && (
-                              <span style={{ fontSize: "11.5px", color: "var(--text-muted)", marginLeft: "8px" }}>
-                                Roll #{pupil.rollNo}
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {pupil.name}
+                                </span>
+                                {pupil.rollNo && (
+                                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                                    #{pupil.rollNo}
+                                  </span>
+                                )}
+                              </div>
+                              {pupil.notes ? (
+                                <p style={{ fontSize: "11.5px", color: "var(--text-muted)", margin: "2px 0 0", fontStyle: "italic" }}>
+                                  Remark: {pupil.notes}
+                                </p>
+                              ) : pupil.usn ? (
+                                <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "2px 0 0", fontFamily: "monospace" }}>
+                                  {pupil.usn}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                            {pupil.status ? (
+                              <span className={`status-pill ${attendanceTone(pupil.status as AttendanceStatus)}`} style={{ fontSize: "11px" }}>
+                                {(ATTENDANCE_STATUS_LABELS as Record<string, string>)[pupil.status] ?? pupil.status}
+                              </span>
+                            ) : (
+                              <span className="status-pill neutral" style={{ fontSize: "11px" }}>
+                                Pending
                               </span>
                             )}
                           </div>
-                          <span className={`status-pill ${attendanceTone(pupil.status)}`}>
-                            {ATTENDANCE_STATUS_LABELS[pupil.status]}
-                          </span>
                         </div>
-
-                        {pupil.notes ? (
-                          <div
-                            style={{
-                              fontSize: "12px",
-                              color: "var(--text-secondary)",
-                              background: "var(--bg-raised)",
-                              padding: "6px 10px",
-                              borderRadius: "6px",
-                            }}
-                          >
-                            <span style={{ fontWeight: 500, color: "var(--text-muted)" }}>Remark: </span>
-                            {pupil.notes}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: "11.5px", color: "var(--text-muted)", fontStyle: "italic" }}>
-                            No remarks entered by teacher
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 )}
               </div>
             </div>
 
             {/* Drawer Footer */}
-            <div style={{ padding: "16px 20px", borderTop: "1px solid var(--border-subtle)", display: "flex", gap: "10px" }}>
+            <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border-subtle)", display: "flex", justifyContent: "flex-end" }}>
               <button
                 type="button"
-                className="primary-button"
-                style={{
-                  flex: 1,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  fontSize: "13px",
-                  padding: "10px 16px",
-                }}
-                onClick={() => {
-                  setClassroomId(inspectedClass.id);
-                  setActiveTab("register");
-                  setInspectClassId(null);
-                }}
+                className="secondary-button"
+                style={{ padding: "8px 16px", fontSize: "12.5px" }}
+                onClick={() => setInspectClassId(null)}
               >
-                <ClipboardCheck size={14} />
-                Open Full Class Register
+                Close
               </button>
             </div>
           </div>
@@ -9626,7 +9772,7 @@ export default function Home() {
           onNavigate={navigate}
         />
       );
-    if (activeView === "Academics")
+    if (activeView === "Timetable" || activeView === "Academics")
       return <AcademicsView onBack={() => navigate("Overview")} />;
     if (activeView === "Examinations")
       return <ExaminationsView onBack={() => navigate("Overview")} />;

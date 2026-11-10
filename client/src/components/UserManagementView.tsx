@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FileText,
   Filter,
   GraduationCap,
   KeyRound,
@@ -115,7 +116,7 @@ const ADMIN_MODULES_LIST = [
   { id: "Admissions", label: "Admissions & Enrollment", desc: "Student onboarding and records" },
   { id: "Finance", label: "Fee Collection & Finance", desc: "Fee registers, invoices, and ledger" },
   { id: "Staff", label: "Staff & Faculty Directory", desc: "Employee records and onboarding" },
-  { id: "Academics", label: "Academics & Timetables", desc: "Schedules, exams, and grading" },
+  { id: "Academics", label: "Timetable & Schedules", desc: "Class timetables, bell timings, and room schedules" },
   { id: "Analytics", label: "Analytics & Reports", desc: "School performance and KPIs" },
   { id: "Settings", label: "School Identity & Settings", desc: "Campus configuration and branding" },
 ] as const;
@@ -430,14 +431,10 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       `Student Name: ${row.name}`,
       `Grade & Class: ${gradeDisplay}`,
       `Username (USN): ${row.username}`,
-      `Initial Password: ${
-        row.passwordSet
-          ? "already changed by the student"
-          : row.password || "not issued"
-      }`,
+      `Password: ${row.password || (row.passwordSet ? "Set by student" : "not issued")}`,
       `Portal Login URL: https://ggs-erp.vercel.app/login`,
       `======================================`,
-      `Use your USN and password to sign in. Please change your password after initial sign-in.`,
+      `Use your USN and password to sign in.`,
     ].join("\n");
     void navigator.clipboard.writeText(slip);
     toast.success(`Student access slip copied for ${row.name}`);
@@ -473,11 +470,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
       `Assigned Scope: ${scope}`,
       `Portal Login URL: https://ggs-erp.vercel.app/login`,
       `Username / USN: ${username}`,
-      `Password: ${
-        staffAcc?.passwordSet
-          ? "already set by the staff member"
-          : password || "not issued"
-      }`,
+      `Password: ${password || (staffAcc?.passwordSet ? "Set by staff member" : "not issued")}`,
       `======================================`,
       `Sign in with your username or email at the portal to access your dashboard.`,
     ].join("\n");
@@ -1129,20 +1122,20 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         <td className="py-4.5 px-6">
                           <div className="flex items-center gap-2">
                             <code className="text-xs font-mono font-medium text-[var(--success)] bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
-                              {passwordSet
-                                ? "Set by owner"
-                                : hasPassword
-                                  ? revealed
-                                    ? password
-                                    : "••••••••"
+                              {hasPassword
+                                ? revealed
+                                  ? password
+                                  : "••••••••"
+                                : passwordSet
+                                  ? "Set by owner"
                                   : "—"}
                             </code>
-                            {hasPassword && !passwordSet && (
+                            {hasPassword && (
                               <button
                                 type="button"
                                 onClick={() => {
                                   void navigator.clipboard.writeText(password);
-                                  toast.success("Password copied");
+                                  toast.success("Password copied to clipboard");
                                 }}
                                 className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
                                 title="Copy password"
@@ -1163,7 +1156,15 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
 
                         {/* Actions */}
                         <td className="py-4.5 px-6 text-right">
-                          <div className="flex items-center justify-end">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              className="secondary-button compact h-8 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                              onClick={() => copyStaffSlip(person, staffAcc)}
+                              title="Copy login slip"
+                            >
+                              <FileText size={12} />
+                              <span>Copy Slip</span>
+                            </button>
                             <button
                               className="secondary-button compact h-8 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5"
                               onClick={() => openEditModal(person)}
@@ -1270,14 +1271,17 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                   <th style={{ minWidth: 130 }} className="py-4 px-6 text-left">
                     Issued Date
                   </th>
+                  <th style={{ minWidth: 120 }} className="py-4 px-6 text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
                 {accountsLoading ? (
-                  <SkeletonTableRows rows={6} columns={5} />
+                  <SkeletonTableRows rows={6} columns={6} />
                 ) : filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-16 text-center">
+                    <td colSpan={6} className="py-16 text-center">
                       <div className="empty-state max-w-sm mx-auto space-y-2">
                         <GraduationCap size={32} className="mx-auto text-[var(--text-muted)]" />
                         <p className="text-sm font-bold text-[var(--text-primary)]">
@@ -1346,20 +1350,20 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                         <td className="py-4.5 px-6">
                           <div className="flex items-center gap-2">
                             <code className="text-xs font-mono font-medium text-[var(--success)] bg-[var(--bg-card)] px-2.5 py-1.5 rounded-lg border border-[var(--border)]">
-                              {row.passwordSet
-                                ? "Set by owner"
-                                : row.password
-                                  ? revealed
-                                    ? row.password
-                                    : "••••••••"
+                              {row.password
+                                ? revealed
+                                  ? row.password
+                                  : "••••••••"
+                                : row.passwordSet
+                                  ? "Set by owner"
                                   : "—"}
                             </code>
-                            {revealed && row.password && !row.passwordSet && (
+                            {Boolean(row.password) && (
                               <button
                                 type="button"
                                 onClick={() => {
                                   void navigator.clipboard.writeText(row.password);
-                                  toast.success("Password copied");
+                                  toast.success("Password copied to clipboard");
                                 }}
                                 className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
                                 title="Copy password"
@@ -1374,6 +1378,19 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                           {row.issuedAt
                             ? new Date(row.issuedAt).toLocaleDateString()
                             : "Active"}
+                        </td>
+
+                        <td className="py-4.5 px-6 text-right">
+                          <div className="flex items-center justify-end">
+                            <button
+                              className="secondary-button compact h-8 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+                              onClick={() => copyStudentSlip(row)}
+                              title="Copy student portal access slip"
+                            >
+                              <FileText size={12} />
+                              <span>Copy Slip</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

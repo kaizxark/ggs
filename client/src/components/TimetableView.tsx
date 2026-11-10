@@ -19,9 +19,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   CalendarDays,
   Check,
+  CheckCircle2,
   Clock3,
+  Coffee,
   Copy,
   Lock,
   Loader2,
@@ -496,6 +499,199 @@ function CellEditor({
       {subjectsList.length === 0 && (
         <span className="tt-cell-editor-hint">No subject catalog yet — type the subject name.</span>
       )}
+    </div>
+  );
+}
+
+/* =========================================================================
+   SKELETON LOADER
+   ========================================================================= */
+
+export function TimetableSkeleton() {
+  return (
+    <div className="tt-shell skeleton-region" aria-busy="true" aria-label="Loading timetable">
+      <div className="panel tt-skeleton-toolbar">
+        <div className="tt-skeleton-row-between">
+          <div className="tt-skeleton-tabs">
+            <div className="erp-skeleton" style={{ width: 140, height: 34, borderRadius: 8 }} />
+            <div className="erp-skeleton" style={{ width: 120, height: 34, borderRadius: 8 }} />
+          </div>
+          <div className="tt-skeleton-actions">
+            <div className="erp-skeleton" style={{ width: 88, height: 32, borderRadius: 6 }} />
+            <div className="erp-skeleton" style={{ width: 72, height: 32, borderRadius: 6 }} />
+            <div className="erp-skeleton" style={{ width: 72, height: 32, borderRadius: 6 }} />
+          </div>
+        </div>
+
+        <div className="tt-skeleton-class-pills">
+          {[84, 84, 84, 84, 84, 84, 84, 84, 84, 84].map((w, idx) => (
+            <div
+              key={idx}
+              className="erp-skeleton"
+              style={{ width: w, height: 32, borderRadius: 8, flexShrink: 0 }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="tt-skeleton-metrics">
+        {[
+          { label: "Teaching Hours", val: 90, sub: 110 },
+          { label: "Daily Schedule", val: 120, sub: 130 },
+          { label: "Scheduled Breaks", val: 80, sub: 115 },
+          { label: "Clash Detection", val: 105, sub: 125 },
+        ].map((item, idx) => (
+          <div key={idx} className="panel tt-skeleton-metric-card">
+            <div
+              className="erp-skeleton"
+              style={{ width: 28, height: 28, borderRadius: 6, marginBottom: 12 }}
+            />
+            <div
+              className="erp-skeleton"
+              style={{ width: 70, height: 11, marginBottom: 8 }}
+            />
+            <div
+              className="erp-skeleton"
+              style={{ width: item.val, height: 22, marginBottom: 6 }}
+            />
+            <div
+              className="erp-skeleton"
+              style={{ width: item.sub, height: 12 }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <section className="panel tt-grid-panel" style={{ padding: "16px 18px" }}>
+        <div className="tt-grid-head" style={{ marginBottom: 16 }}>
+          <div className="erp-skeleton" style={{ width: 140, height: 20, borderRadius: 4 }} />
+          <div className="erp-skeleton" style={{ width: 120, height: 14, borderRadius: 4, marginLeft: 12 }} />
+          <span style={{ flex: 1 }} />
+          <div className="erp-skeleton" style={{ width: 85, height: 28, borderRadius: 6 }} />
+          <div className="erp-skeleton" style={{ width: 95, height: 28, borderRadius: 6, marginLeft: 8 }} />
+        </div>
+
+        <div className="tt-grid-wrap">
+          <table className="tt-grid">
+            <thead>
+              <tr>
+                <th className="tt-period-head" style={{ width: 140 }}>
+                  <div className="erp-skeleton" style={{ width: 60, height: 14, margin: "0 auto" }} />
+                </th>
+                {["Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => (
+                  <th key={day}>
+                    <div className="erp-skeleton" style={{ width: 65, height: 14, margin: "0 auto" }} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Period 1 */}
+              <tr>
+                <td className="tt-period-cell">
+                  <div className="erp-skeleton" style={{ width: 70, height: 14, marginBottom: 5 }} />
+                  <div className="erp-skeleton" style={{ width: 85, height: 11 }} />
+                </td>
+                {[0, 1, 2, 3, 4].map((col) => (
+                  <td key={col} className="tt-slot-cell">
+                    <div className="tt-skeleton-slot">
+                      <div className="erp-skeleton" style={{ width: "65%", height: 16, borderRadius: 4, marginBottom: 6 }} />
+                      <div className="erp-skeleton" style={{ width: "85%", height: 12, borderRadius: 3 }} />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+
+              {/* Period 2 */}
+              <tr>
+                <td className="tt-period-cell">
+                  <div className="erp-skeleton" style={{ width: 70, height: 14, marginBottom: 5 }} />
+                  <div className="erp-skeleton" style={{ width: 85, height: 11 }} />
+                </td>
+                {[0, 1, 2, 3, 4].map((col) => (
+                  <td key={col} className="tt-slot-cell">
+                    <div className="tt-skeleton-slot">
+                      <div className="erp-skeleton" style={{ width: "60%", height: 16, borderRadius: 4, marginBottom: 6 }} />
+                      <div className="erp-skeleton" style={{ width: "80%", height: 12, borderRadius: 3 }} />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+
+              {/* Recess Break Row */}
+              <tr className="tt-break-row">
+                <td colSpan={6} style={{ padding: 0 }}>
+                  <div className="tt-skeleton-break">
+                    <div className="erp-skeleton" style={{ width: 190, height: 18, borderRadius: 6 }} />
+                  </div>
+                </td>
+              </tr>
+
+              {/* Period 3 */}
+              <tr>
+                <td className="tt-period-cell">
+                  <div className="erp-skeleton" style={{ width: 70, height: 14, marginBottom: 5 }} />
+                  <div className="erp-skeleton" style={{ width: 85, height: 11 }} />
+                </td>
+                {[0, 1, 2, 3, 4].map((col) => (
+                  <td key={col} className="tt-slot-cell">
+                    <div className="tt-skeleton-slot">
+                      <div className="erp-skeleton" style={{ width: "70%", height: 16, borderRadius: 4, marginBottom: 6 }} />
+                      <div className="erp-skeleton" style={{ width: "75%", height: 12, borderRadius: 3 }} />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+
+              {/* Period 4 */}
+              <tr>
+                <td className="tt-period-cell">
+                  <div className="erp-skeleton" style={{ width: 70, height: 14, marginBottom: 5 }} />
+                  <div className="erp-skeleton" style={{ width: 85, height: 11 }} />
+                </td>
+                {[0, 1, 2, 3, 4].map((col) => (
+                  <td key={col} className="tt-slot-cell">
+                    <div className="tt-skeleton-slot">
+                      <div className="erp-skeleton" style={{ width: "55%", height: 16, borderRadius: 4, marginBottom: 6 }} />
+                      <div className="erp-skeleton" style={{ width: "85%", height: 12, borderRadius: 3 }} />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+
+              {/* Lunch Break Row */}
+              <tr className="tt-break-row">
+                <td colSpan={6} style={{ padding: 0 }}>
+                  <div className="tt-skeleton-break">
+                    <div className="erp-skeleton" style={{ width: 210, height: 18, borderRadius: 6 }} />
+                  </div>
+                </td>
+              </tr>
+
+              {/* Period 5 */}
+              <tr>
+                <td className="tt-period-cell">
+                  <div className="erp-skeleton" style={{ width: 70, height: 14, marginBottom: 5 }} />
+                  <div className="erp-skeleton" style={{ width: 85, height: 11 }} />
+                </td>
+                {[0, 1, 2, 3, 4].map((col) => (
+                  <td key={col} className="tt-slot-cell">
+                    <div className="tt-skeleton-slot">
+                      <div className="erp-skeleton" style={{ width: "65%", height: 16, borderRadius: 4, marginBottom: 6 }} />
+                      <div className="erp-skeleton" style={{ width: "80%", height: 12, borderRadius: 3 }} />
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="tt-grid-foot" style={{ marginTop: 14 }}>
+          <div className="erp-skeleton" style={{ width: 140, height: 13, borderRadius: 4 }} />
+          <div className="erp-skeleton" style={{ width: 180, height: 13, borderRadius: 4 }} />
+        </div>
+      </section>
     </div>
   );
 }
@@ -1083,18 +1279,13 @@ export function TimetableView() {
   /* ------------------------------ early states ------------------------------ */
 
   if (loading) {
-    return (
-      <section className="panel tt-loading" style={{ padding: 40, textAlign: "center" }}>
-        <Loader2 size={24} className="tt-spin" style={{ margin: "0 auto 12px" }} />
-        <span>Loading timetables…</span>
-      </section>
-    );
+    return <TimetableSkeleton />;
   }
 
   if (loadError) {
     return (
-      <section className="panel tt-loading" style={{ padding: 32 }}>
-        <AlertTriangle size={24} style={{ color: "var(--danger)", margin: "0 auto 12px" }} />
+      <section className="panel tt-loading" style={{ padding: 36, textAlign: "center" }}>
+        <AlertTriangle size={28} style={{ color: "var(--danger)", margin: "0 auto 12px" }} />
         <strong style={{ fontSize: 16 }}>Timetables could not be loaded</strong>
         <p className="tt-sub">{loadError}</p>
         <button
@@ -1110,12 +1301,7 @@ export function TimetableView() {
   }
 
   if (!data) {
-    return (
-      <section className="panel tt-loading" style={{ padding: 40, textAlign: "center" }}>
-        <Loader2 size={24} className="tt-spin" style={{ margin: "0 auto 12px" }} />
-        <span>Preparing…</span>
-      </section>
-    );
+    return <TimetableSkeleton />;
   }
 
   const activeDays = draft?.days ?? [];
@@ -1298,6 +1484,37 @@ export function TimetableView() {
           )}
         </div>
 
+        {view === "classes" && data.classrooms.length > 0 && (
+          <div className="tt-classes-bar" role="tablist" aria-label="Select class">
+            {data.classrooms.map((room) => {
+              const isSelected = room.id === classId;
+              const stored = data.timetables.find((t) => t.classroomId === room.id);
+              const isPublished = stored?.published;
+              const hasDraft = Boolean(stored);
+              return (
+                <button
+                  key={room.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  className={`tt-class-pill${isSelected ? " active" : ""}`}
+                  onClick={() => setClassId(room.id)}
+                  title={`${room.label}${
+                    isPublished ? " · Published" : hasDraft ? " · Draft" : " · No schedule yet"
+                  }`}
+                >
+                  <span
+                    className="tt-class-pill-dot"
+                    data-state={isPublished ? "published" : hasDraft ? "draft" : "none"}
+                  />
+                  <span className="tt-class-pill-label">{room.label}</span>
+                  {room.room && <span className="tt-class-pill-room">Rm {room.room}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {writeError && canEdit && (
           <div className="tt-issue error" style={{ marginTop: 12 }}>
             <AlertTriangle size={14} />
@@ -1358,7 +1575,72 @@ export function TimetableView() {
               }
             />
           ) : (
-            <section className="panel tt-grid-panel" style={{ padding: "16px 18px" }}>
+            <>
+              {draft.periods.length > 0 && (
+                <div className="tt-metrics-grid">
+                  <div className="tt-metric-card">
+                    <div className="tt-metric-top">
+                      <span className="tt-metric-label">Teaching Hours</span>
+                      <span className="tt-metric-icon"><BookOpen size={14} /></span>
+                    </div>
+                    <span className="tt-metric-value">{formatDuration(stats.teaching)}</span>
+                    <span className="tt-metric-detail">{stats.lessons} lessons / day</span>
+                  </div>
+
+                  <div className="tt-metric-card">
+                    <div className="tt-metric-top">
+                      <span className="tt-metric-label">Daily Schedule</span>
+                      <span className="tt-metric-icon"><Clock3 size={14} /></span>
+                    </div>
+                    <span className="tt-metric-value">{formatDuration(stats.dayLength)}</span>
+                    <span className="tt-metric-detail">
+                      {draft.periods[0]?.startsAt ?? "—"} → {draft.periods[draft.periods.length - 1]?.endsAt ?? "—"}
+                    </span>
+                  </div>
+
+                  <div className="tt-metric-card">
+                    <div className="tt-metric-top">
+                      <span className="tt-metric-label">Scheduled Breaks</span>
+                      <span className="tt-metric-icon"><Coffee size={14} /></span>
+                    </div>
+                    <span className="tt-metric-value">{formatDuration(stats.breaks)}</span>
+                    <span className="tt-metric-detail">
+                      {draft.periods.filter((p) => p.kind !== "lesson").length} scheduled breaks
+                    </span>
+                  </div>
+
+                  <div className="tt-metric-card">
+                    <div className="tt-metric-top">
+                      <span className="tt-metric-label">Schedule Status</span>
+                      <span className="tt-metric-icon">
+                        {conflicts.length > 0 ? (
+                          <AlertTriangle size={14} style={{ color: "var(--danger)" }} />
+                        ) : (
+                          <CheckCircle2 size={14} style={{ color: "var(--success)" }} />
+                        )}
+                      </span>
+                    </div>
+                    <span className="tt-metric-value" style={{ fontSize: 18 }}>
+                      {conflicts.length > 0
+                        ? `${conflicts.length} Clash${conflicts.length === 1 ? "" : "es"}`
+                        : unassigned > 0
+                          ? `${unassigned} Unassigned`
+                          : "Conflict-Free"}
+                    </span>
+                    <span className="tt-metric-detail">
+                      {conflicts.length > 0
+                        ? "Resolve overlapping teacher slots"
+                        : unassigned > 0
+                          ? "Slots pending teacher allocation"
+                          : saved?.published
+                            ? "Published to students & parents"
+                            : "Ready to save and publish"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <section key={classId} className="panel tt-grid-panel tt-grid-fade" style={{ padding: "16px 18px" }}>
               <div className="tt-grid-head">
                 <h3 className="tt-title" style={{ fontSize: 16 }}>
                   {classroom?.label ?? "Class"}
@@ -1618,7 +1900,8 @@ export function TimetableView() {
                 </div>
               )}
             </section>
-          )}
+          </>
+        )}
         </>
       )}
 

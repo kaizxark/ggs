@@ -552,7 +552,7 @@ function StaffSectionBody({
           <p className="panel-title">No classes assigned</p>
           <p className="panel-subtitle">
             This record is not linked to a subject, a section or a class yet.
-            Assignments are made from Academics.
+            Assignments are made from Timetable.
           </p>
         </div>
       );
