@@ -30,7 +30,7 @@
 
   /* Surfaces — warm paper, not grey glass. */
   --bg-page: #f7f3eb;
-  --bg-sidebar: #1a3b36;
+  --bg-sidebar: #131417;
   --bg-panel: #fffdf9;
   --bg-panel-solid: #fffdf9;
   --bg-input: #ffffff;
@@ -41,11 +41,11 @@
   --bg-card: #fffdf9;
 
   /* The rail */
-  --rail: #142f2b;
-  --rail-deep: #0f2421;
-  --rail-text: #f6eddd;
-  --rail-muted: rgba(246, 237, 221, 0.74);
-  --rail-faint: rgba(246, 237, 221, 0.58);
+  --rail: #131417;
+  --rail-deep: #0d0e11;
+  --rail-text: #f3f4f6;
+  --rail-muted: rgba(243, 244, 246, 0.72);
+  --rail-faint: rgba(243, 244, 246, 0.44);
 
   /* Ink */
   --text-primary: #241e18;
@@ -63,9 +63,9 @@
   --bg-surface-hover: #efe6d6;
 
   /* Rail chrome */
-  --rail-rule: rgba(246, 237, 221, 0.12);
-  --rail-item-hover: rgba(246, 237, 221, 0.07);
-  --rail-item-active: rgba(246, 237, 221, 0.10);
+  --rail-rule: rgba(255, 255, 255, 0.08);
+  --rail-item-hover: rgba(255, 255, 255, 0.06);
+  --rail-item-active: rgba(255, 255, 255, 0.10);
   --rail-item-active-edge: #d98b63;
   --rail-item-active-icon: #e2a181;
   --rail-badge: #9e3b26;
@@ -234,9 +234,9 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex]
    light tint. Scoped here rather than on `.skeleton-nav` so any placeholder
    that lands in the sidebar inherits it. */
 .sidebar {
-  --skeleton-base: rgba(246, 237, 221, 0.10);
-  --skeleton-sheen: rgba(246, 237, 221, 0.17);
-  --skeleton-sheen-strong: rgba(246, 237, 221, 0.24);
+  --skeleton-base: rgba(255, 255, 255, 0.08);
+  --skeleton-sheen: rgba(255, 255, 255, 0.14);
+  --skeleton-sheen-strong: rgba(255, 255, 255, 0.20);
 }
 .sidebar-top { padding: 20px 16px 14px; }
 .brand-row { position: relative; display: flex; align-items: center; gap: 11px; }
@@ -255,7 +255,7 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex]
 .brand-logo { display: block; height: 38px; width: 38px; flex: 0 0 auto; object-fit: contain; }
 .sidebar-nav { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 15px 10px; }
 .nav-group { margin-bottom: 21px; }
-.nav-group-label { margin: 0 10px 9px; color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .1em; line-height: 1.35; text-transform: uppercase; }
+.nav-group-label { margin: 0 10px 9px; color: var(--rail-faint); font-size: 11px; font-weight: 700; letter-spacing: .1em; line-height: 1.35; text-transform: uppercase; }
 .nav-item { display: flex; width: 100%; align-items: center; gap: 11px; border: 0; border-radius: 9px; background: transparent; padding: 10px 12px; color: var(--rail-muted); font-size: 13.5px; font-weight: 500; line-height: 1.4; text-align: left; transition: background .16s var(--ease-out), color .16s var(--ease-out), transform .16s var(--ease-out); }
 .nav-item:hover { background: var(--rail-item-hover); color: var(--rail-text); }
 .nav-item:active { transform: scale(.985); }
@@ -715,6 +715,123 @@ button.breadcrumb-root:hover { color: var(--brand); }
 .segmented-indicator-brand {
   background: var(--brand);
   box-shadow: 0 2px 10px rgba(158, 59, 38, 0.35);
+}
+
+/* =========================================================================
+   RESPONSIVE MOBILE SELECTOR FOR SLIDERS / SEGMENTED CONTROLS
+   Replaces cramped, glitchy horizontal slider tabs on mobile / smaller views
+   with a fluid, logical, native-friendly selector and 2-way touch split toggle.
+   ========================================================================= */
+
+.segmented-mobile-select {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  display: block;
+}
+
+.segmented-mobile-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.segmented-mobile-select.variant-brand .segmented-mobile-select-trigger {
+  border-left: 3.5px solid var(--brand);
+}
+
+.segmented-mobile-select:hover .segmented-mobile-select-trigger,
+.segmented-mobile-select:focus-within .segmented-mobile-select-trigger {
+  border-color: var(--brand);
+  background: var(--bg-hover);
+}
+
+.segmented-mobile-select:active .segmented-mobile-select-trigger {
+  transform: scale(0.99);
+}
+
+.segmented-mobile-native-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 5;
+  font-size: 16px; /* Essential: prevents iOS Safari auto-zoom on form controls */
+}
+
+/* Two-way split toggle on mobile */
+.segmented-control-2way-mobile {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  height: 40px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+  box-sizing: border-box;
+}
+
+.segmented-control-2way-mobile button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  transition: all .15s ease;
+  cursor: pointer;
+  padding: 0 8px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.segmented-control-2way-mobile button:active {
+  transform: scale(0.98);
+}
+
+.segmented-control-2way-mobile button.active {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.segmented-control-2way-mobile.variant-brand button.active {
+  background: var(--brand);
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(158, 59, 38, 0.35);
+}
+
+.segmented-control-2way-mobile.variant-brand button.active svg {
+  color: #ffffff !important;
+}
+
+@media (min-width: 641px) {
+  .segmented-mobile-select,
+  .segmented-control-2way-mobile {
+    display: none !important;
+  }
 }
 .schedule-panel { padding-bottom: 12px; }
 .schedule-list { padding: 15px 20px 4px; }
@@ -1699,7 +1816,7 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   html {
     zoom: 1 !important;
   }
-  .sidebar { width: 232px; transform: translateX(-100%); box-shadow: 8px 0 24px rgba(36, 30, 24, 0.12); }
+  .sidebar { width: 232px; transform: translateX(-100%); box-shadow: 8px 0 24px rgba(0, 0, 0, 0.28); }
   .sidebar.mobile-open { transform: translateX(0); }
   .sidebar-close-mobile { display: inline-grid; place-items: center; }
   .main-area { margin-left: 0; }
@@ -1833,6 +1950,10 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
   .today-connector { display: none; }
   .panel-header { padding-inline: 14px; gap: 10px; align-items: flex-start; }
   .panel-header .segmented-control { width: 100%; }
+  .segmented-control.sm\:inline-flex,
+  .segmented-control.hidden {
+    display: none !important;
+  }
   .segmented-control { max-width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .segmented-control button { flex: 0 0 auto; padding-inline: 8px; font-size: 11.5px; }
   .profile-tabs {
@@ -4489,7 +4610,7 @@ body { background: var(--bg-page); color: var(--text-primary); font-family: var(
 .sidebar {
   width: 264px;
   background: var(--rail);
-  border-right: 1px solid rgba(246, 237, 221, 0.10);
+  border-right: 1px solid var(--rail-rule);
   box-shadow: none;
   backdrop-filter: none;
 }
@@ -4498,11 +4619,11 @@ body { background: var(--bg-page); color: var(--text-primary); font-family: var(
 .brand-wordmark-line1 { color: var(--rail-text); font-family: var(--font-display); font-size: 15.5px; font-weight: 700; letter-spacing: -0.02em; }
 .brand-wordmark-line2 { color: var(--rail-muted); font-size: 10.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }
 .sidebar-nav { padding: 14px 12px 20px; }
-.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(246, 237, 221, 0.18); }
+.sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); }
 .nav-group { margin-bottom: 24px; }
 .nav-group-label { margin: 0 12px 8px; color: var(--rail-faint); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; }
 .nav-item { gap: 11px; border-radius: 9px; padding: 10px 12px; color: var(--rail-muted); font-size: 13.5px; font-weight: 500; }
-.nav-item:hover { background: rgba(246, 237, 221, 0.07); color: var(--rail-text); }  .sidebar .nav-item.active {
+.nav-item:hover { background: var(--rail-item-hover); color: var(--rail-text); }  .sidebar .nav-item.active {
     background: var(--rail-item-active);
     color: var(--rail-text);
     font-weight: 600;
