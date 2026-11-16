@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Activity,
+  Award,
+  BarChart3,
   CalendarDays,
   Check,
   ChevronDown,
@@ -60,7 +62,7 @@ import {
   type StudentDraft,
 } from "@/lib/student-directory";
 import { toast } from "@/lib/toast";
-import { StudentProfile } from "@/pages/StudentProfile";
+import { StudentProfile, getGradeTier, getPaperStatus } from "@/pages/StudentProfile";
 import { StudentDocumentsPanel } from "@/components/StudentDocuments";
 import { canEditStudent, canManageFees, ALL_STUDENT_SECTIONS, type StudentSection } from "@shared/student-access";
 import { supabase } from "@/lib/supabase";
@@ -1177,7 +1179,7 @@ function StudentDrawer({
                   <StudentDocumentsPanel studentId={student.id} studentName={student.name} />
                 </div>
               ) : (
-                detail && <DrawerSection tab={tab} detail={detail} student={student} />
+                detail && <DrawerSection tab={tab} detail={detail} student={student} onOpenProfile={onOpenProfile} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -1248,6 +1250,298 @@ function StudentDrawer({
 }
 
 /*
+ * Dedicated academics presentation in the quick drawer.
+ * Displays key vitals, subject mastery gauges, and examination performance.
+ */
+function AcademicsDrawerSection({
+  detail,
+  student,
+  onOpenProfile,
+}: {
+  detail: ProfilePayload;
+  student: DirectoryStudent;
+  onOpenProfile?: () => void;
+}) {
+  const academics = detail.academics;
+  const publishedResults = useMemo(
+    () => (academics?.results ?? []).filter((r) => r.published),
+    [academics?.results],
+  );
+  const subjectsPerf = academics?.subject_performance ?? [];
+  const avg = student.academic_average;
+  const tier = getGradeTier(avg);
+  const att = detail.attendance?.summary;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Top Banner KPI Card */}
+      <div
+        style={{
+          background: "var(--bg-raised)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-lg, 12px)",
+          padding: "16px 18px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)" }}>
+              Academic Average
+            </span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
+              <span style={{ fontSize: 26, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.04em", fontFamily: "var(--font-sans)" }}>
+                {avg !== null ? formatPercent(avg) : "—"}
+              </span>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: tier.color,
+                  background: tier.bg,
+                  border: `1px solid ${tier.border}`,
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                }}
+              >
+                {tier.grade} · {tier.label}
+              </span>
+            </div>
+          </div>
+          {att && att.percentage !== null && (
+            <div style={{ textAlign: "right" }}>
+              <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>Attendance</span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: att.percentage >= 75 ? "var(--success, #10b981)" : "var(--danger, #ef4444)" }}>
+                {formatPercent(att.percentage)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            paddingTop: 10,
+            borderTop: "1px solid var(--border-subtle)",
+            fontSize: 12,
+            color: "var(--text-secondary)",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <GraduationCap size={14} style={{ color: "var(--brand)" }} />
+            Grade {student.grade ?? "—"}{student.section ? ` · Sec ${student.section}` : ""}{student.roll_no ? ` · Roll ${student.roll_no}` : ""}
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Layers size={14} style={{ color: "var(--brand)" }} />
+            {academics?.subjects?.length ?? 0} Enrolled Subjects
+          </span>
+        </div>
+      </div>
+
+      {/* Subject Performance Breakdown */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <h4 style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
+            <BarChart3 size={14} style={{ color: "var(--brand)" }} />
+            Subject Mastery
+          </h4>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{subjectsPerf.length} assessed</span>
+        </div>
+
+        {subjectsPerf.length === 0 ? (
+          <div style={{ padding: "12px", borderRadius: 8, background: "var(--bg-card)", border: "1px dashed var(--border)", textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
+            No subject grades recorded yet.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {subjectsPerf.map((p) => {
+              const subTier = getGradeTier(p.average);
+              const scorePct = p.average !== null ? Math.min(100, Math.max(0, p.average)) : 0;
+              return (
+                <div
+                  key={p.subject}
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "9px 12px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+                    <div>
+                      <strong style={{ fontSize: 12.5, color: "var(--text-primary)", fontWeight: 600 }}>{p.subject}</strong>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 6 }}>
+                        {p.papers} paper{p.papers === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)" }}>
+                        {p.average !== null ? formatPercent(p.average) : "—"}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: subTier.color,
+                          background: subTier.bg,
+                          border: `1px solid ${subTier.border}`,
+                          padding: "1px 5px",
+                          borderRadius: 999,
+                        }}
+                      >
+                        {subTier.grade}
+                      </span>
+                    </div>
+                  </div>
+                  {/* Progress bar */}
+                  <div
+                    style={{
+                      height: 5,
+                      width: "100%",
+                      background: "var(--border)",
+                      borderRadius: 999,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${scorePct}%`,
+                        background: subTier.color,
+                        borderRadius: 999,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Examinations Hub */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <h4 style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
+            <Award size={14} style={{ color: "var(--brand)" }} />
+            Examination Results
+          </h4>
+          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+            {publishedResults.length} published
+          </span>
+        </div>
+
+        {publishedResults.length === 0 ? (
+          <div style={{ padding: "12px", borderRadius: 8, background: "var(--bg-card)", border: "1px dashed var(--border)", textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
+            No examination results published.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {publishedResults.map((exam) => {
+              const status = getPaperStatus(exam.percentage);
+              return (
+                <div
+                  key={exam.examination_id}
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "9px 12px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                    <div>
+                      <strong style={{ fontSize: 12.5, color: "var(--text-primary)", display: "block" }}>
+                        {exam.name}
+                      </strong>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        {formatDate(exam.starts_on)} · {exam.papers?.length ?? 0} papers
+                      </span>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text-primary)", display: "block" }}>
+                        {exam.percentage !== null ? formatPercent(exam.percentage) : "—"}
+                      </span>
+                      <span
+                        className={`badge ${status.tone}`}
+                        style={{ fontSize: 10, padding: "1px 5px" }}
+                      >
+                        {status.text}
+                      </span>
+                    </div>
+                  </div>
+
+                  {exam.papers && exam.papers.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 4,
+                        marginTop: 7,
+                        paddingTop: 7,
+                        borderTop: "1px solid var(--border-subtle)",
+                      }}
+                    >
+                      {exam.papers.map((paper, idx) => (
+                        <span
+                          key={`${paper.subject}-${idx}`}
+                          style={{
+                            fontSize: 10.5,
+                            background: "var(--bg-raised)",
+                            border: "1px solid var(--border)",
+                            padding: "1px 5px",
+                            borderRadius: 4,
+                            color: "var(--text-secondary)",
+                          }}
+                        >
+                          <strong>{paper.subject}</strong>: {paper.percentage !== null ? `${Math.round(paper.percentage)}%` : "—"}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Button to open complete profile */}
+      {onOpenProfile && (
+        <button
+          type="button"
+          onClick={onOpenProfile}
+          className="btn-secondary"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            width: "100%",
+            padding: "9px 14px",
+            fontSize: 12.5,
+            fontWeight: 600,
+            borderRadius: 8,
+            marginTop: 4,
+          }}
+        >
+          <GraduationCap size={14} />
+          <span>Open Full Academic Scorecard</span>
+          <ExternalLink size={12} style={{ marginLeft: "auto" }} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/*
  * The section bodies. Wide mode shows them two abreast because the point of
  * widening is to stop a fourteen-section record being one long scroll.
  */
@@ -1255,15 +1549,25 @@ function DrawerSection({
   tab,
   detail,
   student,
+  onOpenProfile,
 }: {
   tab: StudentSection;
   detail: ProfilePayload;
   student: DirectoryStudent;
+  onOpenProfile?: () => void;
 }) {
   if (tab === "documents") {
     return (
       <div className="drawer-section">
         <StudentDocumentsPanel studentId={student.id} studentName={student.name} />
+      </div>
+    );
+  }
+
+  if (tab === "academics") {
+    return (
+      <div className="drawer-section">
+        <AcademicsDrawerSection detail={detail} student={student} onOpenProfile={onOpenProfile} />
       </div>
     );
   }
@@ -1292,46 +1596,6 @@ function DrawerSection({
         .join(", "),
     );
     push("Status", s.status);
-  } else if (tab === "academics") {
-    const att = detail.attendance?.summary;
-    if (att) {
-      push(
-        "Attendance",
-        att.percentage === null
-          ? "No sessions marked"
-          : `${formatPercent(att.percentage)} (${att.present} of ${att.marked_sessions} sessions)`,
-      );
-      if (att.absent > 0) {
-        push("Absences", `${att.absent} session${att.absent === 1 ? "" : "s"}`);
-      }
-    }
-
-    push("Academic average", formatPercent(student.academic_average));
-    push(
-      "Enrolled class",
-      `Grade ${student.grade ?? "Unassigned"}${student.section ? ` \u00b7 Section ${student.section}` : ""}${student.roll_no ? ` \u00b7 Roll ${student.roll_no}` : ""}`,
-    );
-
-    const publishedResults = detail.academics.results.filter((r) => r.published);
-    if (publishedResults.length > 0) {
-      publishedResults.slice(0, 3).forEach((r) => {
-        push(
-          r.name,
-          r.percentage === null ? "Marks pending" : `${formatPercent(r.percentage)} overall`,
-        );
-      });
-    } else if (!detail.academics.results.length) {
-      push("Examinations", "No examination records");
-    }
-
-    if (detail.academics.subject_performance.length > 0) {
-      detail.academics.subject_performance.slice(0, 4).forEach((p) => {
-        push(
-          `${p.subject}`,
-          p.average === null ? "No marks" : formatPercent(p.average),
-        );
-      });
-    }
   } else if (tab === "fees") {
     const f = detail.fees.summary;
     push("Total fee billed", formatMoney(f.billed));

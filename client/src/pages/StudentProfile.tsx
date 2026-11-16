@@ -734,7 +734,7 @@ function GuardiansSection({ data, role }: { data: ProfilePayload; role: string }
   );
 }
 
-interface GradeTier {
+export interface GradeTier {
   grade: string;
   label: string;
   color: string;
@@ -743,7 +743,7 @@ interface GradeTier {
   badgeClass: string;
 }
 
-function getGradeTier(percentage: number | null): GradeTier {
+export function getGradeTier(percentage: number | null): GradeTier {
   if (percentage === null || !Number.isFinite(percentage)) {
     return {
       grade: "—",
@@ -824,7 +824,7 @@ function getGradeTier(percentage: number | null): GradeTier {
   };
 }
 
-function getPaperStatus(percentage: number | null) {
+export function getPaperStatus(percentage: number | null) {
   if (percentage === null || !Number.isFinite(percentage)) {
     return { text: "Pending", tone: "neutral" };
   }
@@ -856,10 +856,6 @@ function AcademicsSection({ data }: { data: ProfilePayload }) {
     const fromSubjects = averageOfSubjects(academics.subject_performance ?? []);
     if (fromSubjects !== null) return fromSubjects;
 
-    if (typeof data.student.academic_average === "number" && data.student.academic_average > 0) {
-      return data.student.academic_average;
-    }
-
     const validExamPcts = publishedExams
       .map((e) => e.percentage)
       .filter((p): p is number => p !== null && Number.isFinite(p));
@@ -868,7 +864,7 @@ function AcademicsSection({ data }: { data: ProfilePayload }) {
     }
 
     return null;
-  }, [academics.subject_performance, data.student.academic_average, publishedExams]);
+  }, [academics.subject_performance, publishedExams]);
 
   // Latest published exam & trend delta vs previous exam
   const latestExam = publishedExams[publishedExams.length - 1] ?? publishedExams[0] ?? null;
