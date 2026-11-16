@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Activity,
   CalendarDays,
@@ -952,6 +952,9 @@ function StudentDrawer({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<StudentSection>("personal");
+  const [direction, setDirection] = useState<number>(0);
+  const reduceMotion = useReducedMotion();
+  const drawerBodyRef = useRef<HTMLDivElement>(null);
 
   /*
    * One record per open drawer, fetched when the drawer opens rather than for
@@ -965,6 +968,7 @@ function StudentDrawer({
     setFailed(false);
     setDetail(null);
     setTab("personal");
+    setDirection(0);
     fetchStudentProfile(student.id)
       .then((data) => {
         if (live) setDetail(data);
@@ -992,6 +996,20 @@ function StudentDrawer({
   const allowed = detail ? new Set(detail.sections) : new Set<string>();
   const visibleTabs = DRAWER_ACTIVE_SECTIONS.filter(
     (key) => (!detail || allowed.has(key)) && (key !== "fees" || maySeeFees),
+  );
+
+  const handleTabChange = useCallback(
+    (newTab: StudentSection) => {
+      if (newTab === tab) return;
+      const oldIdx = visibleTabs.indexOf(tab);
+      const newIdx = visibleTabs.indexOf(newTab);
+      setDirection(newIdx >= oldIdx ? 1 : -1);
+      setTab(newTab);
+      if (drawerBodyRef.current) {
+        drawerBodyRef.current.scrollTop = 0;
+      }
+    },
+    [tab, visibleTabs],
   );
 
   return (
@@ -1063,7 +1081,7 @@ function StudentDrawer({
           </div>
           <select
             value={tab}
-            onChange={(e) => setTab(e.target.value as StudentSection)}
+            onChange={(e) => handleTabChange(e.target.value as StudentSection)}
             className="segmented-mobile-native-select"
           >
             {visibleTabs.map((key) => (
@@ -1082,11 +1100,19 @@ function StudentDrawer({
             <button
               key={key}
               className={isActive ? "active" : ""}
-              onClick={() => setTab(key)}
+              onClick={() => handleTabChange(key)}
               style={{ position: "relative" }}
             >
               {isActive && (
-                <div className="tab-indicator" />
+                <motion.div
+                  layoutId="pupil-drawer-active-tab"
+                  className="tab-indicator"
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { type: "spring", stiffness: 450, damping: 32 }
+                  }
+                />
               )}
               <span style={{ position: "relative", zIndex: 1 }}>{DRAWER_TABS[key]}</span>
             </button>
@@ -1094,37 +1120,67 @@ function StudentDrawer({
         })}
       </div>
 
-      <div className="pupil-drawer-body">
-        {tab === "documents" ? (
+      <div
+        ref={drawerBodyRef}
+        className="pupil-drawer-body"
+      >
+        {loading && tab !== "documents" ? (
           <div className="drawer-section">
-            <StudentDocumentsPanel studentId={student.id} studentName={student.name} />
+            <div className="skeleton-line" style={{ width: "70%" }} />
+            <div className="skeleton-line" style={{ width: "90%" }} />
+            <div className="skeleton-line" style={{ width: "60%" }} />
+          </div>
+        ) : !loading && failed && tab !== "documents" ? (
+          <div className="empty-state">
+            <p className="panel-title">Record unavailable</p>
+            <p className="panel-subtitle">
+              The full record could not be loaded. The summary above is from the roll call and is still accurate.
+            </p>
+            <button className="secondary-button compact" onClick={onOpenProfile}>
+              Open full profile page
+            </button>
           </div>
         ) : (
-          <>
-            {loading && (
-              <div className="drawer-section">
-                <div className="skeleton-line" style={{ width: "70%" }} />
-                <div className="skeleton-line" style={{ width: "90%" }} />
-                <div className="skeleton-line" style={{ width: "60%" }} />
-              </div>
-            )}
-
-            {!loading && failed && (
-              <div className="empty-state">
-                <p className="panel-title">Record unavailable</p>
-                <p className="panel-subtitle">
-                  The full record could not be loaded. The summary above is from the roll call and is still accurate.
-                </p>
-                <button className="secondary-button compact" onClick={onOpenProfile}>
-                  Open full profile page
-                </button>
-              </div>
-            )}
-
-            {!loading && !failed && detail && (
-              <DrawerSection tab={tab} detail={detail} student={student} />
-            )}
-          </>
+          <AnimatePresence mode="wait" initial={false} custom={direction}>
+            <motion.div
+              key={tab}
+              custom={direction}
+              variants={{
+                enter: (dir: number) => ({
+                  x: reduceMotion ? 0 : dir > 0 ? 44 : dir < 0 ? -44 : 0,
+                  opacity: 0,
+                }),
+                center: {
+                  x: 0,
+                  opacity: 1,
+                  transition: {
+                    x: { type: "spring", stiffness: 400, damping: 30 },
+                    opacity: { duration: 0.16, ease: "easeOut" },
+                  },
+                },
+                exit: (dir: number) => ({
+                  x: reduceMotion ? 0 : dir > 0 ? -44 : dir < 0 ? 44 : 0,
+                  opacity: 0,
+                  transition: {
+                    x: { duration: 0.1, ease: "easeIn" },
+                    opacity: { duration: 0.08, ease: "easeIn" },
+                  },
+                }),
+              }}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              style={{ width: "100%" }}
+            >
+              {tab === "documents" ? (
+                <div className="drawer-section">
+                  <StudentDocumentsPanel studentId={student.id} studentName={student.name} />
+                </div>
+              ) : (
+                detail && <DrawerSection tab={tab} detail={detail} student={student} />
+              )}
+            </motion.div>
+          </AnimatePresence>
         )}
       </div>
 

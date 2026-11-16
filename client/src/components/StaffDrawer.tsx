@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { avatarTones } from "@/lib/school-data";
 import {
   Activity,
@@ -119,6 +119,9 @@ export function StaffDrawer({
   const [failed, setFailed] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [tab, setTab] = useState<StaffSection>("personal");
+  const [direction, setDirection] = useState<number>(0);
+  const reduceMotion = useReducedMotion();
+  const drawerBodyRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -132,6 +135,20 @@ export function StaffDrawer({
     "classrooms",
     "subjects",
   ]);
+
+  const handleTabChange = useCallback(
+    (newTab: StaffSection) => {
+      if (newTab === tab) return;
+      const oldIdx = ALL_STAFF_SECTIONS.indexOf(tab);
+      const newIdx = ALL_STAFF_SECTIONS.indexOf(newTab);
+      setDirection(newIdx >= oldIdx ? 1 : -1);
+      setTab(newTab);
+      if (drawerBodyRef.current) {
+        drawerBodyRef.current.scrollTop = 0;
+      }
+    },
+    [tab],
+  );
 
   /*
    * Escape and the scroll lock live in `DrawerBackdrop`, as they do for the
@@ -150,6 +167,7 @@ export function StaffDrawer({
       setFailed(null);
       setDetail(null);
       setTab("personal");
+      setDirection(0);
     }
     fetchStaffProfile(staff.id, controller.signal)
       .then((data) => {
@@ -348,7 +366,7 @@ export function StaffDrawer({
             </div>
             <select
               value={tab}
-              onChange={(e) => setTab(e.target.value as StaffSection)}
+              onChange={(e) => handleTabChange(e.target.value as StaffSection)}
               className="segmented-mobile-native-select"
             >
               {ALL_STAFF_SECTIONS.map((key) => {
@@ -373,14 +391,22 @@ export function StaffDrawer({
               <button
                 key={key}
                 className={`${isActive ? "active" : ""}${locked ? " locked" : ""}`.trim()}
-                onClick={() => setTab(key)}
+                onClick={() => handleTabChange(key)}
                 disabled={locked}
                 title={locked ? withheldReason.get(key) ?? "Your role cannot read this section." : undefined}
                 aria-current={isActive ? "page" : undefined}
                 style={{ position: "relative" }}
               >
                 {isActive && (
-                  <div className="tab-indicator" />
+                  <motion.div
+                    layoutId="staff-drawer-active-tab"
+                    className="tab-indicator"
+                    transition={
+                      reduceMotion
+                        ? { duration: 0 }
+                        : { type: "spring", stiffness: 450, damping: 32 }
+                    }
+                  />
                 )}
                 <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Icon size={14} aria-hidden="true" />
@@ -392,7 +418,7 @@ export function StaffDrawer({
           })}
         </div>
 
-        <div className="pupil-drawer-body">
+        <div ref={drawerBodyRef} className="pupil-drawer-body">
           {loading && (
             <div className="drawer-section">
               <div className="skeleton-line" style={{ width: "70%" }} />
@@ -418,22 +444,55 @@ export function StaffDrawer({
           )}
 
           {!loading && !failed && detail && (
-            allowed?.has(tab) ? (
-              <StaffSectionBody
-                tab={tab}
-                detail={detail}
-                taughtClassCount={taughtClassCount}
-                onOpenAccountLogins={onOpenAccountLogins}
-              />
-            ) : (
-              <div className="empty-state">
-                <Lock size={20} />
-                <p className="panel-title">This section is locked</p>
-                <p className="panel-subtitle">
-                  {withheldReason.get(tab) ?? "Your role cannot read this section."}
-                </p>
-              </div>
-            )
+            <AnimatePresence mode="wait" initial={false} custom={direction}>
+              <motion.div
+                key={tab}
+                custom={direction}
+                variants={{
+                  enter: (dir: number) => ({
+                    x: reduceMotion ? 0 : dir > 0 ? 44 : dir < 0 ? -44 : 0,
+                    opacity: 0,
+                  }),
+                  center: {
+                    x: 0,
+                    opacity: 1,
+                    transition: {
+                      x: { type: "spring", stiffness: 400, damping: 30 },
+                      opacity: { duration: 0.16, ease: "easeOut" },
+                    },
+                  },
+                  exit: (dir: number) => ({
+                    x: reduceMotion ? 0 : dir > 0 ? -44 : dir < 0 ? 44 : 0,
+                    opacity: 0,
+                    transition: {
+                      x: { duration: 0.1, ease: "easeIn" },
+                      opacity: { duration: 0.08, ease: "easeIn" },
+                    },
+                  }),
+                }}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                style={{ width: "100%" }}
+              >
+                {allowed?.has(tab) ? (
+                  <StaffSectionBody
+                    tab={tab}
+                    detail={detail}
+                    taughtClassCount={taughtClassCount}
+                    onOpenAccountLogins={onOpenAccountLogins}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    <Lock size={20} />
+                    <p className="panel-title">This section is locked</p>
+                    <p className="panel-subtitle">
+                      {withheldReason.get(tab) ?? "Your role cannot read this section."}
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           )}
         </div>
 

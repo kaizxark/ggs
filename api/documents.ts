@@ -323,7 +323,7 @@ export default async function handler(req: Request): Promise<Response> {
       .filter((id) => STUDENT_ID_PATTERN.test(id))
       .slice(0, 60);
 
-    const REQUIRED = ["marks-card", "hall-ticket", "birth-certificate"];
+    const REQUIRED = ["aadhaar", "birth-certificate"];
 
     const entries = await Promise.all(
       ids.map(async (id) => {
@@ -363,29 +363,42 @@ export default async function handler(req: Request): Promise<Response> {
     if (!STUDENT_ID_PATTERN.test(studentId)) {
       return fail("That student could not be found.", 400, "bad_student");
     }
-    const res = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`,
-      {
+    const [storageRes, metaRows] = await Promise.all([
+      fetch(`${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`, {
         method: "POST",
         headers: { ...serviceHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ prefix: `${studentId}/`, limit: 200 }),
-      }
-    );
-    if (res.status === 404) return Response.json({ documents: [] });
-    if (!res.ok) return fail("Could not read this student's documents.", 502, "storage_error");
+      }),
+      restJson<Json[]>(
+        `student_documents?student_id=eq.${studentId}&is_current=eq.true`
+      ).catch(() => [] as Json[]),
+    ]);
+    if (storageRes.status === 404) return Response.json({ documents: [] });
+    if (!storageRes.ok) return fail("Could not read this student's documents.", 502, "storage_error");
 
-    const objects = (await res.json()) as {
+    const objects = (await storageRes.json()) as {
       name?: string;
       updated_at?: string;
       created_at?: string;
       metadata?: { size?: number; mimetype?: string; contentLength?: number };
     }[];
 
+    const metaByPath = new Map<string, Json>();
+    const metaByName = new Map<string, Json>();
+    for (const row of Array.isArray(metaRows) ? metaRows : []) {
+      if (row.file_path) metaByPath.set(String(row.file_path), row);
+      if (row.file_name) metaByName.set(String(row.file_name), row);
+    }
+
     const documents = (Array.isArray(objects) ? objects : [])
       .map((object) => {
         const parsed = parseKey(String(object.name ?? ""));
+        const key = `${studentId}/${object.name}`;
+        const meta = metaByPath.get(key) || metaByName.get(parsed.fileName);
         return {
+          id: meta?.id ? String(meta.id) : undefined,
           docType: parsed.docType,
+          title: meta?.title ? String(meta.title) : undefined,
           fileName: parsed.fileName,
           // The path timestamp is the issue date; storage's own is only a
           // fallback for objects uploaded before this convention existed.
@@ -395,7 +408,14 @@ export default async function handler(req: Request): Promise<Response> {
             object.metadata?.size ?? object.metadata?.contentLength ?? 0
           ),
           contentType: String(object.metadata?.mimetype ?? ""),
-          key: `${studentId}/${object.name}`,
+          key,
+          verification_status: meta?.verification_status
+            ? String(meta.verification_status)
+            : undefined,
+          rejection_reason: meta?.rejection_reason
+            ? String(meta.rejection_reason)
+            : undefined,
+          remarks: meta?.remarks ? String(meta.remarks) : undefined,
         };
       })
       .sort((a, b) => String(b.issuedAt ?? "").localeCompare(String(a.issuedAt ?? "")));
@@ -417,6 +437,7 @@ export default async function handler(req: Request): Promise<Response> {
     const docType = String(body.docType ?? "");
     const fileName = String(body.fileName ?? "");
     const contentType = String(body.contentType ?? "");
+    const customTitle = String(body.title ?? "").trim();
 
     if (!STUDENT_ID_PATTERN.test(studentId)) {
       return fail("That student could not be found.", 400, "bad_student");
@@ -500,6 +521,7 @@ export default async function handler(req: Request): Promise<Response> {
     const category = categoryFor(docType);
     const orgId = await organisationOf(studentId);
     let metadataId: string | null = null;
+    const documentTitle = customTitle || `${docType.replace(/-/g, " ")} — ${safeFileName(fileName)}`;
 
     if (orgId) {
       const current = await restJson<Json[]>(
@@ -527,7 +549,7 @@ export default async function handler(req: Request): Promise<Response> {
           organisation_id: orgId,
           student_id: studentId,
           category,
-          title: `${docType.replace(/-/g, " ")} — ${safeFileName(fileName)}`,
+          title: documentTitle,
           file_path: objectPath,
           file_name: safeFileName(fileName),
           content_type: contentType,
@@ -549,6 +571,7 @@ export default async function handler(req: Request): Promise<Response> {
       document: {
         id: metadataId,
         docType,
+        title: documentTitle,
         category,
         fileName: safeFileName(fileName),
         issuedAt: stamp(),

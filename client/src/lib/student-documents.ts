@@ -25,67 +25,35 @@ export interface DocType {
 export const DOC_TYPES: DocType[] = [
   {
     id: "aadhaar",
-    label: "Aadhaar card",
+    label: "Aadhaar Card",
     short: "Aadhaar",
-    required: false,
-    hint: "Identity document for the pupil. Store the masked copy where possible.",
+    required: true,
+    hint: "Government-issued 12-digit Aadhaar identity card for the student.",
     icon: "id-card",
   },
   {
-    id: "marks-card",
-    label: "Marks card",
-    short: "Marks card",
-    required: true,
-    hint: "Termly or annual report card, as issued to the family.",
-    icon: "award",
-  },
-  {
-    id: "hall-ticket",
-    label: "Hall ticket",
-    short: "Hall ticket",
-    required: true,
-    hint: "Exam hall ticket for the sitting concerned.",
-    icon: "ticket",
-  },
-  {
     id: "birth-certificate",
-    label: "Birth certificate",
-    short: "Birth cert.",
+    label: "Birth Certificate",
+    short: "Birth Cert.",
     required: true,
-    hint: "Also the source of the date of birth used for portal passwords.",
+    hint: "Official birth certificate verifying date of birth and parentage.",
     icon: "baby",
   },
   {
     id: "caste-income",
-    label: "Caste / income / domicile",
-    short: "Caste / income",
+    label: "Caste / Income Certificate",
+    short: "Caste / Income",
     required: false,
-    hint: "Needed for admissions, scholarships and fee concessions.",
+    hint: "Caste, income, or domicile certificate for category, quota & fee concessions.",
     icon: "file-text",
   },
   {
     id: "transfer-certificate",
-    label: "Transfer certificate",
-    short: "Transfer cert.",
+    label: "Transfer Certificate",
+    short: "Transfer Cert.",
     required: false,
-    hint: "Issued when a pupil leaves. Usually the last document added.",
+    hint: "Transfer Certificate (TC) from previous school or issued on school leaving.",
     icon: "log-out",
-  },
-  {
-    id: "immunisation",
-    label: "Immunisation / medical",
-    short: "Immunisation",
-    required: false,
-    hint: "Vaccination record, plus any medical notes the school holds.",
-    icon: "syringe",
-  },
-  {
-    id: "passport",
-    label: "Passport / visa",
-    short: "Passport",
-    required: false,
-    hint: "For pupils who travel or hold foreign citizenship.",
-    icon: "globe",
   },
 ];
 
@@ -95,8 +63,40 @@ export function docTypeById(id: string): DocType | undefined {
   return DOC_TYPES.find((type) => type.id === id);
 }
 
+export function documentDisplayTitle(doc: StudentDocument): string {
+  if (doc.title && doc.title.trim()) {
+    const t = doc.title.trim();
+    if (!t.toLowerCase().startsWith("other — ") && !t.toLowerCase().startsWith("other - ")) {
+      return t;
+    }
+  }
+  const defaultType = docTypeById(doc.docType);
+  if (defaultType) return defaultType.label;
+  if (doc.docType.startsWith("other-") || doc.docType.startsWith("other_")) {
+    const raw = doc.docType.replace(/^other[-_]/, "");
+    return raw
+      .split(/[-_]+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+  if (doc.docType === "marks-card") return "Marks Card";
+  if (doc.docType === "hall-ticket") return "Hall Ticket";
+  if (doc.docType === "immunisation") return "Immunisation / Medical";
+  if (doc.docType === "passport") return "Passport / Visa";
+  if (doc.docType === "other") {
+    const clean = doc.fileName.replace(/\.[^/.]+$/, "").replace(/[-_]+/g, " ");
+    return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "Other Document";
+  }
+  return doc.docType
+    .split(/[-_]+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export interface StudentDocument {
+  id?: string;
   docType: string;
+  title?: string;
   fileName: string;
   issuedAt: string | null;
   updatedAt: string | null;
@@ -104,6 +104,9 @@ export interface StudentDocument {
   contentType: string;
   /** Storage key relative to the bucket, e.g. "<studentId>/aadhaar__…__a.pdf". */
   key: string;
+  verification_status?: string;
+  rejection_reason?: string;
+  remarks?: string;
 }
 
 export function formatBytes(bytes: number): string {
@@ -209,7 +212,8 @@ export function fileToBase64(file: File): Promise<string> {
 export async function uploadStudentDocument(
   studentId: string,
   docType: string,
-  file: File
+  file: File,
+  title?: string
 ): Promise<StudentDocument> {
   const data = await fileToBase64(file);
   const res = await fetch("/api/documents", {
@@ -219,6 +223,7 @@ export async function uploadStudentDocument(
       studentId,
       docType,
       fileName: file.name,
+      title: title?.trim() || undefined,
       contentType: file.type,
       data,
     }),

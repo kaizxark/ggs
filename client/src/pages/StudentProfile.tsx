@@ -1,17 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
   Archive,
   ArrowLeft,
+  Award,
+  BarChart3,
   BookOpen,
   CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheck,
   Download,
   FileText,
+  GraduationCap,
+  Layers,
   Lock,
   Pencil,
   Printer,
   ShieldAlert,
+  Sparkles,
+  Star,
+  Target,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   UserRound,
   Users,
   Wallet,
@@ -720,169 +734,841 @@ function GuardiansSection({ data, role }: { data: ProfilePayload; role: string }
   );
 }
 
+interface GradeTier {
+  grade: string;
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+  badgeClass: string;
+}
+
+function getGradeTier(percentage: number | null): GradeTier {
+  if (percentage === null || !Number.isFinite(percentage)) {
+    return {
+      grade: "—",
+      label: "Awaiting Assessment",
+      color: "var(--text-muted)",
+      bg: "var(--bg-raised)",
+      border: "var(--border-subtle)",
+      badgeClass: "neutral",
+    };
+  }
+  if (percentage >= 90) {
+    return {
+      grade: "A1",
+      label: "High Distinction",
+      color: "#10b981",
+      bg: "rgba(16, 185, 129, 0.12)",
+      border: "rgba(16, 185, 129, 0.28)",
+      badgeClass: "success",
+    };
+  }
+  if (percentage >= 80) {
+    return {
+      grade: "A2",
+      label: "Distinction",
+      color: "#0ea5e9",
+      bg: "rgba(14, 165, 233, 0.12)",
+      border: "rgba(14, 165, 233, 0.28)",
+      badgeClass: "brand",
+    };
+  }
+  if (percentage >= 70) {
+    return {
+      grade: "B1",
+      label: "First Class",
+      color: "#6366f1",
+      bg: "rgba(99, 102, 241, 0.12)",
+      border: "rgba(99, 102, 241, 0.28)",
+      badgeClass: "brand",
+    };
+  }
+  if (percentage >= 60) {
+    return {
+      grade: "B2",
+      label: "First Class",
+      color: "#8b5cf6",
+      bg: "rgba(139, 92, 246, 0.12)",
+      border: "rgba(139, 92, 246, 0.28)",
+      badgeClass: "neutral",
+    };
+  }
+  if (percentage >= 50) {
+    return {
+      grade: "C1",
+      label: "Second Class",
+      color: "#f59e0b",
+      bg: "rgba(245, 158, 11, 0.12)",
+      border: "rgba(245, 158, 11, 0.28)",
+      badgeClass: "warning",
+    };
+  }
+  if (percentage >= 40) {
+    return {
+      grade: "C2",
+      label: "Passing Grade",
+      color: "#ea580c",
+      bg: "rgba(234, 88, 12, 0.12)",
+      border: "rgba(234, 88, 12, 0.28)",
+      badgeClass: "warning",
+    };
+  }
+  return {
+    grade: "D/E",
+    label: "Remedial Focus Required",
+    color: "#ef4444",
+    bg: "rgba(239, 68, 68, 0.12)",
+    border: "rgba(239, 68, 68, 0.28)",
+    badgeClass: "danger",
+  };
+}
+
+function getPaperStatus(percentage: number | null) {
+  if (percentage === null || !Number.isFinite(percentage)) {
+    return { text: "Pending", tone: "neutral" };
+  }
+  if (percentage >= 85) {
+    return { text: "Distinction", tone: "success" };
+  }
+  if (percentage >= 40) {
+    return { text: "Passed", tone: "neutral" };
+  }
+  return { text: "Needs Retest", tone: "danger" };
+}
+
 function AcademicsSection({ data }: { data: ProfilePayload }) {
   const academics = data.academics;
   if (!academics) {
     return <Withheld />;
   }
 
-  const best = academics.subject_performance[0];
-  const weakest = academics.subject_performance[academics.subject_performance.length - 1];
+  const [selectedExamId, setSelectedExamId] = useState<string | "all">("all");
+  const [subjectSort, setSubjectSort] = useState<"average_desc" | "name_asc">("average_desc");
+
+  // Published examination records
+  const publishedExams = useMemo(() => {
+    return (academics.results ?? []).filter((r) => r.published);
+  }, [academics.results]);
+
+  // Overall cumulative academic average
+  const overallAverage = useMemo(() => {
+    const fromSubjects = averageOfSubjects(academics.subject_performance ?? []);
+    if (fromSubjects !== null) return fromSubjects;
+
+    if (typeof data.student.academic_average === "number" && data.student.academic_average > 0) {
+      return data.student.academic_average;
+    }
+
+    const validExamPcts = publishedExams
+      .map((e) => e.percentage)
+      .filter((p): p is number => p !== null && Number.isFinite(p));
+    if (validExamPcts.length > 0) {
+      return validExamPcts.reduce((sum, p) => sum + p, 0) / validExamPcts.length;
+    }
+
+    return null;
+  }, [academics.subject_performance, data.student.academic_average, publishedExams]);
+
+  // Latest published exam & trend delta vs previous exam
+  const latestExam = publishedExams[publishedExams.length - 1] ?? publishedExams[0] ?? null;
+  const previousExam = publishedExams.length >= 2 ? publishedExams[publishedExams.length - 2] : null;
+  const examDelta =
+    latestExam?.percentage != null && previousExam?.percentage != null
+      ? Math.round((latestExam.percentage - previousExam.percentage) * 10) / 10
+      : null;
+
+  // Sorted subject performance
+  const sortedSubjects = useMemo(() => {
+    const list = [...(academics.subject_performance ?? [])];
+    if (subjectSort === "average_desc") {
+      return list.sort((a, b) => (b.average ?? 0) - (a.average ?? 0));
+    }
+    return list.sort((a, b) => a.subject.localeCompare(b.subject));
+  }, [academics.subject_performance, subjectSort]);
+
+  // Best & weakest subjects (with valid scores)
+  const scoredSubjects = sortedSubjects.filter((s) => s.average !== null && Number.isFinite(s.average));
+  const best = scoredSubjects[0] ?? null;
+  const weakest = scoredSubjects.length > 1 ? scoredSubjects[scoredSubjects.length - 1] : null;
+
+  // Passing vs needing support count
+  const passingSubjectsCount = scoredSubjects.filter((s) => (s.average ?? 0) >= 40).length;
+  const needsSupportCount = scoredSubjects.filter((s) => (s.average ?? 0) < 50).length;
+
+  // Overall grade tier
+  const overallTier = getGradeTier(overallAverage);
+
+  // Filtered exams list
+  const filteredExams = useMemo(() => {
+    if (selectedExamId === "all") return academics.results ?? [];
+    return (academics.results ?? []).filter((e) => e.examination_id === selectedExamId);
+  }, [academics.results, selectedExamId]);
 
   return (
     <div className="section-stack">
-      <div className="two-column">
-        <div className="panel">
-          <h2 className="panel-title">Subject performance</h2>
-          {academics.subject_performance.length === 0 ? (
-            <p className="panel-subtitle">No published results yet.</p>
-          ) : (
-            <>
-              {best && (
-                <p className="panel-subtitle">
-                  Strongest: <strong>{best.subject}</strong> at {formatPercent(best.average)}.{" "}
-                  {weakest && weakest.subject !== best.subject && (
-                    <>
-                      Needs support in <strong>{weakest.subject}</strong> at {formatPercent(weakest.average)}.
-                    </>
-                  )}
-                </p>
-              )}
-              <SubjectChart subjects={academics.subject_performance} />
-            </>
-          )}
-        </div>
-
-        <div className="panel">
-          <h2 className="panel-title">Subjects and teachers</h2>
-          {academics.subjects.length === 0 ? (
-            <p className="panel-subtitle">No subject assignments recorded for this class.</p>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Subject</th>
-                  <th>Code</th>
-                  <th>Teacher</th>
-                </tr>
-              </thead>
-              <tbody>
-                {academics.subjects.map((s) => (
-                  <tr key={s.id}>
-                    <td className="font-medium">{s.subject}</td>
-                    <td className="muted-cell">{s.code ?? "—"}</td>
-                    <td>{s.teacher ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+      {/* 1. Academic KPI Metrics Row */}
+      <div className="metric-row">
+        <Metric
+          label="Cumulative Average"
+          value={overallAverage !== null ? formatPercent(overallAverage) : "No data"}
+          note={overallAverage !== null ? `Grade ${overallTier.grade} · ${overallTier.label.split(" · ")[0]}` : "Awaiting evaluations"}
+          tone={overallAverage !== null && overallAverage >= 75 ? "good" : overallAverage !== null && overallAverage >= 50 ? "neutral" : overallAverage !== null ? "warning" : undefined}
+        />
+        <Metric
+          label="Latest Examination"
+          value={latestExam && latestExam.percentage !== null ? formatPercent(latestExam.percentage) : "Pending"}
+          note={
+            latestExam
+              ? `${latestExam.name}${examDelta !== null ? ` (${examDelta >= 0 ? `+${examDelta}%` : `${examDelta}%`} vs prev)` : ""}`
+              : "Results in review"
+          }
+          tone={latestExam && (latestExam.percentage ?? 0) >= 75 ? "good" : undefined}
+        />
+        <Metric
+          label="Strongest Subject"
+          value={best ? best.subject : "—"}
+          note={best && best.average !== null ? `${formatPercent(best.average)} historical average` : "No scored subjects"}
+          tone="good"
+        />
+        <Metric
+          label="Curriculum Standing"
+          value={`${academics.subjects.length} Subjects`}
+          note={
+            scoredSubjects.length > 0
+              ? `${passingSubjectsCount}/${scoredSubjects.length} passing (≥40%)`
+              : "Registered curriculum"
+          }
+          tone={needsSupportCount > 0 ? "warning" : "good"}
+        />
       </div>
 
-      <div className="panel">
-        <h2 className="panel-title">Examination results</h2>
-        {academics.results.length === 0 ? (
-          <p className="panel-subtitle">No examination results recorded.</p>
-        ) : (
-          academics.results.map((exam) => (
-            <div key={exam.examination_id} className="subsection">
-              <div className="panel-header">
-                <h3 className="subsection-title">
-                  {exam.name}
-                  {exam.published ? null : <span className="chip chip-muted">Not published</span>}
-                </h3>
-                <span className={scoreClass(exam.percentage)}>{formatPercent(exam.percentage)}</span>
+      {/* 2. Key Academic Insights Callout Banner */}
+      {(best || needsSupportCount > 0) && (
+        <div
+          className="panel"
+          style={{
+            padding: "16px 20px",
+            background: "var(--bg-raised)",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: "14px",
+          }}
+        >
+          {best && best.average !== null && (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "10px",
+                  background: "rgba(16, 185, 129, 0.12)",
+                  color: "var(--success)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Award size={18} />
               </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-primary)" }}>
+                    Key Strength: {best.subject}
+                  </span>
+                  <span className="status-pill success" style={{ fontSize: "10.5px", padding: "1px 6px" }}>
+                    {formatPercent(best.average)}
+                  </span>
+                </div>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "3px 0 0" }}>
+                  Demonstrates strong conceptual grasp and consistent marks across {best.papers} examination paper{best.papers === 1 ? "" : "s"}.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {weakest && weakest.subject !== best?.subject && (weakest.average ?? 0) < 65 && (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "10px",
+                  background: "rgba(245, 158, 11, 0.12)",
+                  color: "var(--warning)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Target size={18} />
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-primary)" }}>
+                    Growth Focus: {weakest.subject}
+                  </span>
+                  <span className="status-pill warning" style={{ fontSize: "10.5px", padding: "1px 6px" }}>
+                    {formatPercent(weakest.average)}
+                  </span>
+                </div>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "3px 0 0" }}>
+                  Targeted review and teacher guidance recommended before upcoming term assessments.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Two-Column: Subject Mastery Breakdown & Curriculum Allocation */}
+      <div className="two-column">
+        {/* Left: Subject Mastery Breakdown */}
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Subject Mastery & Benchmarks</h2>
+              <p className="panel-subtitle">
+                Longitudinal averages across all scored examination papers.
+              </p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <button
+                type="button"
+                className={`secondary-button compact ${subjectSort === "average_desc" ? "active" : ""}`}
+                style={{ fontSize: "11px", padding: "3px 8px" }}
+                onClick={() => setSubjectSort("average_desc")}
+                title="Sort by highest score"
+              >
+                Highest
+              </button>
+              <button
+                type="button"
+                className={`secondary-button compact ${subjectSort === "name_asc" ? "active" : ""}`}
+                style={{ fontSize: "11px", padding: "3px 8px" }}
+                onClick={() => setSubjectSort("name_asc")}
+                title="Sort alphabetically"
+              >
+                A–Z
+              </button>
+            </div>
+          </div>
+
+          {sortedSubjects.length === 0 ? (
+            <div className="empty-state">
+              <BookOpen size={24} style={{ color: "var(--text-muted)", margin: "0 auto 8px" }} />
+              <p className="panel-subtitle">No published examination results yet for this student.</p>
+            </div>
+          ) : (
+            <div style={{ padding: "8px 20px 20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+              {sortedSubjects.map((s) => {
+                const pct = Math.max(0, Math.min(100, Number(s.average ?? 0)));
+                const tier = getGradeTier(s.average);
+                const teacherMatch = academics.subjects.find(
+                  (sub) => sub.subject.toLowerCase() === s.subject.toLowerCase()
+                );
+
+                return (
+                  <div key={s.subject} style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
+                          {s.subject}
+                        </span>
+                        {teacherMatch?.code && (
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontFamily: "monospace",
+                              padding: "1px 5px",
+                              borderRadius: "4px",
+                              background: "var(--bg-raised)",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {teacherMatch.code}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span
+                          className={`status-pill ${tier.badgeClass}`}
+                          style={{ fontSize: "11px", padding: "1px 7px", fontWeight: 700 }}
+                        >
+                          {tier.grade}
+                        </span>
+                        <span style={{ fontSize: "13.5px", fontWeight: 700, color: tier.color, minWidth: "48px", textAlign: "right" }}>
+                          {formatPercent(s.average)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      className="progress-bar"
+                      style={{
+                        height: "7px",
+                        borderRadius: "999px",
+                        background: "var(--bg-raised)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "block",
+                          height: "100%",
+                          width: `${pct}%`,
+                          background: tier.color,
+                          borderRadius: "999px",
+                          transition: "width 0.4s ease",
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "11.5px", color: "var(--text-muted)" }}>
+                      <span>{teacherMatch?.teacher ? `Faculty: ${teacherMatch.teacher}` : `${s.papers} paper(s) assessed`}</span>
+                      <span>{tier.label.split(" · ")[0]}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Enrolled Curriculum & Faculty Allocation */}
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Curriculum & Faculty Allocation</h2>
+              <p className="panel-subtitle">
+                Registered courses and subject teachers for Grade {data.class.grade ?? "—"} {data.class.section ? `· Sec ${data.class.section}` : ""}.
+              </p>
+            </div>
+            <span className="count-badge">
+              {academics.subjects.length} Courses
+            </span>
+          </div>
+
+          {academics.subjects.length === 0 ? (
+            <div className="empty-state">
+              <GraduationCap size={24} style={{ color: "var(--text-muted)", margin: "0 auto 8px" }} />
+              <p className="panel-subtitle">No subject assignments recorded for this class.</p>
+            </div>
+          ) : (
+            <div className="table-scroll">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Subject</th>
-                    <th>Marks</th>
-                    <th>Out of</th>
-                    <th>%</th>
-                    <th>Grade</th>
+                    <th>Code</th>
+                    <th>Assigned Faculty</th>
+                    <th style={{ textAlign: "right" }}>Standing</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {exam.papers.map((p) => (
-                    <tr key={p.subject}>
-                      <td>{p.subject}</td>
-                      <td>{p.marks}</td>
-                      <td className="muted-cell">{p.max_marks}</td>
-                      <td>{formatPercent(p.percentage)}</td>
-                      <td>{p.grade ?? "—"}</td>
-                    </tr>
-                  ))}
+                  {academics.subjects.map((s) => {
+                    const perf = academics.subject_performance.find(
+                      (p) => p.subject.toLowerCase() === s.subject.toLowerCase()
+                    );
+                    const tier = getGradeTier(perf?.average ?? null);
+
+                    return (
+                      <tr key={s.id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span
+                              style={{
+                                width: "28px",
+                                height: "28px",
+                                borderRadius: "7px",
+                                background: "var(--bg-raised)",
+                                color: "var(--brand)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {s.subject.slice(0, 2).toUpperCase()}
+                            </span>
+                            <span className="font-medium text-[var(--text-primary)]">
+                              {s.subject}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="muted-cell" style={{ fontFamily: "monospace", fontSize: "11.5px" }}>
+                          {s.code ?? "—"}
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span className="avatar" style={{ width: "22px", height: "22px", fontSize: "10px" }}>
+                              {initialsFor(s.teacher ?? "Teacher")}
+                            </span>
+                            <span style={{ fontSize: "12.5px" }}>
+                              {s.teacher ?? "Unassigned"}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          {perf?.average !== null && perf?.average !== undefined ? (
+                            <span className={`status-pill ${tier.badgeClass}`} style={{ fontSize: "11px", padding: "2px 7px" }}>
+                              {tier.grade} ({formatPercent(perf.average)})
+                            </span>
+                          ) : (
+                            <span className="muted-cell" style={{ fontSize: "11.5px" }}>Pending</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          ))
+          )}
+        </div>
+      </div>
+
+      {/* 4. Full Examination Results Hub */}
+      <div className="panel">
+        <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <h2 className="panel-title">Examination Results & Performance Ledgers</h2>
+            <p className="panel-subtitle">
+              Term-wise scorecards, marks obtained, percentage, and letter grades.
+            </p>
+          </div>
+
+          {academics.results.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={`secondary-button compact ${selectedExamId === "all" ? "active" : ""}`}
+                style={{ fontSize: "12px" }}
+                onClick={() => setSelectedExamId("all")}
+              >
+                All Terms ({academics.results.length})
+              </button>
+              {academics.results.map((e) => (
+                <button
+                  key={e.examination_id}
+                  type="button"
+                  className={`secondary-button compact ${selectedExamId === e.examination_id ? "active" : ""}`}
+                  style={{ fontSize: "12px" }}
+                  onClick={() => setSelectedExamId(e.examination_id)}
+                >
+                  {e.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {academics.results.length === 0 ? (
+          <div className="empty-state" style={{ padding: "40px 20px" }}>
+            <GraduationCap size={32} style={{ color: "var(--text-muted)", margin: "0 auto 10px" }} />
+            <p className="panel-title" style={{ fontSize: "15px", margin: 0 }}>No Examination Results Recorded</p>
+            <p className="panel-subtitle" style={{ maxWidth: "440px", margin: "6px auto 0" }}>
+              Examination results and term report cards will appear here once examination evaluations are completed and published.
+            </p>
+          </div>
+        ) : (
+          <div style={{ padding: "16px 20px 24px", display: "flex", flexDirection: "column", gap: "24px" }}>
+            {filteredExams.map((exam) => {
+              const tier = getGradeTier(exam.percentage);
+              const hasPapers = (exam.papers ?? []).length > 0;
+              const passingPapers = (exam.papers ?? []).filter((p) => (p.percentage ?? 0) >= 40).length;
+
+              return (
+                <div
+                  key={exam.examination_id}
+                  style={{
+                    borderRadius: "12px",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-card)",
+                    overflow: "hidden",
+                    boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
+                  }}
+                >
+                  {/* Exam Header */}
+                  <div
+                    style={{
+                      padding: "16px 20px",
+                      background: "var(--bg-raised)",
+                      borderBottom: "1px solid var(--border)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: "12px",
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <h3 style={{ fontSize: "16px", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+                          {exam.name}
+                        </h3>
+                        {exam.published ? (
+                          <span className="status-pill success" style={{ fontSize: "11px", padding: "2px 7px" }}>
+                            <CheckCircle2 size={11} /> Published
+                          </span>
+                        ) : (
+                          <span className="status-pill warning" style={{ fontSize: "11px", padding: "2px 7px" }}>
+                            <AlertCircle size={11} /> Marks in Review
+                          </span>
+                        )}
+                        {exam.starts_on && (
+                          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                            · {formatDate(exam.starts_on)}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "4px 0 0" }}>
+                        {hasPapers
+                          ? `${exam.papers.length} Papers evaluated · ${passingPapers} Passed`
+                          : "No evaluated papers in this term"}
+                      </p>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: "6px", justifyContent: "flex-end" }}>
+                          <span style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Aggregate:</span>
+                          <strong style={{ fontSize: "15px", color: "var(--text-primary)" }}>
+                            {exam.total_marks} / {exam.max_marks}
+                          </strong>
+                        </div>
+                        <span style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>
+                          Status: {tier.label.split(" · ")[0]}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: "10px",
+                          background: tier.bg,
+                          border: `1px solid ${tier.border}`,
+                          textAlign: "center",
+                        }}
+                      >
+                        <span style={{ fontSize: "18px", fontWeight: 800, color: tier.color, display: "block", lineHeight: 1.1 }}>
+                          {formatPercent(exam.percentage)}
+                        </span>
+                        <span style={{ fontSize: "10.5px", fontWeight: 700, color: tier.color, textTransform: "uppercase" }}>
+                          Grade {tier.grade}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Papers Data Table */}
+                  <div className="table-scroll">
+                    <table className="data-table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: "40px" }}>#</th>
+                          <th>Subject Paper</th>
+                          <th style={{ width: "120px" }}>Marks Obtained</th>
+                          <th style={{ width: "100px" }}>Max Marks</th>
+                          <th style={{ minWidth: "160px" }}>Score Gauge</th>
+                          <th style={{ width: "80px", textAlign: "right" }}>%</th>
+                          <th style={{ width: "90px", textAlign: "center" }}>Grade</th>
+                          <th style={{ width: "120px", textAlign: "right" }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {!hasPapers ? (
+                          <tr>
+                            <td colSpan={8} style={{ textAlign: "center", padding: "24px" }}>
+                              <span className="muted-cell">No subject paper marks recorded for this examination.</span>
+                            </td>
+                          </tr>
+                        ) : (
+                          exam.papers.map((p, idx) => {
+                            const pct = p.percentage ?? (p.max_marks > 0 ? Math.round((p.marks / p.max_marks) * 1000) / 10 : 0);
+                            const paperTier = getGradeTier(pct);
+                            const paperStatus = getPaperStatus(pct);
+
+                            return (
+                              <tr key={`${p.subject}-${idx}`}>
+                                <td className="muted-cell" style={{ fontSize: "12px" }}>
+                                  {idx + 1}
+                                </td>
+                                <td>
+                                  <span className="font-medium text-[var(--text-primary)]">
+                                    {p.subject}
+                                  </span>
+                                </td>
+                                <td>
+                                  <strong style={{ fontSize: "13.5px", color: "var(--text-primary)" }}>
+                                    {p.marks}
+                                  </strong>
+                                </td>
+                                <td className="muted-cell">
+                                  {p.max_marks}
+                                </td>
+                                <td>
+                                  <div className="progress-bar" style={{ height: "6px", borderRadius: "999px", background: "var(--bg-raised)" }}>
+                                    <span
+                                      style={{
+                                        display: "block",
+                                        height: "100%",
+                                        width: `${Math.max(0, Math.min(100, pct))}%`,
+                                        background: paperTier.color,
+                                        borderRadius: "999px",
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span style={{ fontWeight: 600, color: paperTier.color }}>
+                                    {formatPercent(pct)}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "center" }}>
+                                  <span
+                                    className={`status-pill ${paperTier.badgeClass}`}
+                                    style={{ fontSize: "11px", padding: "1px 7px", fontWeight: 700 }}
+                                  >
+                                    {p.grade ?? paperTier.grade}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <span
+                                    className={`status-pill ${paperStatus.tone}`}
+                                    style={{ fontSize: "10.5px", padding: "1px 7px" }}
+                                  >
+                                    {paperStatus.text}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
+      {/* 5. Two-Column: Academic Progression History & Grading Scale Reference */}
       <div className="two-column">
+        {/* Left: Class Progression & Enrollment History */}
         <div className="panel">
-          <h2 className="panel-title">Class and promotion history</h2>
-          <p className="panel-subtitle">
-            Previous years are kept when a student moves class, so this history is not overwritten.
-          </p>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Year</th>
-                <th>Class</th>
-                <th>Roll</th>
-                <th>From</th>
-              </tr>
-            </thead>
-            <tbody>
-              {academics.enrollment_history.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.academic_year ?? "—"}</td>
-                  <td>
-                    {e.grade ?? "—"}
-                    {e.section ? ` · ${e.section}` : ""}
-                  </td>
-                  <td className="muted-cell">{e.roll_no ?? "—"}</td>
-                  <td className="muted-cell">{formatDate(e.enrolled_on)}</td>
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Class & Promotion History</h2>
+              <p className="panel-subtitle">
+                Longitudinal record across academic years.
+              </p>
+            </div>
+          </div>
+
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Academic Year</th>
+                  <th>Class & Section</th>
+                  <th>Roll No</th>
+                  <th>Enrolled On</th>
+                  <th style={{ textAlign: "right" }}>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(academics.enrollment_history ?? []).length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: "24px" }}>
+                      <span className="muted-cell">No prior enrollment history on file.</span>
+                    </td>
+                  </tr>
+                ) : (
+                  academics.enrollment_history.map((e) => (
+                    <tr key={e.id}>
+                      <td className="font-medium text-[var(--text-primary)]">
+                        {e.academic_year ?? "Current Year"}
+                      </td>
+                      <td>
+                        Grade {e.grade ?? "—"}{e.section ? ` · Sec ${e.section}` : ""}
+                      </td>
+                      <td className="muted-cell" style={{ fontFamily: "monospace" }}>
+                        {e.roll_no ? `#${e.roll_no}` : "—"}
+                      </td>
+                      <td className="muted-cell">
+                        {formatDate(e.enrolled_on)}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span
+                          className={`status-pill ${e.active ? "success" : "neutral"}`}
+                          style={{ fontSize: "11px", padding: "2px 7px" }}
+                        >
+                          {e.active ? "Current" : "Completed"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
+        {/* Right: Institutional Grading Scale Reference */}
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Grading Scale & Assessment Standards</h2>
+              <p className="panel-subtitle">
+                Institutional benchmark criteria and grade descriptors.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ padding: "12px 20px 18px", display: "flex", flexDirection: "column", gap: "8px" }}>
+            {[
+              { grade: "A1", range: "90% – 100%", title: "High Distinction", note: "Outstanding mastery & conceptual depth", tone: "success" },
+              { grade: "A2", range: "80% – 89%", title: "Distinction", note: "Excellent academic execution", tone: "brand" },
+              { grade: "B1", range: "70% – 79%", title: "First Class", note: "Very good understanding across subjects", tone: "brand" },
+              { grade: "B2", range: "60% – 69%", title: "First Class", note: "Above average academic competence", tone: "neutral" },
+              { grade: "C1 / C2", range: "40% – 59%", title: "Passing Grade", note: "Meets standard graduation requirements", tone: "warning" },
+              { grade: "D / E", range: "Below 40%", title: "Needs Support", note: "Remedial tutorials & reassessment scheduled", tone: "danger" },
+            ].map((tier) => (
+              <div
+                key={tier.grade}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "7px 10px",
+                  borderRadius: "8px",
+                  background: "var(--bg-raised)",
+                  fontSize: "12px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span className={`status-pill ${tier.tone}`} style={{ fontSize: "11px", fontWeight: 700, padding: "1px 6px", minWidth: "32px", textAlign: "center" }}>
+                    {tier.grade}
+                  </span>
+                  <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{tier.title}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>({tier.note})</span>
+                </div>
+                <span style={{ fontFamily: "monospace", fontSize: "11.5px", color: "var(--text-secondary)", fontWeight: 600 }}>
+                  {tier.range}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
-  );
-}
-
-/**
- * A horizontal bar chart of subject averages.
- *
- * Plain divs rather than a charting library: this is the only chart the profile
- * needs, and a bar is a width. Sizing it in CSS avoids shipping a library to
- * render six rectangles.
- */
-function SubjectChart({ subjects }: { subjects: Array<{ subject: string; average: number | null }> }) {
-  return (
-    <ul className="bar-chart">
-      {subjects.slice(0, 10).map((s) => {
-        const pct = Math.max(0, Math.min(100, Number(s.average ?? 0)));
-        return (
-          <li key={s.subject}>
-            <span className="bar-label">{s.subject}</span>
-            <span className="bar-track">
-              <span
-                className={`bar-fill ${pct >= 50 ? "bar-good" : "bar-low"}`}
-                style={{ width: `${pct}%` }}
-              />
-            </span>
-            <span className="bar-value">{formatPercent(s.average)}</span>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 
