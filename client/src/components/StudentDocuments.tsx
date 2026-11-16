@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   Baby,
   CheckCircle2,
+  CreditCard,
   Download,
+  ExternalLink,
   Eye,
   FileSignature,
   FileText,
@@ -37,7 +39,7 @@ import {
 } from "../lib/student-documents";
 
 const ICONS: Record<DocType["icon"], React.ElementType> = {
-  "id-card": FileSignature,
+  "id-card": CreditCard,
   award: GraduationCap,
   ticket: Ticket,
   baby: Baby,
@@ -46,6 +48,15 @@ const ICONS: Record<DocType["icon"], React.ElementType> = {
   syringe: Syringe,
   globe: Globe,
 };
+
+const QUICK_TITLE_SUGGESTIONS = [
+  "Medical Fitness Certificate",
+  "Passport / Visa",
+  "Conduct Certificate",
+  "Sports Merit Award",
+  "Migration Certificate",
+  "Affidavit / Undertaking",
+];
 
 export function DocIcon({ type, size = 16 }: { type: DocType; size?: number }) {
   const Icon = ICONS[type.icon] ?? FileText;
@@ -97,9 +108,9 @@ export function StudentDocumentsPanel({
     if (realtimeRevision > 0) void load();
   }, [realtimeRevision, load]);
 
-  const byType = new Map(documents.map((doc) => [doc.docType, doc]));
+  const byType = useMemo(() => new Map(documents.map((doc) => [doc.docType, doc])), [documents]);
   const coreHeldCount = DOC_TYPES.filter((t) => byType.has(t.id)).length;
-  const otherDocs = documents.filter((doc) => !DOC_TYPES.some((t) => t.id === doc.docType));
+  const otherDocs = useMemo(() => documents.filter((doc) => !DOC_TYPES.some((t) => t.id === doc.docType)), [documents]);
 
   const pick = (docType: string) => {
     inputs.current[docType]?.click();
@@ -206,25 +217,45 @@ export function StudentDocumentsPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Header status bar */}
+      {/* Header status bar with segmented compliance progress */}
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "10px 14px",
+          flexDirection: "column",
+          gap: "8px",
+          padding: "12px 14px",
           background: "var(--bg-subtle)",
           border: "1px solid var(--border)",
-          borderRadius: "8px",
-          fontSize: "12.5px",
+          borderRadius: "10px",
         }}
       >
-        <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-          Core Paperwork
-        </span>
-        <span className={`status-pill ${coreHeldCount === DOC_TYPES.length ? "success" : "brand"}`} style={{ fontSize: "11px" }}>
-          {coreHeldCount} of {DOC_TYPES.length} on file
-        </span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontWeight: 650, color: "var(--text-primary)", fontSize: "13px" }}>
+            Core Documents Compliance
+          </span>
+          <span className={`status-pill ${coreHeldCount === DOC_TYPES.length ? "success" : "brand"}`} style={{ fontSize: "11px" }}>
+            {coreHeldCount} of {DOC_TYPES.length} on file
+          </span>
+        </div>
+
+        {/* 4-segment mini progress bar */}
+        <div style={{ display: "flex", gap: "4px", height: "4px", width: "100%" }}>
+          {DOC_TYPES.map((t) => {
+            const isHeld = byType.has(t.id);
+            return (
+              <div
+                key={t.id}
+                style={{
+                  flex: 1,
+                  height: "100%",
+                  borderRadius: "2px",
+                  background: isHeld ? "var(--success)" : "var(--border-strong)",
+                  transition: "background 0.2s ease",
+                }}
+              />
+            );
+          })}
+        </div>
       </div>
 
       {loadError && (
@@ -252,6 +283,7 @@ export function StudentDocumentsPanel({
                 const held = byType.get(type.id);
                 const busy = busyType === type.id;
                 const isHeld = Boolean(held);
+                const isVerified = held?.verification_status === "verified";
 
                 return (
                   <div
@@ -268,14 +300,20 @@ export function StudentDocumentsPanel({
 
                     <div className="min-w-0 flex-1">
                       <div className="doc-name">
-                        {type.label}
-                        {isHeld && <CheckCircle2 size={13} className="doc-onfile" />}
+                        <span>{type.label}</span>
+                        {isHeld && (
+                          <CheckCircle2
+                            size={13}
+                            className="doc-onfile"
+                            style={{ color: isVerified ? "var(--success)" : "var(--brand)" }}
+                          />
+                        )}
                       </div>
-                      <div className="doc-meta">
+                      <div className="doc-meta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {isHeld ? (
                           <>
-                            {held!.fileName} · {formatBytes(held!.sizeBytes)}
-                            {held!.issuedAt && ` · ${formatIssuedAt(held!.issuedAt)}`}
+                            <span>{held!.fileName}</span>
+                            <span style={{ color: "var(--text-muted)" }}> · {formatBytes(held!.sizeBytes)}</span>
                           </>
                         ) : (
                           <span style={{ color: "var(--text-muted)" }}>Not on file · Required</span>
@@ -290,10 +328,10 @@ export function StudentDocumentsPanel({
                             type="button"
                             className="doc-icon-button"
                             onClick={() => void view(held!)}
-                            aria-label={`View ${type.short}`}
+                            aria-label={`Preview ${type.short}`}
                             title="Preview"
                           >
-                            <Eye size={14} />
+                            <Eye size={13} />
                           </button>
                           <button
                             type="button"
@@ -302,17 +340,17 @@ export function StudentDocumentsPanel({
                             aria-label={`Download ${held!.fileName}`}
                             title="Download"
                           >
-                            <Download size={14} />
+                            <Download size={13} />
                           </button>
                           <button
                             type="button"
-                            className="tiny-action"
+                            className="doc-icon-button"
                             onClick={() => pick(type.id)}
                             disabled={busy}
-                            title="Upload newer version"
+                            aria-label={`Replace ${type.short}`}
+                            title="Replace document"
                           >
-                            {busy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-                            Replace
+                            {busy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={13} />}
                           </button>
                           <button
                             type="button"
@@ -322,7 +360,7 @@ export function StudentDocumentsPanel({
                             aria-label={`Remove ${type.short}`}
                             title="Remove"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
                         </>
                       ) : (
@@ -331,6 +369,7 @@ export function StudentDocumentsPanel({
                           className="tiny-action"
                           onClick={() => pick(type.id)}
                           disabled={busy}
+                          style={{ padding: "4px 8px", fontSize: "11.5px" }}
                         >
                           {busy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
                           Upload
@@ -359,7 +398,7 @@ export function StudentDocumentsPanel({
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>
-                Additional Documents
+                Additional Documents ({otherDocs.length})
               </span>
               <button
                 type="button"
@@ -383,7 +422,7 @@ export function StudentDocumentsPanel({
                   background: "var(--bg-subtle)",
                 }}
               >
-                No additional certificates or supplementary documents uploaded yet.
+                No additional certificates uploaded. Click "+ Upload other file" to add custom files.
               </div>
             ) : (
               <div className="doc-list">
@@ -398,12 +437,12 @@ export function StudentDocumentsPanel({
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="doc-name">
-                          {displayTitle}
+                          <span>{displayTitle}</span>
                           <CheckCircle2 size={13} className="doc-onfile" />
                         </div>
-                        <div className="doc-meta">
-                          {doc.fileName} · {formatBytes(doc.sizeBytes)}
-                          {doc.issuedAt && ` · ${formatIssuedAt(doc.issuedAt)}`}
+                        <div className="doc-meta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span>{doc.fileName}</span>
+                          <span style={{ color: "var(--text-muted)" }}> · {formatBytes(doc.sizeBytes)}</span>
                         </div>
                       </div>
                       <div className="doc-actions">
@@ -411,10 +450,10 @@ export function StudentDocumentsPanel({
                           type="button"
                           className="doc-icon-button"
                           onClick={() => void view(doc)}
-                          aria-label={`View ${displayTitle}`}
+                          aria-label={`Preview ${displayTitle}`}
                           title="Preview"
                         >
-                          <Eye size={14} />
+                          <Eye size={13} />
                         </button>
                         <button
                           type="button"
@@ -423,7 +462,7 @@ export function StudentDocumentsPanel({
                           aria-label={`Download ${doc.fileName}`}
                           title="Download"
                         >
-                          <Download size={14} />
+                          <Download size={13} />
                         </button>
                         <button
                           type="button"
@@ -433,7 +472,7 @@ export function StudentDocumentsPanel({
                           aria-label={`Remove ${displayTitle}`}
                           title="Remove"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </div>
@@ -445,7 +484,7 @@ export function StudentDocumentsPanel({
         </>
       )}
 
-      {/* Upload Other File Dialog */}
+      {/* Upload Other File Dialog with quick suggestions */}
       {showOtherModal && (
         <DrawerUploadOtherModal
           studentId={studentId}
@@ -467,13 +506,26 @@ export function StudentDocumentsPanel({
                 <h2 className="panel-title" style={{ fontSize: "14.5px" }}>{preview.title}</h2>
                 <p className="panel-subtitle" style={{ fontSize: "12px", marginTop: "2px" }}>{preview.name}</p>
               </div>
-              <button
-                type="button"
-                className="secondary-button compact"
-                onClick={() => setPreview(null)}
-              >
-                <X size={14} /> Close
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <a
+                  href={preview.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="secondary-button compact"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "4px", textDecoration: "none" }}
+                  title="Open in new window"
+                >
+                  <ExternalLink size={12} />
+                  New Tab
+                </a>
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  onClick={() => setPreview(null)}
+                >
+                  <X size={14} /> Close
+                </button>
+              </div>
             </div>
             <div className="preview-frame">
               {preview.type === "application/pdf" ? (
@@ -484,12 +536,12 @@ export function StudentDocumentsPanel({
             </div>
             <div className="modal-footer">
               <span className="muted-cell" style={{ fontSize: "12px" }}>
-                Expires in five minutes.
+                Protected link expires in five minutes.
               </span>
               <a
                 href={preview.url}
                 download={preview.name}
-                className="secondary-button compact"
+                className="primary-button compact"
                 style={{ display: "inline-flex", alignItems: "center", gap: "5px", textDecoration: "none" }}
               >
                 <Download size={13} /> Download
@@ -502,7 +554,7 @@ export function StudentDocumentsPanel({
   );
 }
 
-/** Modal dialog to upload additional file with title */
+/** Modal dialog in drawer to upload additional file with title */
 function DrawerUploadOtherModal({
   studentId,
   studentName,
@@ -516,13 +568,12 @@ function DrawerUploadOtherModal({
 }) {
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = e.target.files?.[0];
-    if (!picked) return;
+  const validateAndSetFile = (picked: File) => {
     if (picked.size > MAX_BYTES) {
       setError("File is larger than 10 MB. Please compress it first.");
       return;
@@ -533,6 +584,11 @@ function DrawerUploadOtherModal({
     }
     setError(null);
     setFile(picked);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    if (picked) validateAndSetFile(picked);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -591,29 +647,47 @@ function DrawerUploadOtherModal({
               </div>
             )}
 
-            <label className="stack-label" style={{ margin: 0 }}>
-              <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "12.5px" }}>
-                Document Title <span style={{ color: "var(--brand)" }}>*</span>
-              </span>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Medical Certificate, Passport, Affidavit"
-                autoFocus
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--border)",
-                  background: "var(--bg-input)",
-                  color: "var(--text-primary)",
-                  fontSize: "13px",
-                  outline: "none",
-                }}
-              />
-            </label>
+            <div>
+              <label className="stack-label" style={{ margin: 0 }}>
+                <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "12.5px" }}>
+                  Document Title <span style={{ color: "var(--brand)" }}>*</span>
+                </span>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Medical Certificate, Passport, Affidavit"
+                  autoFocus
+                  disabled={saving}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-input)",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    outline: "none",
+                  }}
+                />
+              </label>
+
+              {/* Quick suggestions */}
+              <div style={{ marginTop: "6px" }}>
+                <div className="doc-suggestion-chips">
+                  {QUICK_TITLE_SUGGESTIONS.map((sug) => (
+                    <button
+                      key={sug}
+                      type="button"
+                      className="doc-chip-btn"
+                      onClick={() => setTitle(sug)}
+                    >
+                      + {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "12.5px" }}>
@@ -657,18 +731,30 @@ function DrawerUploadOtherModal({
               ) : (
                 <div
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const dropped = e.dataTransfer.files?.[0];
+                    if (dropped) validateAndSetFile(dropped);
+                  }}
                   style={{
-                    border: "1.5px dashed var(--border-strong)",
+                    border: isDragging ? "2px dashed var(--brand)" : "1.5px dashed var(--border-strong)",
                     borderRadius: "8px",
                     padding: "18px 14px",
                     textAlign: "center",
                     cursor: "pointer",
-                    background: "var(--bg-subtle)",
+                    background: isDragging ? "var(--brand-soft)" : "var(--bg-subtle)",
+                    transition: "all 0.15s ease",
                   }}
                 >
-                  <Upload size={18} style={{ margin: "0 auto 6px", color: "var(--text-muted)" }} />
+                  <Upload size={18} style={{ margin: "0 auto 6px", color: isDragging ? "var(--brand)" : "var(--text-muted)" }} />
                   <p style={{ margin: "0 0 2px", fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)" }}>
-                    Select PDF, PNG, or JPEG
+                    {isDragging ? "Drop file here" : "Select PDF, PNG, or JPEG"}
                   </p>
                   <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)" }}>
                     Up to 10 MB

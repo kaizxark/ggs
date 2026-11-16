@@ -1,15 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertCircle,
+  Baby,
   BadgeCheck,
   CheckCircle2,
+  Clock,
+  CreditCard,
   Download,
+  ExternalLink,
   Eye,
+  FileSignature,
   FileText,
   FileWarning,
+  GraduationCap,
   Loader2,
   Lock,
   Plus,
+  Search,
   ShieldAlert,
+  ShieldCheck,
   Trash2,
   Upload,
   X,
@@ -39,6 +48,22 @@ export interface DocumentPanelProps {
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
+const QUICK_TITLE_SUGGESTIONS = [
+  "Medical Fitness Certificate",
+  "Passport / Visa",
+  "Conduct Certificate",
+  "Sports Merit Award",
+  "Migration Certificate",
+  "Affidavit / Undertaking",
+];
+
+const CORE_ICONS: Record<string, React.ElementType> = {
+  aadhaar: CreditCard,
+  "birth-certificate": Baby,
+  "caste-income": FileText,
+  "transfer-certificate": GraduationCap,
+};
+
 export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
   const [documents, setDocuments] = useState<StudentDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +72,10 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
   const [preview, setPreview] = useState<{ url: string; name: string; title: string; type: string } | null>(null);
   const [verifying, setVerifying] = useState<StudentDocument | null>(null);
   const [showOtherModal, setShowOtherModal] = useState(false);
+
+  // Table filtering and search
+  const [tableFilter, setTableFilter] = useState<"all" | "core" | "additional" | "verified">("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingType = useRef<string | null>(null);
@@ -69,9 +98,29 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
     void load();
   }, [load]);
 
-  const heldMap = new Map(documents.map((d) => [d.docType, d]));
-  const missingCore = DOC_TYPES.filter((t) => !heldMap.has(t.id));
+  const heldMap = useMemo(() => new Map(documents.map((d) => [d.docType, d])), [documents]);
+  const missingCore = useMemo(() => DOC_TYPES.filter((t) => !heldMap.has(t.id)), [heldMap]);
   const heldCoreCount = DOC_TYPES.length - missingCore.length;
+  const verifiedCount = useMemo(() => documents.filter((d) => d.verification_status === "verified").length, [documents]);
+  const otherDocs = useMemo(() => documents.filter((d) => !DOC_TYPES.some((t) => t.id === d.docType)), [documents]);
+
+  // Filtered documents for the file cabinet table
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => {
+      const isCore = DOC_TYPES.some((t) => t.id === doc.docType);
+      if (tableFilter === "core" && !isCore) return false;
+      if (tableFilter === "additional" && isCore) return false;
+      if (tableFilter === "verified" && doc.verification_status !== "verified") return false;
+
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        const title = documentDisplayTitle(doc).toLowerCase();
+        const fileName = doc.fileName.toLowerCase();
+        return title.includes(query) || fileName.includes(query);
+      }
+      return true;
+    });
+  }, [documents, tableFilter, searchQuery]);
 
   const open = async (doc: StudentDocument) => {
     try {
@@ -127,7 +176,7 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
       return;
     }
     if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(file.type)) {
-      toast.error("Upload a PDF, PNG, JPEG or WebP file");
+      toast.error("Please upload a PDF, PNG, JPEG or WebP file.");
       return;
     }
 
@@ -137,8 +186,8 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
       await uploadStudentDocument(studentId, docType, file);
       toast.success(replacing ? "Document replaced" : "Document uploaded", {
         description: replacing
-          ? "The previous version was replaced with the latest copy."
-          : `${docTypeById(docType)?.label ?? docType} is now on file.`,
+          ? "The previous copy has been superseded by the new scan."
+          : `${docTypeById(docType)?.label ?? docType} is now safely on file.`,
       });
       await load();
     } catch (err) {
@@ -185,116 +234,173 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
         </div>
       )}
 
-      {/* Panel 1: Core Documents Overview */}
+      {/* Panel 1: Core Documents Checklist */}
       <div className="panel">
         <div className="panel-header">
-          <div>
-            <h2 className="panel-title" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              Core Student Documents
-              <span className={`chip ${missingCore.length === 0 ? "chip-accent" : "chip-muted"}`}>
-                {heldCoreCount} of {DOC_TYPES.length} on file
+          <div style={{ width: "100%" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+              <h2 className="panel-title" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                Core Documents Checklist
+                <span className={`chip ${missingCore.length === 0 ? "chip-accent" : "chip-muted"}`}>
+                  {heldCoreCount} of {DOC_TYPES.length} on file
+                </span>
+              </h2>
+
+              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                {verifiedCount} verified by administration
               </span>
-            </h2>
-            <p className="panel-subtitle" style={{ marginTop: "4px" }}>
+            </div>
+
+            {/* Segmented visual progress track */}
+            <div className="doc-progress-track">
+              {DOC_TYPES.map((t) => {
+                const isHeld = heldMap.has(t.id);
+                const isVer = heldMap.get(t.id)?.verification_status === "verified";
+                return (
+                  <div
+                    key={t.id}
+                    className={`doc-progress-segment ${isHeld ? (isVer ? "done" : "pending") : ""}`}
+                    title={`${t.label}: ${isHeld ? (isVer ? "Verified" : "Uploaded (Pending Check)") : "Missing"}`}
+                  />
+                );
+              })}
+            </div>
+
+            <p className="panel-subtitle" style={{ marginTop: "8px" }}>
               {missingCore.length === 0 ? (
                 <span style={{ color: "var(--success)", fontWeight: 500, display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                  <CheckCircle2 size={14} /> All default required paperwork (Aadhaar, Birth Certificate, Caste/Income, Transfer Certificate) is on file.
+                  <CheckCircle2 size={14} /> All 4 core documents (Aadhaar, Birth Certificate, Caste/Income, Transfer Certificate) are on file.
                 </span>
               ) : (
                 <span>
-                  Mandatory school records. Still missing: <strong>{missingCore.map((m) => m.label).join(", ")}</strong>.
+                  Official student documents. Still missing:{" "}
+                  <strong style={{ color: "var(--brand)" }}>
+                    {missingCore.map((m) => m.label).join(", ")}
+                  </strong>
+                  .
                 </span>
               )}
             </p>
           </div>
         </div>
 
-        {/* Core Document Action Tiles */}
-        <div className="upload-grid" style={{ marginTop: "16px" }}>
+        {/* 4 Core Document Cards in 4-column / 2x2 responsive grid */}
+        <div className="doc-core-grid">
           {DOC_TYPES.map((type) => {
             const held = heldMap.get(type.id);
             const isHeld = Boolean(held);
             const isBusy = uploading === type.id;
             const isVerified = held?.verification_status === "verified";
             const isRejected = held?.verification_status === "rejected";
+            const Icon = CORE_ICONS[type.id] ?? FileText;
 
             return (
               <div
                 key={type.id}
-                className="upload-tile"
-                style={{
-                  borderStyle: isHeld ? "solid" : "dashed",
-                  borderColor: isHeld ? "var(--border-strong)" : "var(--border)",
-                  background: isHeld ? "var(--bg-panel)" : "var(--bg-input)",
-                  position: "relative",
-                  padding: "13px 14px",
-                }}
+                className={`doc-core-card ${isHeld ? "held" : "missing"}`}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: "6px" }}>
-                  <span className="upload-tile-label" style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                    {type.short}
-                    {isHeld && <CheckCircle2 size={13} style={{ color: isVerified ? "var(--success)" : "var(--brand)" }} />}
-                  </span>
-                  {isHeld ? (
-                    <span
-                      className={`status-pill ${isVerified ? "success" : isRejected ? "danger" : "brand"}`}
-                      style={{ fontSize: "10.5px", padding: "1px 6px" }}
+                <div>
+                  {/* Top row: Icon badge + Status pill */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                    <div className={`doc-badge-icon ${type.id}`}>
+                      <Icon size={18} />
+                    </div>
+
+                    {isHeld ? (
+                      <span
+                        className={`status-pill ${isVerified ? "success" : isRejected ? "danger" : "brand"}`}
+                        style={{ fontSize: "11px", padding: "2px 8px" }}
+                      >
+                        <span className="status-dot" />
+                        {isVerified ? "Verified" : isRejected ? "Rejected" : "On File"}
+                      </span>
+                    ) : (
+                      <span className="status-pill warning" style={{ fontSize: "11px", padding: "2px 8px" }}>
+                        <span className="status-dot" />
+                        Missing
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Document Title & info */}
+                  <div style={{ marginTop: "12px" }}>
+                    <h3 style={{ margin: 0, fontSize: "13.5px", fontWeight: 700, color: "var(--text-primary)" }}>
+                      {type.label}
+                    </h3>
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        fontSize: "11.5px",
+                        color: isHeld ? "var(--text-secondary)" : "var(--text-muted)",
+                        lineHeight: 1.45,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: isHeld ? "nowrap" : "normal",
+                      }}
+                      title={isHeld ? held!.fileName : type.hint}
                     >
-                      {isVerified ? "Verified" : isRejected ? "Rejected" : "On File"}
-                    </span>
-                  ) : (
-                    <span className="status-pill warning" style={{ fontSize: "10.5px", padding: "1px 6px" }}>
-                      Missing
-                    </span>
-                  )}
+                      {isHeld ? (
+                        <>
+                          <span style={{ fontWeight: 500 }}>{held!.fileName}</span>
+                          <span style={{ color: "var(--text-muted)" }}> · {formatBytes(held!.sizeBytes)}</span>
+                        </>
+                      ) : (
+                        type.hint
+                      )}
+                    </p>
+
+                    {isHeld && held!.issuedAt && (
+                      <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                        Uploaded {formatIssuedAt(held!.issuedAt)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="upload-tile-hint" style={{ marginTop: "4px", minHeight: "30px", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {isBusy ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", color: "var(--brand)" }}>
-                      <Loader2 size={12} className="animate-spin" /> Uploading…
-                    </span>
-                  ) : isHeld ? (
-                    <span title={held!.fileName}>
-                      {held!.fileName} · {formatBytes(held!.sizeBytes)}
-                    </span>
-                  ) : (
-                    <span>{type.hint}</span>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%", marginTop: "10px", paddingTop: "8px", borderTop: "1px solid var(--border-subtle)" }}>
+                {/* Bottom action row */}
+                <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid var(--border-subtle)" }}>
                   {isHeld ? (
-                    <>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <button
                         type="button"
                         className="secondary-button compact"
-                        style={{ flex: 1, padding: "3px 7px", fontSize: "11.5px" }}
+                        style={{ flex: 1, padding: "5px 8px", fontSize: "12px", justifyContent: "center" }}
                         onClick={() => void open(held!)}
-                        title="View document"
+                        title="View / Preview"
                       >
-                        <Eye size={12} /> View
+                        <Eye size={13} />
+                        View
                       </button>
                       <button
                         type="button"
                         className="secondary-button compact"
-                        style={{ flex: 1, padding: "3px 7px", fontSize: "11.5px" }}
+                        style={{ flex: 1, padding: "5px 8px", fontSize: "12px", justifyContent: "center" }}
                         onClick={() => pick(type.id)}
                         disabled={isBusy}
-                        title="Upload new copy"
+                        title="Replace with new copy"
                       >
-                        <Upload size={12} /> Replace
+                        {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                        Replace
                       </button>
-                    </>
+                      <button
+                        type="button"
+                        className="secondary-button compact"
+                        style={{ padding: "5px 8px", fontSize: "12px" }}
+                        onClick={() => void download(held!)}
+                        title="Download file"
+                      >
+                        <Download size={13} />
+                      </button>
+                    </div>
                   ) : (
                     <button
                       type="button"
                       className="primary-button compact"
-                      style={{ width: "100%", padding: "4px 8px", fontSize: "12px", justifyContent: "center" }}
+                      style={{ width: "100%", padding: "6px 12px", fontSize: "12.5px", justifyContent: "center" }}
                       onClick={() => pick(type.id)}
                       disabled={isBusy}
                     >
-                      {isBusy ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      {isBusy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
                       Upload Document
                     </button>
                   )}
@@ -317,7 +423,7 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
         }}
       />
 
-      {/* Panel 2: Complete File Cabinet Table */}
+      {/* Panel 2: Complete File Cabinet */}
       <div className="panel">
         <div
           className="panel-header"
@@ -326,15 +432,16 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: "12px",
+            gap: "14px",
           }}
         >
           <div>
             <h2 className="panel-title">File Cabinet</h2>
             <p className="panel-subtitle">
-              All documents held for {studentName}. Files are encrypted and accessed through time-limited secure links.
+              All stored records for {studentName}. Documents are encrypted and protected by time-limited access tokens.
             </p>
           </div>
+
           <button
             type="button"
             className="secondary-button"
@@ -346,50 +453,132 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
           </button>
         </div>
 
+        {/* Filter pills and search bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "10px",
+            padding: "12px 20px",
+            borderBottom: "1px solid var(--border-subtle)",
+            background: "var(--bg-subtle)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+            {[
+              { id: "all", label: `All (${documents.length})` },
+              { id: "core", label: `Core Records (${heldCoreCount})` },
+              { id: "additional", label: `Additional (${otherDocs.length})` },
+              { id: "verified", label: `Verified (${verifiedCount})` },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setTableFilter(tab.id as typeof tableFilter)}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "12px",
+                  fontWeight: tableFilter === tab.id ? 700 : 500,
+                  borderRadius: "6px",
+                  border: tableFilter === tab.id ? "1px solid var(--brand-border)" : "1px solid var(--border)",
+                  background: tableFilter === tab.id ? "var(--brand-soft)" : "var(--bg-input)",
+                  color: tableFilter === tab.id ? "var(--brand)" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  transition: "all 0.14s ease",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ position: "relative", minWidth: "200px" }}>
+            <Search
+              size={13}
+              style={{ position: "absolute", left: "9px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter by title or file name…"
+              style={{
+                width: "100%",
+                padding: "5px 10px 5px 28px",
+                fontSize: "12px",
+                borderRadius: "6px",
+                border: "1px solid var(--border)",
+                background: "var(--bg-input)",
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
+            />
+          </div>
+        </div>
+
         {documents.length === 0 ? (
           <div className="empty-state">
-            <ShieldAlert size={22} />
-            <p className="panel-title" style={{ marginTop: "6px" }}>No documents uploaded yet</p>
+            <ShieldAlert size={24} />
+            <p className="panel-title" style={{ marginTop: "8px" }}>No documents uploaded yet</p>
             <p className="panel-subtitle">
-              Upload the core documents above or add additional certificates for this student.
+              Upload the core documents above or click "+ Upload Additional Document" to add custom files.
             </p>
+          </div>
+        ) : filteredDocuments.length === 0 ? (
+          <div className="empty-state">
+            <Search size={22} />
+            <p className="panel-title" style={{ marginTop: "6px" }}>No documents match this filter</p>
+            <p className="panel-subtitle">Try selecting a different filter tab or clearing your search term.</p>
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Document Title</th>
+                  <th>Document</th>
                   <th>Category</th>
                   <th>Issued / Uploaded</th>
                   <th>Size</th>
-                  <th>Status</th>
+                  <th>Verification</th>
                   <th aria-label="Actions" style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {documents.map((doc) => {
+                {filteredDocuments.map((doc) => {
                   const core = docTypeById(doc.docType);
                   const displayTitle = documentDisplayTitle(doc);
-                  const tone = verificationTone(doc);
-                  const vLabel = verificationLabel(doc);
+                  const isVerified = doc.verification_status === "verified";
+                  const isRejected = doc.verification_status === "rejected";
+                  const tone = isVerified ? "success" : isRejected ? "danger" : "brand";
+                  const vLabel = isVerified ? "Verified" : isRejected ? "Rejected" : "Pending Check";
+
+                  // Extract file extension for badge
+                  const ext = (doc.fileName.split(".").pop() || "FILE").toUpperCase().slice(0, 4);
 
                   return (
                     <tr key={doc.key}>
                       <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span
-                            className="doc-icon held"
-                            style={{ width: "30px", height: "30px", borderRadius: "6px", flexShrink: 0 }}
+                            className={`doc-badge-icon ${core ? core.id : "other"}`}
+                            style={{ width: "32px", height: "32px", borderRadius: "6px" }}
                           >
-                            <FileText size={15} />
+                            <FileText size={16} />
                           </span>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "13px" }}>
+                            <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
                               {displayTitle}
+                              {isVerified && (
+                                <ShieldCheck size={14} style={{ color: "var(--success)" }} title="Verified by Administration" />
+                              )}
                             </div>
-                            <div className="muted-cell" style={{ fontSize: "11.5px", marginTop: "1px" }}>
-                              {doc.fileName}
+                            <div className="muted-cell" style={{ fontSize: "11.5px", marginTop: "1px", display: "flex", alignItems: "center", gap: "5px" }}>
+                              <span style={{ fontFamily: "var(--font-mono)", fontSize: "10.5px", padding: "1px 4px", borderRadius: "3px", background: "var(--bg-subtle)", border: "1px solid var(--border-subtle)" }}>
+                                {ext}
+                              </span>
+                              <span>{doc.fileName}</span>
                             </div>
                           </div>
                         </div>
@@ -406,10 +595,15 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
                         {formatBytes(doc.sizeBytes)}
                       </td>
                       <td>
-                        <span className={`status-pill ${tone}`} style={{ fontSize: "11px" }}>
+                        <span className={`status-pill ${tone}`} style={{ fontSize: "11px" }} title={isRejected && doc.rejection_reason ? `Reason: ${doc.rejection_reason}` : undefined}>
                           <span className="status-dot" />
                           {vLabel}
                         </span>
+                        {isRejected && doc.rejection_reason && (
+                          <div style={{ fontSize: "10.5px", color: "var(--danger)", marginTop: "2px", maxWidth: "200px" }}>
+                            {doc.rejection_reason}
+                          </div>
+                        )}
                       </td>
                       <td style={{ textAlign: "right" }}>
                         <div className="row-actions" style={{ justifyContent: "flex-end" }}>
@@ -493,15 +687,28 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
                 <h2 className="panel-title" style={{ fontSize: "15px" }}>{preview.title}</h2>
                 <p className="panel-subtitle" style={{ fontSize: "12px", marginTop: "2px" }}>{preview.name}</p>
               </div>
-              <button
-                type="button"
-                className="secondary-button compact"
-                onClick={() => setPreview(null)}
-                style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
-              >
-                <X size={14} />
-                Close
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <a
+                  href={preview.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="secondary-button compact"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "5px", textDecoration: "none" }}
+                  title="Open in new window"
+                >
+                  <ExternalLink size={13} />
+                  New Tab
+                </a>
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  onClick={() => setPreview(null)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}
+                >
+                  <X size={14} />
+                  Close
+                </button>
+              </div>
             </div>
             <div className="preview-frame">
               {preview.type === "application/pdf" ? (
@@ -512,16 +719,16 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
             </div>
             <div className="modal-footer">
               <span className="muted-cell" style={{ fontSize: "12px" }}>
-                This secure temporary link expires in five minutes.
+                Protected link expires in five minutes.
               </span>
               <a
                 href={preview.url}
                 download={preview.name}
-                className="secondary-button compact"
+                className="primary-button compact"
                 style={{ display: "inline-flex", alignItems: "center", gap: "5px", textDecoration: "none" }}
               >
                 <Download size={13} />
-                Download
+                Download Document
               </a>
             </div>
           </div>
@@ -546,8 +753,7 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
 
 /**
  * Upload Other / Additional Document Dialog.
- * Prompts for a clear Document Title (e.g. "Passport", "Medical Certificate")
- * and the corresponding file, ensuring proper nomenclature and organization.
+ * Prompts for a clear Document Title (with quick suggestions) and file picker.
  */
 function UploadOtherDialog({
   studentId,
@@ -562,13 +768,12 @@ function UploadOtherDialog({
 }) {
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = e.target.files?.[0];
-    if (!picked) return;
+  const validateAndSetFile = (picked: File) => {
     if (picked.size > MAX_BYTES) {
       setError("File is larger than 10 MB. Please compress before uploading.");
       return;
@@ -579,6 +784,18 @@ function UploadOtherDialog({
     }
     setError(null);
     setFile(picked);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    if (picked) validateAndSetFile(picked);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) validateAndSetFile(dropped);
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -596,7 +813,6 @@ function UploadOtherDialog({
     setSaving(true);
     setError(null);
 
-    // Build a unique, slugified docType identifier
     const slug = cleanTitle
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -645,31 +861,53 @@ function UploadOtherDialog({
               </div>
             )}
 
-            <label className="stack-label" style={{ margin: 0 }}>
-              <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "13px" }}>
-                Document Title <span style={{ color: "var(--brand)" }}>*</span>
-              </span>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Medical Fitness Certificate, Passport, Affidavit"
-                autoFocus
-                disabled={saving}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--border)",
-                  background: "var(--bg-input)",
-                  color: "var(--text-primary)",
-                  fontSize: "13px",
-                  outline: "none",
-                }}
-              />
-              <span className="field-hint">A clear name that describes what this document contains.</span>
-            </label>
+            {/* Document Title with quick suggestions */}
+            <div>
+              <label className="stack-label" style={{ margin: 0 }}>
+                <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "13px" }}>
+                  Document Title <span style={{ color: "var(--brand)" }}>*</span>
+                </span>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. Medical Fitness Certificate, Passport, Affidavit"
+                  autoFocus
+                  disabled={saving}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-input)",
+                    color: "var(--text-primary)",
+                    fontSize: "13px",
+                    outline: "none",
+                  }}
+                />
+              </label>
 
+              {/* Quick suggestion chips */}
+              <div style={{ marginTop: "8px" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>
+                  Quick suggestions:
+                </span>
+                <div className="doc-suggestion-chips">
+                  {QUICK_TITLE_SUGGESTIONS.map((sug) => (
+                    <button
+                      key={sug}
+                      type="button"
+                      className="doc-chip-btn"
+                      onClick={() => setTitle(sug)}
+                    >
+                      + {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* File selection dropzone */}
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <span style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "13px" }}>
                 Select File <span style={{ color: "var(--brand)" }}>*</span>
@@ -681,15 +919,17 @@ function UploadOtherDialog({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    padding: "10px 14px",
+                    padding: "12px 14px",
                     border: "1px solid var(--brand-border)",
                     borderRadius: "8px",
                     background: "var(--brand-soft)",
                     gap: "10px",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                    <FileText size={16} style={{ color: "var(--brand)", flexShrink: 0 }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                    <div className="doc-badge-icon other" style={{ width: "32px", height: "32px" }}>
+                      <FileText size={16} />
+                    </div>
                     <div style={{ minWidth: 0 }}>
                       <p style={{ margin: 0, fontSize: "12.5px", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {file.name}
@@ -714,24 +954,28 @@ function UploadOtherDialog({
               ) : (
                 <div
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
                   style={{
-                    border: "1.5px dashed var(--border-strong)",
+                    border: isDragging ? "2px dashed var(--brand)" : "1.5px dashed var(--border-strong)",
                     borderRadius: "8px",
-                    padding: "24px 16px",
+                    padding: "26px 16px",
                     textAlign: "center",
                     cursor: "pointer",
-                    background: "var(--bg-subtle)",
-                    transition: "border-color 0.15s ease",
+                    background: isDragging ? "var(--brand-soft)" : "var(--bg-subtle)",
+                    transition: "all 0.15s ease",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--brand)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-strong)")}
                 >
-                  <Upload size={22} style={{ margin: "0 auto 8px", color: "var(--text-muted)" }} />
+                  <Upload size={24} style={{ margin: "0 auto 8px", color: isDragging ? "var(--brand)" : "var(--text-muted)" }} />
                   <p style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: 600, color: "var(--text-primary)" }}>
-                    Click to select file
+                    {isDragging ? "Drop your file here" : "Click to select or drag & drop file"}
                   </p>
                   <p style={{ margin: 0, fontSize: "11.5px", color: "var(--text-muted)" }}>
-                    PDF, PNG, JPEG or WebP up to 10 MB
+                    Supports PDF, PNG, JPEG or WebP (max 10 MB)
                   </p>
                 </div>
               )}
@@ -857,6 +1101,7 @@ function VerifyDialog({
                 checked={status === "verified"}
                 onChange={() => setStatus("verified")}
               />
+              <CheckCircle2 size={15} style={{ color: "var(--success)" }} />
               Verified
             </label>
             <label className={status === "rejected" ? "choice selected" : "choice"}>
@@ -866,6 +1111,7 @@ function VerifyDialog({
                 checked={status === "rejected"}
                 onChange={() => setStatus("rejected")}
               />
+              <AlertCircle size={15} style={{ color: "var(--danger)" }} />
               Rejected
             </label>
           </div>
@@ -878,7 +1124,7 @@ function VerifyDialog({
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. Scan is illegible, Aadhaar number does not match pupil records."
+                placeholder="e.g. Scan is blurry/illegible, wrong document uploaded, or name does not match school records."
                 rows={3}
                 style={{
                   padding: "8px 12px",
@@ -899,7 +1145,7 @@ function VerifyDialog({
             <textarea
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
-              placeholder="e.g. Original physical copy verified in office by admin."
+              placeholder="e.g. Physical original verified by principal on 15 Nov."
               rows={2}
               style={{
                 padding: "8px 12px",
@@ -935,20 +1181,6 @@ function VerifyDialog({
 async function authHeadersFor(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {};
-}
-
-function verificationTone(doc: StudentDocument): string {
-  const status = doc.verification_status;
-  if (status === "verified") return "success";
-  if (status === "rejected") return "danger";
-  return "warning";
-}
-
-function verificationLabel(doc: StudentDocument): string {
-  const status = doc.verification_status;
-  if (status === "verified") return "Verified";
-  if (status === "rejected") return "Rejected";
-  return "Awaiting check";
 }
 
 export const DocumentLockIcon = Lock;

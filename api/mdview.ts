@@ -11,7 +11,7 @@
  * Credentials required: username 'admin', password 'admin123'.
  */
 
-export const config = { runtime: "nodejs" };
+export const config = { runtime: "edge" };
 
 const SUPABASE_URL =
   process.env.VITE_SUPABASE_URL || "https://fmlwzxmjrecbtvgraqqm.supabase.co";
@@ -463,4 +463,11 @@ export async function GET(req: Request): Promise<Response> {
       { status: 500, headers: { "Access-Control-Allow-Origin": "*" } }
     );
   }
+}
+
+export default async function handler(req: Request): Promise<Response> {
+  if (req.method === "OPTIONS") return OPTIONS();
+  if (req.method === "POST") return POST(req);
+  if (req.method === "GET") return GET(req);
+  return new Response("Method not allowed", { status: 405 });
 }
