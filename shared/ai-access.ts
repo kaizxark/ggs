@@ -60,6 +60,11 @@ export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
     blurb:
       "invoices, outstanding and overdue balances, collection rate, monthly collected vs pending",
   },
+  transportation: {
+    label: "Transportation",
+    blurb:
+      "bus fee collection (₹14,000/annum), route allocations, rider opt-ins, collections & receipts",
+  },
   analytics: {
     label: "Analytics",
     blurb:
@@ -194,6 +199,7 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
     "academics",
     "examinations",
     "reports",
+    "transportation",
     "settings",
   ],
 
@@ -226,6 +232,7 @@ const ROLE_SCREENS: Record<string, AiScreenKey[]> = {
     "students",
     "attendance",
     "finance",
+    "transportation",
     "reports",
     "settings",
   ],
