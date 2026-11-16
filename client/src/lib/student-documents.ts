@@ -119,15 +119,30 @@ export function formatBytes(bytes: number): string {
 /** 20261002T221145Z -> 2 Oct 2026 */
 export function formatIssuedAt(stamp: string | null): string {
   if (!stamp) return "—";
-  const match = /^(\d{4})(\d{2})(\d{2})T/.exec(stamp);
-  if (!match) return stamp;
-  const [, year, month, day] = match;
   const months = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
-  const label = months[Number(month) - 1] ?? month;
-  return `${Number(day)} ${label} ${year}`;
+  // 1. Compact timestamp format: 20261002T221145Z
+  const compact = /^(\d{4})(\d{2})(\d{2})T/.exec(stamp);
+  if (compact) {
+    const [, year, month, day] = compact;
+    const label = months[Number(month) - 1] ?? month;
+    return `${Number(day)} ${label} ${year}`;
+  }
+  // 2. Standard ISO date format: 2026-10-02...
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(stamp);
+  if (iso) {
+    const [, year, month, day] = iso;
+    const label = months[Number(month) - 1] ?? month;
+    return `${Number(day)} ${label} ${year}`;
+  }
+  // 3. General Date parser
+  const parsed = new Date(stamp);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getDate()} ${months[parsed.getMonth()]} ${parsed.getFullYear()}`;
+  }
+  return stamp;
 }
 
 /** How much of a student's required paperwork is on file. */

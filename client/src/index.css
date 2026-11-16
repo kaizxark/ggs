@@ -2537,6 +2537,126 @@ img.avatar { display: inline-block; object-fit: cover; vertical-align: middle; }
 .preview-frame iframe { width: 100%; height: min(66vh, 620px); border: 0; border-radius: 8px; background: white; }
 .preview-frame img { display: block; max-width: 100%; margin: 0 auto; border-radius: 8px; }
 
+/* Core Document Grid (Profile) */
+.doc-core-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.doc-core-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  padding: 16px;
+  min-height: 165px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.doc-core-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 14px rgba(36, 30, 24, 0.05);
+}
+
+.doc-core-card.held {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+}
+
+.doc-core-card.missing {
+  border-style: dashed;
+  background: var(--bg-input);
+}
+
+.doc-badge-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.doc-badge-icon.aadhaar {
+  background: rgba(62, 107, 138, 0.12);
+  color: #3e6b8a;
+}
+
+.doc-badge-icon.birth-certificate {
+  background: rgba(47, 111, 94, 0.12);
+  color: #2f6f5e;
+}
+
+.doc-badge-icon.caste-income {
+  background: rgba(168, 90, 22, 0.12);
+  color: #a85a16;
+}
+
+.doc-badge-icon.transfer-certificate {
+  background: rgba(107, 83, 130, 0.12);
+  color: #6b5382;
+}
+
+.doc-badge-icon.other {
+  background: rgba(158, 59, 38, 0.10);
+  color: var(--brand);
+}
+
+/* Compliance Progress Track */
+.doc-progress-track {
+  display: flex;
+  gap: 6px;
+  height: 6px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.doc-progress-segment {
+  flex: 1;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--border-strong);
+  transition: background .2s ease;
+}
+
+.doc-progress-segment.done {
+  background: var(--success);
+}
+
+.doc-progress-segment.pending {
+  background: var(--warning);
+}
+
+/* Quick Suggestion Chips */
+.doc-suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.doc-chip-btn {
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all .14s ease;
+}
+
+.doc-chip-btn:hover {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
 /* ---------- Skeletons --------------------------------------------------- */
 
 .skeleton-panel { padding: 22px 21px; }

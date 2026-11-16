@@ -44,6 +44,7 @@ function lazyWithRetry<T extends ComponentType<any>>(
 const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"));
 const Login = lazyWithRetry(() => import("./pages/Login"));
 const ResetPassword = lazyWithRetry(() => import("./pages/ResetPassword"));
+const MdView = lazyWithRetry(() => import("./pages/MdView"));
 
 function AuthSplash() {
   return (
@@ -90,6 +91,14 @@ function ResetPasswordRoute() {
   );
 }
 
+function MdViewRoute() {
+  return (
+    <Suspense fallback={<AuthSplash />}>
+      <MdView />
+    </Suspense>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -100,6 +109,7 @@ function Router() {
         leaving them signed in and with the old password still in force.
       */}
       <Route path="/reset-password" component={ResetPasswordRoute} />
+      <Route path="/mdview" component={MdViewRoute} />
       <Route path="/login" component={LoginGate} />
       <Route path="/" component={GuardedDashboard} />
       <Route path="/dashboard" component={GuardedDashboard} />

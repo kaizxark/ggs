@@ -40,6 +40,10 @@
   ],
   "rewrites": [
     {
+      "source": "/mdview",
+      "destination": "/app.html"
+    },
+    {
       "source": "/login",
       "destination": "/app.html"
     },
