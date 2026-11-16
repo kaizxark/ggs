@@ -1291,12 +1291,11 @@ async function main() {
   const CAT = Object.fromEntries(feeCategories.map((c) => [c.name, c.id]));
 
   // Annual unified tuition fee by grade band:
-  // Grades 1-3: ₹35,000   Grades 4-5: ₹40,000   Grades 6-8: ₹50,000   Grades 9-10: ₹60,000
+  // Grades 1-4: ₹30,000   Grades 5-7: ₹35,000   Grades 8-10: ₹40,000
   const TUITION = {
-    1: 35000, 2: 35000, 3: 35000,
-    4: 40000, 5: 40000,
-    6: 50000, 7: 50000, 8: 50000,
-    9: 60000, 10: 60000,
+    1: 30000, 2: 30000, 3: 30000, 4: 30000,
+    5: 35000, 6: 35000, 7: 35000,
+    8: 40000, 9: 40000, 10: 40000,
   };
   const transportRoutes = [
     { name: "Sira Road Route", code: "RT-01", vehicle_no: "KA-01-AB-1234", driver_name: "Suresh Kumar", driver_phone: mobile(), fee: 1800,

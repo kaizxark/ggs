@@ -70,6 +70,7 @@ import { useCurrentUser } from "@/lib/erp-views";
 import { SmoothFilterDropdown } from "@/components/SmoothFilterDropdown";
 import { usePageScrollLock } from "@/components/SmoothScroll";
 import { FormSelect } from "@/components/FormSelect";
+import { formatFeeInr, getFeeForGrade } from "@/lib/fee-structure";
 
 /**
  * The student directory.
@@ -2068,13 +2069,7 @@ function StudentDialog({
                       Annual Tuition Fee {form.grade ? `· ${formatGradeLabel(form.grade)}` : ""}
                     </span>
                     <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--brand)" }}>
-                      {(() => {
-                        const g = parseInt(String(form.grade || "").replace(/\D/g, ""), 10);
-                        if (g >= 9) return "₹60,000";
-                        if (g >= 6) return "₹50,000";
-                        if (g >= 4) return "₹40,000";
-                        return "₹35,000";
-                      })()}
+                      {formatFeeInr(getFeeForGrade(form.grade))}
                       <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}> / year</span>
                     </span>
                   </div>

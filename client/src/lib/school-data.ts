@@ -306,12 +306,7 @@ export interface LibraryBook extends BaseRow { title: string; author: string; ca
 export interface TimetableEntry extends BaseRow { day: string; period: string; time: string; grade_6: string; grade_7: string; grade_8: string; grade_9: string; grade_10?: string; }
 export const MIN_INSTALLMENT_AMOUNT = 5000;
 
-export function getAnnualFeeForGrade(grade?: string | number | null): number {
-  if (!grade) return 50000;
-  const num = parseInt(String(grade).replace(/\D/g, ""), 10);
-  if (num >= 9) return 60000;
-  return 50000;
-}
+export { getFeeForGrade as getAnnualFeeForGrade } from "./fee-structure";
 export interface SubjectRow extends BaseRow { name: string; code: string | null; description: string | null; active: boolean; teacher: string | null; classes: number; classList: string[]; progress: number; results: number; }
 export interface PerformanceTrend extends BaseRow { month: string; mathematics: number; science: number; english: number; }
 export interface SubjectAverage extends BaseRow { subject: string; average: number; }

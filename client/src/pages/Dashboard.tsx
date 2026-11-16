@@ -200,6 +200,7 @@ import { recordManualPayment } from "../lib/fee-payments";
 import { authHeaders } from "../lib/supabase";
 import { ReportsView } from "../components/ReportsView";
 import { ExaminationsView } from "../components/ExaminationsView";
+import { TransportationView } from "../components/TransportationView";
 import { AcademicsView } from "../components/AcademicsView";
 import { FormSelect } from "../components/FormSelect";
 import { DateDropdowns } from "../components/DateDropdowns";
@@ -368,6 +369,11 @@ const SCREEN_PROMPTS: Record<string, string[]> = {
     "Who owes the most?",
     "What is the collection rate?",
   ],
+  Transportation: [
+    "How many students use the school bus?",
+    "Who owes transportation fees?",
+    "Which bus route has the most riders?",
+  ],
   Analytics: [
     "Which grade is weakest academically?",
     "How has performance trended this year?",
@@ -453,6 +459,7 @@ const navGroups = [
       { label: "Attendance", icon: ClipboardCheck },
       { label: "Examinations", icon: FileText },
       { label: "Fees & Finance", icon: IndianRupee },
+      { label: "Transportation", icon: Bus },
     ],
   },
   {
@@ -646,6 +653,13 @@ function CommandPaletteBody({
         detail: "Fee invoices, collections, overdue balances & payment receipts",
         icon: IndianRupee,
         keywords: ["fees", "finance", "billing", "invoices", "payments", "collections", "accounts", "dues", "outstanding", "money"],
+      },
+      {
+        view: "Transportation",
+        label: "Transportation",
+        detail: "Bus fee collection (₹14,000/annum), route allocations, rider opt-ins & receipts",
+        icon: Bus,
+        keywords: ["transport", "transportation", "bus", "bus fees", "routes", "rider", "pickup", "drop", "fleet"],
       },
       {
         view: "Analytics",
@@ -10008,6 +10022,8 @@ export default function Home() {
       return <AttendanceView onBack={() => navigate("Overview")} />;
     if (activeView === "Fees & Finance")
       return <FinanceView onBack={() => navigate("Overview")} />;
+    if (activeView === "Transportation")
+      return <TransportationView onBack={() => navigate("Overview")} onNavigate={navigate} />;
     if (activeView === "Analytics")
       return <AnalyticsView onBack={() => navigate("Overview")} onNavigate={navigate} />;
     if (activeView === "Staff")

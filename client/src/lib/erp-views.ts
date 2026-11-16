@@ -21,6 +21,10 @@ import {
 } from "./live-data";
 import { useRealtimeInvalidation } from "./use-realtime";
 import {
+  getCachedFeeStructure,
+  getFeeForGrade,
+} from "./fee-structure";
+import {
   ROLE_LABELS,
   effectiveRole,
   isSuperAdminId,
@@ -908,13 +912,12 @@ async function loadFeeCategories(): Promise<FeeCategory[]> {
     "Grade 10": "#0f3833",
   };
 
+  const structure = getCachedFeeStructure();
   return Array.from(gradeTotals.entries())
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
     .map(([grade, amount], idx) => {
       const pct = Math.round((amount / totalBilled) * 1000) / 10;
-      const gNum = parseInt(grade.replace(/\D/g, ""), 10);
-      const annualFee =
-        gNum >= 9 ? 60000 : gNum >= 6 ? 50000 : gNum >= 4 ? 40000 : 35000;
+      const annualFee = getFeeForGrade(grade, structure);
       return {
         id: `fc-${idx + 1}`,
         name: `${grade} (₹${annualFee.toLocaleString("en-IN")})`,
