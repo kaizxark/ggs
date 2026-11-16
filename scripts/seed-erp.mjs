@@ -555,10 +555,11 @@ async function main() {
   console.log('Seeding organisation:', ORG_ID, '("My School")\n');
 
   // ============================================================== 1. staff ==
-  // With 10 grades × 2-3 sections each we need ~25 classrooms and 25+ teachers.
-  console.log("[1/8] Staff (30)…");
+  // With 10 grades × 2-3 sections each we have 24 classrooms and 70 staff members.
+  // Exactly ONE principal (Dr. Meera Iyer).
+  console.log("[1/8] Staff (70)…");
   const STAFF = [
-    // Leadership
+    // Leadership (ONLY ONE PRINCIPAL)
     ["Dr. Meera Iyer", "Principal", "School Leadership", "dr.meera.iyer", "principal"],
     ["Rajesh Menon", "Vice Principal", "School Leadership", "rajesh.menon", "staff"],
     // Primary teachers (Grades 1–5)
@@ -588,11 +589,63 @@ async function main() {
     ["Nagesh Swamy", "Social Studies Teacher", "Social Studies", "nagesh.swamy", "teacher"],
     ["Rekha Sharma", "English Teacher", "English", "rekha.sharma", "teacher"],
     ["Girish Naidu", "Computer Science Teacher", "Computer Science", "girish.naidu", "teacher"],
-    // Support staff
+    // Support staff & co-curricular
     ["Priya Deshpande", "Art & Craft Teacher", "Arts", "priya.deshpande", "teacher"],
     ["Mohan Kumar", "Music Teacher", "Arts", "mohan.kumar", "teacher"],
     ["Savitha Acharya", "Accounts Officer", "Administration", "savitha.acharya", "staff"],
     ["Ravi Prasad", "Office Coordinator", "Administration", "ravi.prasad", "staff"],
+
+    // Additional Academic Leadership (no principal!)
+    ["Dr. Arvind Swaminathan", "Head of Academics", "School Leadership", "arvind.swaminathan", "staff"],
+
+    // Additional Primary Teachers
+    ["Rashmi Hegde", "Primary Teacher", "Primary", "rashmi.hegde", "teacher"],
+    ["Geetha Bhat", "Primary Teacher", "Primary", "geetha.bhat", "teacher"],
+    ["Shalini Nair", "Primary Teacher", "Primary", "shalini.nair", "teacher"],
+    ["Usha Rao", "Primary Teacher", "Primary", "usha.rao", "teacher"],
+    ["Poornima Shenoy", "Primary Teacher", "Primary", "poornima.shenoy", "teacher"],
+
+    // Additional Middle & Secondary Teachers
+    ["Manjunath Kamath", "Mathematics Teacher", "Mathematics", "manjunath.kamath", "teacher"],
+    ["Sneha Deshmukh", "Mathematics Teacher", "Mathematics", "sneha.deshmukh", "teacher"],
+    ["Bhavana Joshi", "Secondary Mathematics Teacher", "Mathematics", "bhavana.joshi", "teacher"],
+    ["Anand Kulkarni", "Chemistry Teacher", "Science", "anand.kulkarni", "teacher"],
+    ["Archana Shenoy", "General Science Teacher", "Science", "archana.shenoy", "teacher"],
+    ["Sandeep Nayak", "Physics Teacher", "Science", "sandeep.nayak", "teacher"],
+    ["Ananya Mukherjee", "English Literature Teacher", "English", "ananya.mukherjee", "teacher"],
+    ["Meenakshi Sundaram", "English Language Teacher", "English", "meenakshi.sundaram", "teacher"],
+    ["Harish Varma", "History & Civics Teacher", "Social Studies", "harish.varma", "teacher"],
+    ["Vidya Sagar", "Geography & Economics Teacher", "Social Studies", "vidya.sagar", "teacher"],
+    ["Santosh Mishra", "Hindi & Sanskrit Teacher", "Languages", "santosh.mishra", "teacher"],
+    ["Raghavendra Dixit", "Kannada Teacher", "Languages", "raghavendra.dixit", "teacher"],
+    ["Swathi Hegde", "Secondary Kannada Teacher", "Languages", "swathi.hegde", "teacher"],
+    ["Tejaswini Kulkarni", "Computer Applications Teacher", "Computer Science", "tejaswini.kulkarni", "teacher"],
+    ["Rohit Verma", "AI & Robotics Instructor", "Computer Science", "rohit.verma", "teacher"],
+
+    // Additional Sports & Arts Faculty
+    ["Chetan Gowda", "Physical Education Teacher", "Sports", "chetan.gowda", "teacher"],
+    ["Preeti Alva", "Yoga & PE Teacher", "Sports", "preeti.alva", "teacher"],
+    ["Shilpa Murthy", "Visual Arts Teacher", "Arts", "shilpa.murthy", "teacher"],
+    ["Vincent D'Souza", "Western Music Teacher", "Arts", "vincent.dsouza", "teacher"],
+    ["Vandana Kamath", "Performing Arts & Dance Teacher", "Arts", "vandana.kamath", "teacher"],
+
+    // Student Welfare, Labs & Library
+    ["Dr. Sudha Narayan", "Student Counselor & Psychologist", "Student Welfare", "sudha.narayan", "staff"],
+    ["Father Thomas Mathew", "Life Skills Coordinator", "Student Welfare", "thomas.mathew", "staff"],
+    ["Jayashree Shenoy", "Assistant Librarian", "Library", "jayashree.shenoy", "staff"],
+    ["Basavaraj Patil", "Physics Lab Assistant", "Science Laboratories", "basavaraj.patil", "staff"],
+    ["Jyothi Deshmukh", "Chemistry Lab Assistant", "Science Laboratories", "jyothi.deshmukh", "staff"],
+    ["Venkatesh Prasad", "Biology Lab Assistant", "Science Laboratories", "venkatesh.prasad", "staff"],
+    ["Kiran Kumar", "IT Systems & Network Administrator", "IT Support", "kiran.kumar", "staff"],
+
+    // Administration, Finance, Health & Operations
+    ["Mahesh Shenoy", "Senior Accounts Executive", "Administration", "mahesh.shenoy", "accountant"],
+    ["Lakshmi Narayan", "Admissions Coordinator", "Administration", "lakshmi.narayan", "staff"],
+    ["Sister Mary Joseph", "Infirmary Head Nurse", "Health & Wellness", "mary.joseph", "staff"],
+    ["Dr. Arun Kumar", "School Medical Consultant", "Health & Wellness", "arun.kumar", "staff"],
+    ["Gopinath Naik", "Transport Fleet Supervisor", "Transport", "gopinath.naik", "staff"],
+    ["Subhash Chandra", "Campus Estate & Facilities Manager", "Facilities", "subhash.chandra", "staff"],
+    ["Pushpa Murthy", "Examination Records In-Charge", "Administration", "pushpa.murthy", "staff"],
   ];
   const staffJobs = STAFF.map(([name, , , slug, role]) => ({
     email: `${slug}@myschool.edu.in`,
@@ -631,15 +684,32 @@ async function main() {
   await insert("staff", staffRows);
 
   // Subject -> teacher, used for results sanity, assignments and messages.
-  // Multiple teachers per subject — we'll pick from them.
+  // Multiple teachers per subject across all departments.
+  const filterByDeptOrSub = (dept, keyword) =>
+    staffRows.filter(
+      (s) => s.department === dept || (keyword && s.designation.toLowerCase().includes(keyword.toLowerCase()))
+    );
+
+  const mathTeachers = filterByDeptOrSub("Mathematics", "Mathematics");
+  const scienceTeachers = filterByDeptOrSub("Science", "Science");
+  const englishTeachers = filterByDeptOrSub("English", "English");
+  const ssTeachers = filterByDeptOrSub("Social Studies", "Social");
+  const csTeachers = filterByDeptOrSub("Computer Science", "Computer");
+  const hindiTeachers = staffRows.filter(
+    (s) => s.designation.toLowerCase().includes("hindi") || s.department === "Languages"
+  );
+  const kannadaTeachers = staffRows.filter(
+    (s) => s.designation.toLowerCase().includes("kannada") || s.department === "Languages"
+  );
+
   const SUBJECT_TEACHERS = {
-    Mathematics: [staffRows[2], staffRows[15], staffRows[21]],
-    Science: [staffRows[3], staffRows[16], staffRows[22]],
-    English: [staffRows[4], staffRows[17], staffRows[24]],
-    "Social Studies": [staffRows[5], staffRows[18], staffRows[23]],
-    "Computer Science": [staffRows[6], staffRows[25]],
-    Hindi: [staffRows[8], staffRows[19]],
-    Kannada: [staffRows[8], staffRows[20]],
+    Mathematics: mathTeachers.length ? mathTeachers : [staffRows[2]],
+    Science: scienceTeachers.length ? scienceTeachers : [staffRows[3]],
+    English: englishTeachers.length ? englishTeachers : [staffRows[4]],
+    "Social Studies": ssTeachers.length ? ssTeachers : [staffRows[5]],
+    "Computer Science": csTeachers.length ? csTeachers : [staffRows[6]],
+    Hindi: hindiTeachers.length ? hindiTeachers : [staffRows[8]],
+    Kannada: kannadaTeachers.length ? kannadaTeachers : [staffRows[8]],
   };
   const pickTeacher = (subject) => pick(SUBJECT_TEACHERS[subject] ?? [staffRows[2]]);
 
@@ -866,9 +936,9 @@ async function main() {
   }
 
   // Pool of teachers available for homeroom duty. We'll cycle through them.
-  // Indices 2..25 are teaching staff (0=principal, 1=VP, 9=librarian, 26-29=support)
+  // All teaching staff with role 'teacher'
   const teacherPool = staffRows.filter(
-    (_, i) => i >= 2 && i <= 25
+    (_, i) => STAFF[i][4] === "teacher"
   );
   let teacherIdx = 0;
   const nextTeacher = () => teacherPool[teacherIdx++ % teacherPool.length];
