@@ -5,6 +5,7 @@ import {
   Activity,
   BookOpen,
   Briefcase,
+  ChevronDown,
   Copy,
   ExternalLink,
   Lock,
@@ -328,7 +329,42 @@ export function StaffDrawer({
           </div>
         </div>
 
-        <div className="drawer-tabs scroll-x">
+        {/* Mobile Section Selector for small screens */}
+        <div className="sm:hidden mb-2">
+          <div className="segmented-mobile-select">
+            <div className="segmented-mobile-select-trigger">
+              <span className="font-semibold text-xs text-[var(--text-primary)] flex items-center gap-2 truncate">
+                {(() => {
+                  const CurrentIcon = STAFF_SECTION_ICONS[tab] || Briefcase;
+                  return (
+                    <>
+                      <CurrentIcon size={14} className="text-[var(--brand)] flex-shrink-0" />
+                      <span className="truncate">{labels[tab] ?? tab}</span>
+                    </>
+                  );
+                })()}
+              </span>
+              <ChevronDown size={14} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
+            </div>
+            <select
+              value={tab}
+              onChange={(e) => setTab(e.target.value as StaffSection)}
+              className="segmented-mobile-native-select"
+            >
+              {ALL_STAFF_SECTIONS.map((key) => {
+                const locked = allowed !== null && !allowed.has(key);
+                return (
+                  <option key={key} value={key} disabled={locked}>
+                    {labels[key] ?? key} {locked ? "(Restricted)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
+
+        {/* Desktop / Tablet Horizontal Strip */}
+        <div className="drawer-tabs scroll-x hidden sm:flex">
           {ALL_STAFF_SECTIONS.map((key) => {
             const Icon = STAFF_SECTION_ICONS[key];
             const locked = allowed !== null && !allowed.has(key);
@@ -344,11 +380,7 @@ export function StaffDrawer({
                 style={{ position: "relative" }}
               >
                 {isActive && (
-                  <motion.div
-                    layoutId="staffDrawerTab"
-                    className="tab-indicator"
-                    transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
-                  />
+                  <div className="tab-indicator" />
                 )}
                 <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <Icon size={14} aria-hidden="true" />

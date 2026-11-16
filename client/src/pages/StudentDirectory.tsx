@@ -1052,7 +1052,30 @@ function StudentDrawer({
         </div>
       </div>
 
-      <div className="drawer-tabs scroll-x">
+      {/* Mobile Section Selector for small screens */}
+      <div className="sm:hidden mb-2">
+        <div className="segmented-mobile-select">
+          <div className="segmented-mobile-select-trigger">
+            <span className="font-semibold text-xs text-[var(--text-primary)] truncate">
+              {DRAWER_TABS[tab] ?? tab}
+            </span>
+            <ChevronDown size={14} className="text-[var(--text-muted)] flex-shrink-0 ml-2" />
+          </div>
+          <select
+            value={tab}
+            onChange={(e) => setTab(e.target.value as StudentSection)}
+            className="segmented-mobile-native-select"
+          >
+            {visibleTabs.map((key) => (
+              <option key={key} value={key}>
+                {DRAWER_TABS[key] ?? key}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="drawer-tabs scroll-x hidden sm:flex">
         {visibleTabs.map((key) => {
           const isActive = tab === key;
           return (
@@ -1063,11 +1086,7 @@ function StudentDrawer({
               style={{ position: "relative" }}
             >
               {isActive && (
-                <motion.div
-                  layoutId="pupilDrawerActiveTab"
-                  className="tab-indicator"
-                  transition={{ type: "spring", stiffness: 500, damping: 38, mass: 0.8 }}
-                />
+                <div className="tab-indicator" />
               )}
               <span style={{ position: "relative", zIndex: 1 }}>{DRAWER_TABS[key]}</span>
             </button>
@@ -1729,7 +1748,13 @@ function StudentDialog({
                       Annual Tuition Fee {form.grade ? `· ${formatGradeLabel(form.grade)}` : ""}
                     </span>
                     <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--brand)" }}>
-                      {parseInt(String(form.grade || "").replace(/\D/g, ""), 10) >= 9 ? "₹60,000" : "₹50,000"}
+                      {(() => {
+                        const g = parseInt(String(form.grade || "").replace(/\D/g, ""), 10);
+                        if (g >= 9) return "₹60,000";
+                        if (g >= 6) return "₹50,000";
+                        if (g >= 4) return "₹40,000";
+                        return "₹35,000";
+                      })()}
                       <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}> / year</span>
                     </span>
                   </div>

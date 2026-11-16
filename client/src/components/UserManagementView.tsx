@@ -80,6 +80,11 @@ interface Summary {
 }
 
 const ALL_GRADES = [
+  "Grade 1",
+  "Grade 2",
+  "Grade 3",
+  "Grade 4",
+  "Grade 5",
   "Grade 6",
   "Grade 7",
   "Grade 8",
@@ -89,8 +94,13 @@ const ALL_GRADES = [
 
 const CLASSROOM_OPTIONS = [
   "none",
-  "Grade 6-A", "Grade 6-B",
-  "Grade 7-A", "Grade 7-B",
+  "Grade 1-A", "Grade 1-B",
+  "Grade 2-A", "Grade 2-B",
+  "Grade 3-A", "Grade 3-B", "Grade 3-C",
+  "Grade 4-A", "Grade 4-B",
+  "Grade 5-A", "Grade 5-B", "Grade 5-C",
+  "Grade 6-A", "Grade 6-B", "Grade 6-C",
+  "Grade 7-A", "Grade 7-B", "Grade 7-C",
   "Grade 8-A", "Grade 8-B",
   "Grade 9-A", "Grade 9-B",
   "Grade 10-A", "Grade 10-B",
@@ -918,11 +928,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* Controls Toolbar in a Single Clean Straight Line */}
-          <div className="px-6 sm:px-7 py-3.5 border-b border-[var(--border)] bg-[var(--bg-panel)] flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
-            <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Controls Toolbar in a Clean Responsive Layout */}
+          <div className="px-4 sm:px-7 py-3.5 border-b border-[var(--border)] bg-[var(--bg-panel)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
               {/* Search */}
-              <div className="search-field h-10 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 w-60 sm:w-72">
+              <div className="search-field h-10 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 w-full sm:w-64">
                 <Search size={15} className="text-[var(--text-muted)] flex-shrink-0" />
                 <input
                   value={staffQuery}
@@ -932,7 +942,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {/* Roles: Dynamic tabs with Smooth Horizontal Sliding Indicator */}
+              {/* Roles: Dynamic tabs on desktop, clean selector on mobile */}
               <SegmentedControl
                 ariaLabel="Filter staff by role"
                 layoutId="userMgmtStaffRoles"
@@ -946,7 +956,7 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
             </div>
 
             {/* Show / Hide Passwords */}
-            <div className="flex items-center flex-shrink-0">
+            <div className="flex items-center justify-end flex-shrink-0">
               <button
                 className={`secondary-button h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                   revealed
@@ -1206,11 +1216,11 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
             </div>
           </div>
 
-          {/* Controls Toolbar in a Single Clean Straight Line */}
-          <div className="px-6 sm:px-7 py-3.5 border-b border-[var(--border)] bg-[var(--bg-panel)] flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
-            <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Controls Toolbar in a Clean Responsive Layout */}
+          <div className="px-4 sm:px-7 py-3.5 border-b border-[var(--border)] bg-[var(--bg-panel)] flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
               {/* Search */}
-              <div className="search-field h-10 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 w-60 sm:w-72">
+              <div className="search-field h-10 px-3.5 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] flex items-center gap-2.5 w-full sm:w-64">
                 <Search size={15} className="text-[var(--text-muted)] flex-shrink-0" />
                 <input
                   value={studentQuery}
@@ -1220,22 +1230,22 @@ export function UserManagementView({ onBack }: { onBack: () => void }) {
                 />
               </div>
 
-              {/* Intuitive School Division Filters with Smooth Horizontal Sliding Indicator */}
+              {/* Intuitive School Division Filters on desktop, clean selector on mobile */}
               <SegmentedControl
                 ariaLabel="Filter students by division"
                 layoutId="userMgmtStudentDivisions"
                 value={studentFilter}
                 onChange={(val) => setStudentFilter(val as "all" | "primary" | "middle" | "high")}
                 options={[
-                  { value: "all", label: "All Students (G6–10)" },
-                  { value: "middle", label: "Middle School (G6–8)" },
-                  { value: "high", label: "High School (G9–10)" },
+                  { value: "all", label: "All Students (G6–10)", mobileLabel: "All Students" },
+                  { value: "middle", label: "Middle School (G6–8)", mobileLabel: "Middle (G6–8)" },
+                  { value: "high", label: "High School (G9–10)", mobileLabel: "High (G9–10)" },
                 ]}
               />
             </div>
 
             {/* Toggle Password Masking */}
-            <div className="flex items-center flex-shrink-0">
+            <div className="flex items-center justify-end flex-shrink-0">
               <button
                 className={`secondary-button h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap ${
                   revealed

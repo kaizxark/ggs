@@ -810,8 +810,19 @@ async function filterOptions(orgId: string): Promise<Json> {
     new Set(classrooms.map(c => String(c.section ?? "")).filter(Boolean))
   );
 
-  const defaultGrades = ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
-  const defaultSections = ["A", "B"];
+  const defaultGrades = [
+    "Grade 1",
+    "Grade 2",
+    "Grade 3",
+    "Grade 4",
+    "Grade 5",
+    "Grade 6",
+    "Grade 7",
+    "Grade 8",
+    "Grade 9",
+    "Grade 10",
+  ];
+  const defaultSections = ["A", "B", "C"];
   const effectiveGrades = grades.length ? grades : defaultGrades;
   const effectiveSections = sections.length ? sections : defaultSections;
 

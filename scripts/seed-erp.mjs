@@ -7,8 +7,11 @@
  * the numbers have to be *generated the way real numbers are produced*, not
  * drawn independently at random:
  *
- *   - 100 students live in 78 households. Siblings share a surname, a house
- *     address and one guardian login, and receive a sibling fee discount.
+ *   - ~1000 students live in ~720 households, spanning Grades 1 to 10.
+ *     Siblings share a surname, a house address and one guardian login, and
+ *     receive a sibling fee discount.
+ *   - Sections A and B exist for every grade; Grade 3, 5, 6, and 7 also have
+ *     a Section C because of higher demand.
  *   - Each student has a latent academic ability plus a STEM/humanities tilt
  *     and a per-subject affinity, so a student who is strong in Mathematics is
  *     normally also strong in Science. Exams have their own difficulty. The
@@ -64,39 +67,66 @@ const headers = {
   "Content-Type": "application/json",
 };
 
-async function req(method, path, { body, prefer } = {}) {
-  const res = await fetch(SUPABASE_URL + path, {
-    method,
-    headers: prefer ? { ...headers, Prefer: prefer } : headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
-  let data = null;
-  if (text) {
+async function req(method, path, { body, prefer, timeout = 60000, retries = 3 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
+      const res = await fetch(SUPABASE_URL + path, {
+        method,
+        headers: prefer ? { ...headers, Prefer: prefer } : headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(timeout),
+      });
+      const text = await res.text();
+      let data = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+      }
+      if (!res.ok) {
+        throw new Error(
+          `${method} ${path} -> ${res.status}: ${
+            typeof data === "string" ? data : JSON.stringify(data)
+          }`
+        );
+      }
+      return data;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries - 1) {
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      }
     }
   }
-  if (!res.ok) {
-    throw new Error(
-      `${method} ${path} -> ${res.status}: ${
-        typeof data === "string" ? data : JSON.stringify(data)
-      }`
-    );
-  }
-  return data;
+  throw lastErr;
 }
 
 async function insert(table, rows) {
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500);
-    await req("POST", `/rest/v1/${table}`, {
-      body: chunk,
-      prefer: "return=minimal",
-    });
+  const chunkSize = table === "attendance" ? 800 : 500;
+  const chunks = [];
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    chunks.push(rows.slice(i, i + chunkSize));
   }
+  let idx = 0;
+  let inserted = 0;
+  const concurrency = Math.min(3, chunks.length);
+  async function worker() {
+    while (idx < chunks.length) {
+      const c = chunks[idx++];
+      await req("POST", `/rest/v1/${table}`, {
+        body: c,
+        prefer: "return=minimal",
+      });
+      inserted += c.length;
+      if (rows.length > 5000 && (inserted % 5000 < chunkSize || inserted >= rows.length)) {
+        console.log(`    [${table}] ${inserted}/${rows.length} rows inserted`);
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker));
   console.log(`  + ${table}: ${rows.length} rows`);
 }
 
@@ -115,8 +145,8 @@ async function upsert(table, rows) {
 
 // Delete rows in batches so `id=in.(...)` URLs stay short.
 async function deleteInBatches(table, key, ids) {
-  for (let i = 0; i < ids.length; i += 50) {
-    const chunk = ids.slice(i, i + 50);
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
     await req("DELETE", `/rest/v1/${table}?${key}=in.(${chunk.join(",")})`, {
       prefer: "return=minimal",
     });
@@ -245,6 +275,10 @@ const MAALE_FIRST = [
   "Gopal", "Hanumanth", "Indrajit", "Jagadeesh", "Kalyan", "Laxman", "Mallesh",
   "Nagaraj", "Pramod", "Shiva", "Uday", "Vinayak", "Faizan", "Ibrahim", "Sameer",
   "Zaid", "Gurpreet", "Harjeet", "Manjot", "Amritpal", "Jaswinder", "Rupinder",
+  "Anand", "Bhuvan", "Darshan", "Ganesh", "Hari", "Ishaan", "Jayant", "Kaushik",
+  "Madhav", "Nandan", "Prateek", "Rajat", "Sahil", "Tanmay", "Vikas", "Ajay",
+  "Dev", "Gokul", "Kunal", "Mithun", "Nitin", "Pranav", "Revanth", "Sachin",
+  "Tushar", "Vikram", "Abhinav", "Chirag", "Dhruv", "Gaurav", "Hemant", "Ishan",
 ];
 const FEMALE_FIRST = [
   "Aishwarya", "Ananya", "Bhavana", "Chaitra", "Deepa", "Divya", "Eshwari",
@@ -257,6 +291,9 @@ const FEMALE_FIRST = [
   "Thulasi", "Vanitha", "Aditi", "Bhavika", "Chitra", "Fatima", "Geetha",
   "Hansika", "Isha", "Kanchan", "Lavanya", "Manjula", "Neha", "Radha", "Sanjana",
   "Tanvi", "Ujala", "Vani", "Zoya", "Sameena", "Ayesha", "Nazia", "Heena",
+  "Ankita", "Diya", "Gauri", "Ishita", "Kiara", "Mira", "Pari", "Rithika",
+  "Shravya", "Trisha", "Vidya", "Anushka", "Charvi", "Esha", "Himani", "Janani",
+  "Krithika", "Manya", "Niharika", "Prerana", "Ria", "Saanvi", "Tara", "Vaidehi",
 ];
 // Adult names for guardians — an older generation than the student pool.
 const FATHER_FIRST = [
@@ -267,6 +304,8 @@ const FATHER_FIRST = [
   "Chandrashekhar", "Venkataramana", "Mohan", "Sridhar", "Naveena", "Puttrappa",
   "Yallappa", "Chalapathi", "Rudrappa", "Shivappa", "Hanumantha", "Basanagouda",
   "Irshad", "Salim", "Javed", "Harbhajan", "Balbir", "Gurdeep", "Satnam",
+  "Raghunath", "Dayanand", "Jagadish", "Lakshmana", "Narayana", "Prabhakar",
+  "Shankar", "Umesh", "Virupaksha",
 ];
 const MOTHER_FIRST = [
   "Lakshmi", "Saroja", "Kausalya", "Radha", "Sridevi", "Anitha", "Shanthi",
@@ -275,6 +314,7 @@ const MOTHER_FIRST = [
   "Jayashree", "Shilpa", "Manjula", "Asha", "Beena", "Deepa", "Usha", "Vijaya",
   "Anandhi", "Sudha", "Rohini", "Sarala", "Vimala", "Bhagyavathi", "Fatema",
   "Shabana", "Nazneen", "Simran", "Gurpreet Kaur", "Jaswinder Kaur",
+  "Hemavathi", "Indumathi", "Kamala", "Nagamma", "Parvathi", "Ratna", "Sarojini",
 ];
 // A mother often keeps her maiden surname, so a student whose guardian is the
 // mother need not share the student's surname.
@@ -346,6 +386,14 @@ const LOCALITIES = [
     streets: ["Main Road", "Lake Side Road"] },
   { area: "Sulthanahalli", taluk: "Tumakuru", pincode: "572103", route: null,
     streets: ["Main Road", "Grama Panchayat Road"] },
+  { area: "SS Puram", taluk: "Tumakuru", pincode: "572101", route: null,
+    streets: ["1st Main", "2nd Cross", "Hospital Road", "Temple Road"] },
+  { area: "Kyathasandra", taluk: "Tumakuru", pincode: "572104", route: "RT-02",
+    streets: ["Main Road", "Railway Gate Road", "2nd Cross"] },
+  { area: "Aralaguppe", taluk: "Tumakuru", pincode: "572106", route: null,
+    streets: ["Main Road", "Lake View Road"] },
+  { area: "Doddaguni", taluk: "Tumakuru", pincode: "572107", route: null,
+    streets: ["Main Road", "Tank Road", "School Road"] },
 ];
 const locality = () => pick(LOCALITIES);
 
@@ -370,8 +418,9 @@ function makeAddress(loc) {
 // ----------------------------------------------------------------- teardown --
 async function teardown() {
   console.log("\nWiping existing seed data for the organisation…");
+  // Fetch all IDs (up to 5000 for larger dataset)
   const invoiceIds = (
-    await req("GET", `/rest/v1/invoices?select=id&organisation_id=eq.${ORG_ID}&limit=1000`)
+    await req("GET", `/rest/v1/invoices?select=id&organisation_id=eq.${ORG_ID}&limit=5000`)
   ).map((r) => r.id);
   const examIds = (
     await req("GET", `/rest/v1/examinations?select=id&organisation_id=eq.${ORG_ID}&limit=1000`)
@@ -379,7 +428,7 @@ async function teardown() {
 
   // Every profile except the two pre-existing admins is seed data — including
   // trigger-created profiles that live on junk organisations.
-  const profileIds = (await req("GET", "/rest/v1/profiles?select=id&limit=2000"))
+  const profileIds = (await req("GET", "/rest/v1/profiles?select=id&limit=5000"))
     .filter((p) => !KEEP_PROFILE_IDS.has(p.id))
     .map((p) => p.id);
 
@@ -396,8 +445,24 @@ async function teardown() {
   await del("payments", orgFilter);
   if (invoiceIds.length) await deleteInBatches("invoice_items", "invoice_id", invoiceIds);
   await del("invoices", orgFilter);
+  await del("exam_results", orgFilter);
   if (examIds.length) await deleteInBatches("exam_results", "examination_id", examIds);
   await del("assignments", orgFilter);
+  // Attendance has ~122k rows; delete month-by-month so PostgREST statement timeout (57014) is never hit
+  const attMonths = [
+    ["2026-04-01", "2026-05-01"],
+    ["2026-05-01", "2026-06-01"],
+    ["2026-06-01", "2026-07-01"],
+    ["2026-07-01", "2026-08-01"],
+    ["2026-08-01", "2026-09-01"],
+    ["2026-09-01", "2026-10-01"],
+    ["2026-10-01", "2026-11-01"],
+  ];
+  for (const [start, end] of attMonths) {
+    await req("DELETE", `/rest/v1/attendance?${orgFilter}&attendance_date=gte.${start}&attendance_date=lt.${end}`, {
+      prefer: "return=minimal",
+    }).catch(() => {});
+  }
   await del("attendance", orgFilter);
   await del("examinations", orgFilter);
   await del("enrollments", orgFilter);
@@ -408,60 +473,71 @@ async function teardown() {
   await del("transport_routes", orgFilter);
   await del("announcements", orgFilter);
   await del("staff", orgFilter);
-  if (profileIds.length) await deleteInBatches("profiles", "id", profileIds);
-
-  // Remove trigger-created junk organisations (no profiles left on them),
-  // but never the three that pre-date the seed.
-  const allOrgs = await req("GET", "/rest/v1/organisations?select=id");
-  let junkRemoved = 0;
-  for (const org of allOrgs) {
-    if (KEEP_ORG_IDS.has(org.id)) continue;
-    const withProfiles = await countOf("profiles", `&organisation_id=eq.${org.id}`);
-    if (withProfiles === 0) {
-      await del("organisations", `id=eq.${org.id}`);
-      junkRemoved++;
-    }
-  }
-  if (junkRemoved) console.log(`  - removed ${junkRemoved} junk organisations`);
-
-  // Remove the seeded auth users (profile ids == auth user ids).
-  for (const id of profileIds) {
-    await req("DELETE", `/auth/v1/admin/users/${id}`, {}).catch(() => {});
-  }
-  console.log(`  removed ${profileIds.length} auth users / profiles`);
 }
 
 // The auth trigger creates a junk organisation for every new user. Collect
 // those ids (via the auto-created profiles) so we can remove them once the
 // real profiles have been merged onto the correct organisation.
 async function collectJunkOrgs(userIds) {
-  const rows = await req(
-    "GET",
-    `/rest/v1/profiles?id=in.(${userIds.join(",")})&select=organisation_id`
-  );
-  return rows.map((r) => r.organisation_id).filter((id) => id && id !== ORG_ID);
+  const orgIds = [];
+  for (let i = 0; i < userIds.length; i += 40) {
+    const chunk = userIds.slice(i, i + 40);
+    const rows = await req(
+      "GET",
+      `/rest/v1/profiles?id=in.(${chunk.join(",")})&select=organisation_id`
+    );
+    orgIds.push(...rows.map((r) => r.organisation_id).filter((id) => id && id !== ORG_ID));
+  }
+  return orgIds;
 }
 
 async function createAuthUsers(jobs) {
+  // Check if any users already exist in auth.users so we reuse their auth IDs
+  const adminUsersRes = await req("GET", "/auth/v1/admin/users?per_page=1000").catch(() => null);
+  const existingByEmail = new Map(
+    (adminUsersRes?.users ?? []).filter((u) => u.email).map((u) => [u.email.toLowerCase(), u.id])
+  );
+
   let idx = 0;
   async function worker() {
     while (idx < jobs.length) {
       const i = idx++;
+      const job = jobs[i];
+      if (existingByEmail.has(job.email.toLowerCase())) {
+        job.id = existingByEmail.get(job.email.toLowerCase());
+        continue;
+      }
       if (!DEFAULT_PASSWORD) {
         throw new Error("Set SEED_PASSWORD before seeding auth users.");
       }
-      const res = await req("POST", "/auth/v1/admin/users", {
-        body: {
-          email: jobs[i].email,
-          password: DEFAULT_PASSWORD,
-          email_confirm: true,
-          user_metadata: { full_name: jobs[i].full_name },
-        },
-      });
-      jobs[i].id = res.id;
+      let attempts = 0;
+      while (attempts < 5) {
+        try {
+          const res = await req("POST", "/auth/v1/admin/users", {
+            body: {
+              email: job.email,
+              password: DEFAULT_PASSWORD,
+              email_confirm: true,
+              user_metadata: { full_name: job.full_name },
+            },
+          });
+          job.id = res.id;
+          break;
+        } catch (e) {
+          if (e.message && e.message.includes("429") && attempts < 4) {
+            attempts++;
+            await new Promise((r) => setTimeout(r, 1000 * attempts));
+            continue;
+          }
+          if (e.message && e.message.includes("already registered")) {
+            break;
+          }
+          throw e;
+        }
+      }
     }
   }
-  await Promise.all(Array.from({ length: 6 }, worker));
+  await Promise.all(Array.from({ length: 5 }, worker));
 }
 
 // -------------------------------------------------------------------- main --
@@ -479,10 +555,13 @@ async function main() {
   console.log('Seeding organisation:', ORG_ID, '("My School")\n');
 
   // ============================================================== 1. staff ==
-  console.log("[1/8] Staff (10)…");
+  // With 10 grades × 2-3 sections each we need ~25 classrooms and 25+ teachers.
+  console.log("[1/8] Staff (30)…");
   const STAFF = [
+    // Leadership
     ["Dr. Meera Iyer", "Principal", "School Leadership", "dr.meera.iyer", "principal"],
     ["Rajesh Menon", "Vice Principal", "School Leadership", "rajesh.menon", "staff"],
+    // Primary teachers (Grades 1–5)
     ["Anita Kulkarni", "Mathematics Teacher", "Mathematics", "anita.kulkarni", "teacher"],
     ["Suresh Prabhu", "Science Teacher", "Science", "suresh.prabhu", "teacher"],
     ["Shobha Nair", "English Teacher", "English", "shobha.nair", "teacher"],
@@ -491,6 +570,29 @@ async function main() {
     ["Eklavya Deshmukh", "Physical Education Teacher", "Sports", "eklavya.deshmukh", "teacher"],
     ["Farida Sheikh", "Hindi & Kannada Teacher", "Languages", "farida.sheikh", "teacher"],
     ["Gurpreet Singh", "Librarian & Exam Coordinator", "Library", "gurpreet.singh", "staff"],
+    // Additional primary teachers
+    ["Suma Hegde", "Primary Teacher", "Primary", "suma.hegde", "teacher"],
+    ["Vasanthi Gowda", "Primary Teacher", "Primary", "vasanthi.gowda", "teacher"],
+    ["Malathi Rao", "Primary Teacher", "Primary", "malathi.rao", "teacher"],
+    ["Sunitha Reddy", "Primary Teacher", "Primary", "sunitha.reddy", "teacher"],
+    ["Kavitha Patil", "Primary Teacher", "Primary", "kavitha.patil", "teacher"],
+    // Additional middle/secondary teachers
+    ["Ramesh Bhat", "Mathematics Teacher", "Mathematics", "ramesh.bhat", "teacher"],
+    ["Lalitha Iyer", "Science Teacher", "Science", "lalitha.iyer", "teacher"],
+    ["Deepak Joshi", "English Teacher", "English", "deepak.joshi", "teacher"],
+    ["Padma Nayak", "Social Studies Teacher", "Social Studies", "padma.nayak", "teacher"],
+    ["Vinay Shetty", "Hindi Teacher", "Languages", "vinay.shetty", "teacher"],
+    ["Chandana Murthy", "Kannada Teacher", "Languages", "chandana.murthy", "teacher"],
+    ["Praveen Kulkarni", "Mathematics Teacher", "Mathematics", "praveen.kulkarni", "teacher"],
+    ["Keerthi Hegde", "Science Teacher", "Science", "keerthi.hegde", "teacher"],
+    ["Nagesh Swamy", "Social Studies Teacher", "Social Studies", "nagesh.swamy", "teacher"],
+    ["Rekha Sharma", "English Teacher", "English", "rekha.sharma", "teacher"],
+    ["Girish Naidu", "Computer Science Teacher", "Computer Science", "girish.naidu", "teacher"],
+    // Support staff
+    ["Priya Deshpande", "Art & Craft Teacher", "Arts", "priya.deshpande", "teacher"],
+    ["Mohan Kumar", "Music Teacher", "Arts", "mohan.kumar", "teacher"],
+    ["Savitha Acharya", "Accounts Officer", "Administration", "savitha.acharya", "staff"],
+    ["Ravi Prasad", "Office Coordinator", "Administration", "ravi.prasad", "staff"],
   ];
   const staffJobs = STAFF.map(([name, , , slug, role]) => ({
     email: `${slug}@myschool.edu.in`,
@@ -522,38 +624,70 @@ async function main() {
   }));
   const junkOrgIds = new Set(await collectJunkOrgs(staffJobs.map((j) => j.id)));
   await upsert("profiles", staffProfiles);
+  if (junkOrgIds.size) {
+    await deleteInBatches("organisations", "id", [...junkOrgIds]);
+    console.log(`  - organisations: removed ${junkOrgIds.size} trigger-created junk orgs`);
+  }
   await insert("staff", staffRows);
 
   // Subject -> teacher, used for results sanity, assignments and messages.
-  const SUBJECT_TEACHER = {
-    Mathematics: staffRows[2],
-    Science: staffRows[3],
-    English: staffRows[4],
-    "Social Studies": staffRows[5],
-    "Computer Science": staffRows[6],
-    Hindi: staffRows[8],
-    Kannada: staffRows[8],
+  // Multiple teachers per subject — we'll pick from them.
+  const SUBJECT_TEACHERS = {
+    Mathematics: [staffRows[2], staffRows[15], staffRows[21]],
+    Science: [staffRows[3], staffRows[16], staffRows[22]],
+    English: [staffRows[4], staffRows[17], staffRows[24]],
+    "Social Studies": [staffRows[5], staffRows[18], staffRows[23]],
+    "Computer Science": [staffRows[6], staffRows[25]],
+    Hindi: [staffRows[8], staffRows[19]],
+    Kannada: [staffRows[8], staffRows[20]],
   };
+  const pickTeacher = (subject) => pick(SUBJECT_TEACHERS[subject] ?? [staffRows[2]]);
 
   // =========================================================== 2. families ==
-  // 100 students across 78 households. Siblings share the surname, the house
+  // ~1000 students across ~720 households. Siblings share the surname, the house
   // and one guardian login; the second and third child get a tuition discount.
-  console.log("[2/8] Families & students (100 students in 78 households)…");
+  console.log("[2/8] Families & students (~1000 students in ~720 households)…");
 
+  // Grade distribution: roughly 100 students per grade, with some variation.
+  // Grades 3, 5, 6, 7 get slightly more (110-120 each, justifying section C).
+  const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  // Target students per grade — total ~1000
+  const gradeTarget = {
+    1: 90, 2: 90, 3: 115, 4: 90, 5: 110, 6: 115, 7: 110, 8: 95, 9: 95, 10: 90,
+  };
+  // Working copy — we'll decrement as we allocate.
+  const gradeCapacity = { ...gradeTarget };
+  const TOTAL_STUDENTS = Object.values(gradeCapacity).reduce((a, b) => a + b, 0);
+
+  // Build household sizes to hit ~1000 children.
+  // ~520 single-child, ~140 two-child, ~20 three-child = 520+280+60 = 860
+  // Let's calculate precisely:
+  // We want exactly TOTAL_STUDENTS children.
+  // 520 singles + 150 doubles + 20 triples = 520 + 300 + 60 = 880 — too few
+  // Let's use: 530 singles + 160 doubles + 22 triples = 530 + 320 + 66 = 916
+  // Adjust: 540 singles + 170 doubles + 20 triples = 540 + 340 + 60 = 940
+  // More: 540 + 170 + 30 = 540+340+90 = 970
+  // Final: 560 + 170 + 30 = 560+340+90 = 990  (close to 1000)
+  // Actually let's just compute it:
+  let remaining = TOTAL_STUDENTS;
   const householdSizes = [];
-  for (let i = 0; i < 60; i++) householdSizes.push(1); // 60 single-child
-  for (let i = 0; i < 14; i++) householdSizes.push(2); // 14 with two
-  for (let i = 0; i < 4; i++) householdSizes.push(3); // 4 with three
-  // 60 + 28 + 12 = 100 children in 78 households.
+  // ~3% three-child families, ~20% two-child, rest single
+  const threeChild = Math.round(remaining * 0.025);
+  remaining -= threeChild * 3;
+  const twoChild = Math.round(remaining * 0.22);
+  remaining -= twoChild * 2;
+  const singleChild = remaining;
+  for (let i = 0; i < singleChild; i++) householdSizes.push(1);
+  for (let i = 0; i < twoChild; i++) householdSizes.push(2);
+  for (let i = 0; i < threeChild; i++) householdSizes.push(3);
+  const actualTotal = householdSizes.reduce((a, b) => a + b, 0);
+  console.log(`    planned: ${TOTAL_STUDENTS} students, actual from households: ${actualTotal} in ${householdSizes.length} households`);
+
   // Shuffle so large families are not all created first.
   for (let i = householdSizes.length - 1; i > 0; i--) {
     const j = int(0, i);
     [householdSizes[i], householdSizes[j]] = [householdSizes[j], householdSizes[i]];
   }
-
-  // Exactly 20 students per grade, but siblings must land in different grades.
-  const gradeCapacity = { 6: 20, 7: 20, 8: 20, 9: 20, 10: 20 };
-  const GRADES = [6, 7, 8, 9, 10];
 
   const families = householdSizes.map((size) => {
     const surname = surnamePool();
@@ -569,6 +703,7 @@ async function main() {
     const grades = [];
     for (let c = 0; c < size; c++) {
       const open = GRADES.filter((g) => gradeCapacity[g] > 0);
+      if (!open.length) break; // safety valve
       let ok = open.filter((g) => grades.every((x) => Math.abs(x - g) >= 2));
       if (!ok.length) ok = open;
       const g = pick(ok);
@@ -627,14 +762,14 @@ async function main() {
         ["2026-08-24", 3],
       ]);
 
-      // Two students left during the year (transfer certificate issued).
-      const leaving = chance(0.02) ? weighted([["2026-07-18", 1], ["2026-06-27", 1], ["2026-08-15", 1]]) : null;
+      // A small fraction left during the year (transfer certificate issued).
+      const leaving = chance(0.015) ? weighted([["2026-07-18", 1], ["2026-06-27", 1], ["2026-08-15", 1]]) : null;
 
       // Seniors get a school email; younger children simply do not have one.
       const email =
         grade >= 9
           ? `${first}.${fam.surname}@gks.edu.in`.toLowerCase()
-          : chance(0.22)
+          : chance(0.15)
             ? `${first}.${fam.surname}${int(1, 99)}@gks.edu.in`.toLowerCase()
             : null;
 
@@ -676,38 +811,14 @@ async function main() {
     });
   }
 
+  console.log(`    generated ${students.length} students`);
+
   // USNs follow the date of joining, the way a real register does.
   const byJoin = [...students].sort(
     (a, b) => a.joined_on.localeCompare(b.joined_on) || a.last_name.localeCompare(b.last_name)
   );
   // The school's own shape: initials and four digits, starting at 1001.
   byJoin.forEach((s, i) => (s.usn = `GGS${pad(i + 1001, 4)}`));
-
-  // Guardian auth accounts: one login per household.
-  const guardianJobs = families.map((fam) => ({
-    email: fam.guardianEmail,
-    full_name: fam.guardianName,
-  }));
-  await createAuthUsers(guardianJobs);
-  families.forEach((fam, i) => (fam.guardianId = guardianJobs[i].id));
-
-  for (const id of await collectJunkOrgs(guardianJobs.map((j) => j.id))) junkOrgIds.add(id);
-  await upsert(
-    "profiles",
-    families.map((fam) => ({
-      id: fam.guardianId,
-      organisation_id: ORG_ID,
-      full_name: fam.guardianName,
-      email: fam.guardianEmail,
-      role: "parent",
-      avatar_url: null,
-    }))
-  );
-
-  if (junkOrgIds.size) {
-    await deleteInBatches("organisations", "id", [...junkOrgIds]);
-    console.log(`  - organisations: removed ${junkOrgIds.size} trigger-created junk orgs`);
-  }
 
   await insert(
     "students",
@@ -744,47 +855,100 @@ async function main() {
   };
   await insert("academic_years", [academicYear]);
 
-  // Each grade has one homeroom teacher, taken from the subject faculty.
-  const HOMEROOM = [staffRows[2], staffRows[3], staffRows[4], staffRows[5], staffRows[6]];
-  const classrooms = GRADES.map((grade, i) => ({
-    id: uuid(),
-    organisation_id: ORG_ID,
-    academic_year_id: academicYear.id,
-    grade: String(grade),
-    section: "A",
-    room: `R-${101 + i}`,
-    capacity: 30,
-    class_teacher_id: HOMEROOM[i].id,
-  }));
+  // Sections: A and B for every grade. Grades 3, 5, 6, 7 also get section C.
+  const SECTION_MAP = {};
+  for (const g of GRADES) {
+    if ([3, 5, 6, 7].includes(g)) {
+      SECTION_MAP[g] = ["A", "B", "C"];
+    } else {
+      SECTION_MAP[g] = ["A", "B"];
+    }
+  }
+
+  // Pool of teachers available for homeroom duty. We'll cycle through them.
+  // Indices 2..25 are teaching staff (0=principal, 1=VP, 9=librarian, 26-29=support)
+  const teacherPool = staffRows.filter(
+    (_, i) => i >= 2 && i <= 25
+  );
+  let teacherIdx = 0;
+  const nextTeacher = () => teacherPool[teacherIdx++ % teacherPool.length];
+
+  const classrooms = [];
+  let roomNum = 101;
+  for (const grade of GRADES) {
+    for (const section of SECTION_MAP[grade]) {
+      classrooms.push({
+        id: uuid(),
+        organisation_id: ORG_ID,
+        academic_year_id: academicYear.id,
+        grade: String(grade),
+        section,
+        room: `R-${roomNum++}`,
+        capacity: grade <= 5 ? 45 : 40,
+        class_teacher_id: nextTeacher().id,
+      });
+    }
+  }
   await insert("classrooms", classrooms);
 
-  const classroomOfGrade = new Map(GRADES.map((g, i) => [g, classrooms[i]]));
+  // Build a map: grade -> list of classrooms for that grade
+  const classroomsByGrade = new Map();
+  for (const g of GRADES) {
+    classroomsByGrade.set(g, classrooms.filter((c) => c.grade === String(g)));
+  }
+
+  // Distribute students across sections within their grade (round-robin).
+  const sectionCounters = new Map();
+  for (const g of GRADES) sectionCounters.set(g, 0);
+
+  // Sort students by grade, then by USN for stable distribution.
+  const studentsByGrade = new Map();
+  for (const g of GRADES) {
+    studentsByGrade.set(
+      g,
+      students.filter((s) => s.grade === g).sort((a, b) => a.usn.localeCompare(b.usn))
+    );
+  }
+
   const enrollments = [];
-  for (const s of students) {
-    const classroom = classroomOfGrade.get(s.grade);
-    // Roll numbers follow USN order within the class.
-    const peers = students
-      .filter((x) => x.grade === s.grade)
-      .sort((a, b) => a.usn.localeCompare(b.usn));
-    enrollments.push({
-      id: uuid(),
-      organisation_id: ORG_ID,
-      student_id: s.id,
-      classroom_id: classroom.id,
-      academic_year_id: academicYear.id,
-      roll_no: String(peers.indexOf(s) + 1),
-      enrolled_on: s.joined_on,
-      active: !s.leavingOn,
-    });
+  for (const g of GRADES) {
+    const gradeStudents = studentsByGrade.get(g);
+    const gradeClassrooms = classroomsByGrade.get(g);
+    let rollNo = 1;
+    for (let i = 0; i < gradeStudents.length; i++) {
+      const s = gradeStudents[i];
+      const sectionIdx = i % gradeClassrooms.length;
+      const classroom = gradeClassrooms[sectionIdx];
+      s.classroom = classroom;
+      s.section = classroom.section;
+      enrollments.push({
+        id: uuid(),
+        organisation_id: ORG_ID,
+        student_id: s.id,
+        classroom_id: classroom.id,
+        academic_year_id: academicYear.id,
+        roll_no: String(Math.floor(i / gradeClassrooms.length) + 1),
+        enrolled_on: s.joined_on,
+        active: !s.leavingOn,
+      });
+    }
   }
   await insert("enrollments", enrollments);
-  for (const s of students) s.classroom = classroomOfGrade.get(s.grade);
+
+  console.log(`    ${classrooms.length} classrooms across ${GRADES.length} grades`);
+  for (const g of GRADES) {
+    const count = studentsByGrade.get(g).length;
+    const sections = SECTION_MAP[g].join(", ");
+    console.log(`    Grade ${g}: ${count} students → sections ${sections}`);
+  }
 
   // ========================================================= 4. attendance ==
   // Generated per student against their own propensity, with real multi-day
   // illness streaks and a Monday dip — not an independent coin per cell.
   console.log("[4/8] Attendance across the term…");
-  const days = schoolDays(TERM_START, TODAY);
+  // Recent 20 school days (September–October) provides realistic attendance data
+  // for all 1000 students (~20,000 rows) while keeping dashboard loading instantaneous.
+  const days = schoolDays("2026-09-01", TODAY);
   for (const s of students) {
     // A real roll has a long upper tail near 100% but a genuine lower tail too:
     // a few students miss a day a week or more. Drawing every student from one
@@ -882,6 +1046,7 @@ async function main() {
       });
     }
   }
+  console.log(`    ${attendance.length} attendance records (${students.length} students × ${days.length} school days)`);
   await insert("attendance", attendance);
 
   // ================================================== 5. examinations etc. ==
@@ -902,8 +1067,9 @@ async function main() {
   );
 
   // Mean score per subject: Mathematics and Science are the hard ones, the
-  // language and computer subjects come out easier. Grades 9-10 drop Computer
-  // Science from First Term in most schools, so it is added selectively.
+  // language and computer subjects come out easier. Grades 1-5 get EVS instead
+  // of separate Science/Social Studies in some schools, but for data purposes
+  // we generate all subjects for all grades.
   const SUBJECT_MEAN = {
     Mathematics: 0.62,
     Science: 0.63,
@@ -924,24 +1090,31 @@ async function main() {
       : pct >= 0.6 ? "B2" : pct >= 0.5 ? "C" : pct >= 0.4 ? "D" : "E";
 
   const examResults = [];
-  // Two students sat the First Term without completing every paper.
-  const incompleteExam = new Set([students[int(0, 99)], students[int(0, 99)]]);
+  // A few students sat the First Term without completing every paper.
+  const incompleteExam = new Set();
+  for (let i = 0; i < 15; i++) incompleteExam.add(students[int(0, students.length - 1)]);
 
   for (const exam of examinations) {
     if (!exam.published) continue; // the Mid-Term has not happened yet
     for (const s of students) {
       if (s.leavingOn && s.leavingOn < exam.starts_on) continue; // left before the exam
       for (const subject of exam.subjects) {
-        if (subject === "Computer Science" && s.grade < 9) continue;
+        // Computer Science only for grades 6+
+        if (subject === "Computer Science" && s.grade < 6) continue;
+        // Primary students (1-5) don't take Hindi separately in many Karnataka schools
+        if (subject === "Hindi" && s.grade < 3) continue;
         const max = exam.maxPerSubject;
 
         // The model: a base ability, a STEM/humanities tilt, a personal
         // affinity for the subject, a subject mean, an exam-paper offset and
         // a little noise. Ability dominates, so results are correlated the way
         // a real report card is.
+        // Primary students tend to score higher (gentler grading).
+        const primaryBonus = s.grade <= 5 ? 0.04 : 0;
         const stemDir = STEM.has(subject) ? s.stemTilt : -s.stemTilt;
         let pct =
           0.7 +
+          primaryBonus +
           0.108 * s.ability +
           0.045 * stemDir +
           0.05 * s.affinity[subject] +
@@ -961,6 +1134,7 @@ async function main() {
         }
         examResults.push({
           id: uuid(),
+          organisation_id: ORG_ID,
           examination_id: exam.id,
           student_id: s.id,
           subject,
@@ -971,13 +1145,29 @@ async function main() {
       }
     }
   }
+  console.log(`    ${examResults.length} exam results`);
   await insert("exam_results", examResults);
 
   // ======================================================== 6. assignments ==
   console.log("[6/8] Assignments…");
   const assignmentDefs = [
+    // Primary (grades 1-5)
+    [1, "Mathematics", "Number writing practice — 1 to 50", "Write numbers 1 to 50 in the ruled notebook. Practice counting in tens.", "2026-09-20", "2026-09-15"],
+    [1, "English", "Alphabet practice — A to Z", "Write capital and small letters A to Z three times each in the four-line notebook.", "2026-09-22", "2026-09-16"],
+    [2, "Mathematics", "Addition and subtraction — worksheet 3", "Complete the addition and subtraction worksheet. Show all working.", "2026-09-24", "2026-09-18"],
+    [2, "English", "My Family — drawing and writing", "Draw your family and write two sentences about each family member.", "2026-09-26", "2026-09-19"],
+    [3, "Mathematics", "Multiplication tables — 2 to 10", "Write multiplication tables from 2 to 10 in the notebook. Practice for oral test.", "2026-09-28", "2026-09-20"],
+    [3, "Science", "Parts of a plant — labelling", "Draw a plant and label: root, stem, leaf, flower, fruit. Colour the drawing.", "2026-09-30", "2026-09-22"],
+    [3, "Kannada", "ಕನ್ನಡ ವರ್ಣಮಾಲೆ practice", "Write the Kannada vowels and consonants two times each.", "2026-10-01", "2026-09-23"],
+    [4, "Mathematics", "Division — long division practice", "Solve problems 1 to 15 from the division worksheet. Show quotient and remainder.", "2026-10-03", "2026-09-25"],
+    [4, "English", "Story writing — The Clever Fox", "Write a 100-word story about a clever fox. Use at least five new vocabulary words.", "2026-10-05", "2026-09-26"],
+    [4, "Science", "Water cycle diagram", "Draw the water cycle with labels: evaporation, condensation, precipitation, collection.", "2026-10-04", "2026-09-27"],
+    [5, "Mathematics", "Fractions — addition and subtraction", "Complete the fractions worksheet, questions 1 to 20. Reduce all answers.", "2026-10-06", "2026-09-28"],
+    [5, "English", "Letter writing — to a friend", "Write a letter to your best friend describing your favourite festival.", "2026-10-07", "2026-09-29"],
+    [5, "Social Studies", "Map of India — states and capitals", "Label all states and their capitals on the blank India map provided.", "2026-10-08", "2026-09-30"],
+    // Middle (grades 6-8)
     [6, "Mathematics", "Exercise 4.1 — Real Numbers", "Complete exercises 4.1 to 4.6 from the workbook. Show all working; answers alone will not be marked.", "2026-09-24", "2026-09-18"],
-    [6, "English", "Chapter 3 — The Happy Prince ( comprehension)", "Answer the six comprehension questions at the end of the chapter in your notebook.", "2026-09-29", "2026-09-22"],
+    [6, "English", "Chapter 3 — The Happy Prince (comprehension)", "Answer the six comprehension questions at the end of the chapter in your notebook.", "2026-09-29", "2026-09-22"],
     [6, "Kannada", "Letter writing — formal", "Write a formal letter to the Principal requesting one week's leave for a family function.", "2026-10-06", "2026-09-28"],
     [7, "Mathematics", "Unit Test 2 — syllabus revision", "Revise chapters 1 to 4. The unit test covers worked examples on linear equations.", "2026-10-05", "2026-09-26"],
     [7, "Science", "Diagram: human digestive system", "Draw and label the human digestive system in your science notebook. Neatness carries marks.", "2026-10-02", "2026-09-21"],
@@ -985,6 +1175,7 @@ async function main() {
     [8, "Mathematics", "Algebra worksheet — factorisation", "Complete worksheet 3, questions 1 to 20. Show the factorisation steps.", "2026-10-07", "2026-09-24"],
     [8, "Science", "Project — water purification at home", "Prepare a chart explaining how water is purified at home, with a labelled diagram.", "2026-10-14", "2026-09-29"],
     [8, "English", "Essay — My City", "Write a 300-word essay on Tumakuru: its history, famous places and what you like about it.", "2026-10-09", "2026-09-26"],
+    // Secondary (grades 9-10)
     [9, "Mathematics", "Trigonometry problem set", "Solve problems 1 to 20 from the trigonometry worksheet. Extra credit for questions 21 and 22.", "2026-10-13", "2026-09-28"],
     [9, "Computer Science", "Python — loops practice", "Write five programs using for and while loops: a counter, a factorial, a sum of digits, a pattern and a number check.", "2026-10-06", "2026-09-23"],
     [9, "Science", "Lab report — density of solids", "Submit the lab report for the density experiment, including the observation table and the calculation.", "2026-10-01", "2026-09-19"],
@@ -993,16 +1184,18 @@ async function main() {
     [10, "Social Studies", "History — Source analysis", "Answer the three source-based questions from the History worksheet and comment on the bias of each source.", "2026-10-15", "2026-10-01"],
     [10, "Computer Science", "SQL — student marksheet query", "Write SQL queries to (a) list all students above 75%, (b) find the class average per subject, (c) count absentees per month.", "2026-10-16", "2026-10-02"],
   ];
+
+  // For assignments, pick the first classroom of that grade (section A).
   const assignments = assignmentDefs.map(
     ([grade, subject, title, instructions, dueDate, setOn], i) => ({
       id: uuid(),
       organisation_id: ORG_ID,
-      classroom_id: classroomOfGrade.get(grade).id,
+      classroom_id: classroomsByGrade.get(grade)[0].id,
       subject,
       title,
       instructions,
       due_at: ts(dueDate, 17, 0),
-      created_by: (SUBJECT_TEACHER[subject] ?? staffRows[2]).id,
+      created_by: pickTeacher(subject).id,
       // kept for reference so notifications can say "due in 3 days"
       dueDate,
       setOn,
@@ -1027,13 +1220,19 @@ async function main() {
   await insert("fee_categories", feeCategories);
   const CAT = Object.fromEntries(feeCategories.map((c) => [c.name, c.id]));
 
-  // Annual unified tuition fee: Class 6–8 is ₹50,000; Class 9–10 is ₹60,000.
-  const TUITION = { 6: 50000, 7: 50000, 8: 50000, 9: 60000, 10: 60000 };
+  // Annual unified tuition fee by grade band:
+  // Grades 1-3: ₹35,000   Grades 4-5: ₹40,000   Grades 6-8: ₹50,000   Grades 9-10: ₹60,000
+  const TUITION = {
+    1: 35000, 2: 35000, 3: 35000,
+    4: 40000, 5: 40000,
+    6: 50000, 7: 50000, 8: 50000,
+    9: 60000, 10: 60000,
+  };
   const transportRoutes = [
     { name: "Sira Road Route", code: "RT-01", vehicle_no: "KA-01-AB-1234", driver_name: "Suresh Kumar", driver_phone: mobile(), fee: 1800,
       stops: ["Sira Road Circle", "Vidyaranyapura", "Kalidasa Road", "Siddamanahalli Cross", "School Gate"] },
     { name: "Huliyar Route", code: "RT-02", vehicle_no: "KA-01-CD-5678", driver_name: "Ramesh Gowda", driver_phone: mobile(), fee: 2000,
-      stops: ["Huliyar Bazzar", "Kalyanapura Junction", "Malaguni Canal", "School Gate"] },
+      stops: ["Huliyar Bazzar", "Kalyanapura Junction", "Malaguni Canal", "Kyathasandra", "School Gate"] },
     { name: "Gubbi Route", code: "RT-03", vehicle_no: "KA-01-EF-9012", driver_name: "Mahesh Reddy", driver_phone: mobile(), fee: 2600,
       stops: ["Gubbi Bus Stand", "Rice Mill", "Nittur Cross", "Nagavalli", "School Gate"] },
     { name: "Kunigal Route", code: "RT-04", vehicle_no: "KA-01-GH-3456", driver_name: "Prakash N", driver_phone: mobile(), fee: 2200,
@@ -1220,7 +1419,7 @@ async function main() {
       "The school will remain closed on Monday 14 September 2026 for Ganesh Chaturthi and on Friday 25 September 2026 for Anant Chaturdashi. Classes resume the next working day.", "2026-09-10T09:00:00+05:30", true],
     ["First Term Examination — results published", "parents",
       "First Term Examination results have been published. Parents may collect the report cards from the school office between 9:00 AM and 3:00 PM, and may raise queries with the class teacher within seven days.", "2026-10-01T16:30:00+05:30", true],
-    ["Parent–Teacher Meeting — Grades 6 to 10", "parents",
+    ["Parent–Teacher Meeting — Grades 1 to 10", "parents",
       "The parent–teacher meeting is scheduled for Saturday 18 October 2026 from 9:30 AM to 1:00 PM. Slots are 15 minutes each; please carry the report card.", "2026-09-28T10:00:00+05:30", true],
     ["Term 2 fee payment", "parents",
       "Term 2 invoices have been raised and are due on 20 October 2026. A late payment fine of Rs.100 per week applies to Term 1 balances still outstanding. Fees may be paid at the office or by UPI.", "2026-09-20T09:00:00+05:30", true],
@@ -1232,6 +1431,10 @@ async function main() {
       "A staff meeting to review the First Term performance is scheduled for Saturday 17 October 2026 at 9:00 AM in the staff room. Attendance is compulsory for all teaching staff.", "2026-10-01T11:00:00+05:30", false],
     ["Mid-Term Examination — syllabus", "all",
       "The Mid-Term Examination will be held from 1 to 15 December 2026. The syllabus is the First Term syllabus plus chapters 5 and 6 of each subject, and will be circulated by the subject teachers.", "2026-10-02T15:00:00+05:30", false],
+    ["Primary Section — activity day", "parents",
+      "An activity day for Grades 1 to 5 is planned for 25 October 2026. Students will participate in art, craft, music and a science quiz. No uniform required.", "2026-10-01T09:00:00+05:30", true],
+    ["Annual Day rehearsals", "all",
+      "Annual Day rehearsals begin from 3 November 2026 during the last two periods. Selected students from each class will be informed by their class teacher.", "2026-10-02T14:00:00+05:30", false],
   ].map(([title, audience, body, publishedAt]) => ({
     id: uuid(),
     organisation_id: ORG_ID,
@@ -1252,15 +1455,15 @@ async function main() {
     messages.push({
       id: uuid(),
       organisation_id: ORG_ID,
-      sender_id: senderId,
-      recipient_id: recipientId,
+      sender_id: senderId ?? ADMIN_ID,
+      recipient_id: recipientId ?? staffRows[0].id,
       subject,
       body,
-      status,
+      status: status ?? "unread",
       created_at: when,
     });
 
-  // Guardian -> class teacher, about that guardian's own child.
+  // Guardian -> class teacher, about that guardian's child.
   const parentQueries = [
     (s) => `Doubt in the trigonometry chapter — ${s.first_name}`,
     (s) => `${s.first_name} was absent on Monday`,
@@ -1268,54 +1471,55 @@ async function main() {
     (s) => `${s.first_name} — request for extra classes in Science`,
     (s) => `Medical leave for ${s.first_name} on Friday`,
   ];
-  for (const inv of [...overdueInvoices.slice(0, 3), ...partialInvoices.slice(0, 2)]) {
+  for (const inv of [...overdueInvoices.slice(0, 5), ...partialInvoices.slice(0, 3)]) {
     const s = studentsById.get(inv.student_id);
     if (!s) continue;
-    const teacher = SUBJECT_TEACHER[Math.floor(rand() * 3) + 2] ?? staffRows[2];
+    const teacher = pickTeacher("Mathematics");
     addMessage(
-      s.family.guardianId,
+      ADMIN_ID,
       teacher.id,
       parentQueries[messages.length % parentQueries.length](s),
-      `Respected sir/madam, this is regarding ${s.first_name} (Grade ${s.grade}, USN ${s.usn}). ${inv.status === "overdue" ? `We are still arranging the ${inv.term} fee of Rs.${inv.total.toLocaleString("en-IN")} and would like to clear it by the end of the month.` : `We have paid Rs.${inv.paid_amount.toLocaleString("en-IN")} against the ${inv.term} invoice and will pay the balance shortly.`} Kindly advise.`,
+      `Respected teacher, this is regarding ${s.first_name} (Grade ${s.grade}, USN ${s.usn}). ${inv.status === "overdue" ? `We are still arranging the ${inv.term} fee of Rs.${inv.total.toLocaleString("en-IN")} and would like to clear it by the end of the month.` : `We have paid Rs.${inv.paid_amount.toLocaleString("en-IN")} against the ${inv.term} invoice and will pay the balance shortly.`} Kindly advise.`,
       chance(0.5) ? "read" : "unread",
       ts(addDays("2026-09-24", int(0, 8)), int(8, 19), int(0, 59))
     );
   }
-  // Attendance follow-up, sent by the class teacher to the guardian.
-  for (const s of students.filter((x) => x.attendanceRate < 0.9).slice(0, 3)) {
+  // Attendance follow-up, sent by the class teacher to admin.
+  for (const s of students.filter((x) => x.attendanceRate < 0.9).slice(0, 8)) {
+    const teacherId = s.classroom.class_teacher_id ?? staffRows[2].id;
     addMessage(
-      s.classroom.class_teacher_id ? staffRows.find((t) => t.id === s.classroom.class_teacher_id).id : staffRows[2].id,
-      s.family.guardianId,
+      teacherId,
+      ADMIN_ID,
       `Attendance follow-up — ${s.first_name} (Grade ${s.grade})`,
-      `Dear parent, ${s.first_name}'s attendance this term has been below the 90% benchmark. Could you please share the reason so we can support the family? We would like to arrange a catch-up plan before the Mid-Term.`,
+      `Dear Principal, ${s.first_name}'s attendance this term has been below the 90% benchmark. We have contacted the parents and arranged a catch-up plan before the Mid-Term.`,
       "read",
       ts(addDays("2026-09-25", int(0, 7)), int(9, 18), int(0, 59))
     );
   }
   // Staff -> staff, and principal -> staff.
   addMessage(staffRows[1].id, ADMIN_ID, "Leave application — 12 October",
-    "I would like to apply for casual leave on 12 October 2026 for a family function. The class-teacher duty for Grade 6 has been handed over to Ms. Kulkarni and the exam duty register has been updated.",
+    "I would like to apply for casual leave on 12 October 2026 for a family function. The class-teacher duty for Grade 1-A has been handed over to Ms. Hegde and the exam duty register has been updated.",
     "unread", ts("2026-10-01", 10, 15));
   addMessage(ADMIN_ID, staffRows[1].id, "Approved — leave on 12 October",
-    "Approved. Please ensure the Grade 6 duty roster and the Term 2 marks upload are handed over before you leave.",
+    "Approved. Please ensure the duty roster and the Term 2 marks upload are handed over before you leave.",
     "read", ts("2026-10-01", 11, 2));
-  addMessage(staffRows[2].id, staffRows[0].id, "Grade 6 Mathematics — term summary",
-    "The Unit Test 1 average for Grade 6 is 62% with a spread of 28 to 96. Three students are struggling with real numbers; I propose a Saturday remedial batch from 10 October.",
+  addMessage(staffRows[2].id, staffRows[0].id, "Primary Mathematics — term summary",
+    "The Unit Test 1 average for Grades 1 to 5 is 68% with a spread of 25 to 98. Eight students across Grades 3 and 4 are struggling with multiplication; I propose a Saturday remedial batch from 10 October.",
     "read", ts("2026-09-26", 16, 40));
   addMessage(staffRows[3].id, staffRows[0].id, "Laboratory safety inspection",
     "The science laboratory inspection has been completed. Two gas taps need servicing before the practical exams; I have raised it with the maintenance contractor.",
     "read", ts("2026-09-29", 14, 20));
   addMessage(staffRows[4].id, staffRows[0].id, "First Term results uploaded",
-    "All First Term results for Grades 6 to 10 are uploaded. Eight students are below 40% in two or more subjects and need a remedial plan before the Mid-Term.",
+    "All First Term results for Grades 1 to 10 are uploaded. Thirty-two students are below 40% in two or more subjects and need a remedial plan before the Mid-Term.",
     "read", ts("2026-10-01", 17, 5));
   addMessage(staffRows[9].id, ADMIN_ID, "Exam duty allocation",
-    "The Mid-Term invigilator duty list for December is ready for approval. Two teachers have clashing duties on 4 December and I have proposed a swap.",
+    "The Mid-Term invigilator duty list for December is ready for approval. Four teachers have clashing duties on 4 December and I have proposed swaps.",
     "unread", ts("2026-10-02", 9, 45));
   addMessage(ADMIN_ID, staffRows[5].id, "Social Studies — syllabus revision",
     "Please add a source-analysis worksheet to the Grade 10 Social Studies section before the Mid-Term; the students responded well to it this term.",
     "read", ts("2026-09-30", 12, 10));
   addMessage(staffRows[6].id, staffRows[2].id, "Computer lab — software update",
-    "The Grade 9 and 10 machines are on Python 3.12 now. Grade 6 and 7 will stay on the Python 3.9 image until the November break.",
+    "The Grade 6 to 10 machines are on Python 3.12 now. Primary lab will stay on the Python 3.9 image until the November break.",
     "read", ts("2026-09-28", 15, 35));
   addMessage(staffRows[7].id, staffRows[0].id, "Sports day — team lists",
     "Team lists for the Annual Sports Day are attached in the register. I need approval for two additional ground bookings on 8 and 9 November.",
@@ -1326,6 +1530,12 @@ async function main() {
   addMessage(ADMIN_ID, staffRows[9].id, "Library — new issue register",
     "Please set up the new issue register from Term 2 and circulate the borrowing policy to all classes.",
     "read", ts("2026-09-22", 10, 30));
+  addMessage(staffRows[10].id, staffRows[0].id, "Primary section — handwriting competition",
+    "We would like to organize a handwriting competition for Grades 1 to 5 during the last week of October. Requesting approval and budget for prizes.",
+    "unread", ts("2026-10-02", 11, 15));
+  addMessage(staffRows[15].id, staffRows[2].id, "Grade 8 Mathematics — slow learners",
+    "Five students in Grade 8-B are consistently scoring below 35% in Mathematics. I recommend pairing them with stronger students for peer tutoring sessions.",
+    "read", ts("2026-10-01", 14, 30));
   await insert("messages", messages);
 
   // -------------------------------------------------------- notifications --
@@ -1343,11 +1553,11 @@ async function main() {
       created_at: createdAt,
     });
 
-  for (const inv of overdueInvoices.slice(0, 22)) {
+  for (const inv of overdueInvoices.slice(0, 60)) {
     const s = studentsById.get(inv.student_id);
     if (!s) continue;
     notify(
-      s.family.guardianId,
+      ADMIN_ID,
       `Fee overdue — ${inv.invoice_no}`,
       `The ${inv.term} fee of Rs.${inv.total.toLocaleString("en-IN")} for ${s.first_name} was due on ${inv.due_on}. A fine of Rs.100 per week applies until it is cleared.`,
       "/dashboard/finance",
@@ -1355,12 +1565,12 @@ async function main() {
       ts(addDays(inv.due_on, 7), int(9, 18), int(0, 59))
     );
   }
-  for (const inv of partialInvoices.slice(0, 8)) {
+  for (const inv of partialInvoices.slice(0, 20)) {
     const s = studentsById.get(inv.student_id);
     if (!s) continue;
     const balance = inv.total - inv.paid_amount;
     notify(
-      s.family.guardianId,
+      ADMIN_ID,
       `Balance pending — ${inv.invoice_no}`,
       `A balance of Rs.${balance.toLocaleString("en-IN")} is outstanding on the ${inv.term} invoice for ${s.first_name}.`,
       "/dashboard/finance",
@@ -1368,15 +1578,15 @@ async function main() {
       ts(inv.issuedOn, int(9, 18), int(0, 59))
     );
   }
-  // First Term results are genuinely published, so every family is told.
-  for (const s of students.filter((x) => !x.leavingOn).slice(0, 34)) {
+  // First Term results are genuinely published, so notifications are raised for the school.
+  for (const s of students.filter((x) => !x.leavingOn).slice(0, 60)) {
     const results = examResults.filter((r) => r.student_id === s.id && r.grade !== "Ab");
     if (!results.length) continue;
     const pct = Math.round(
       results.reduce((sum, r) => sum + r.marks / r.max_marks, 0) / results.length * 100
     );
     notify(
-      s.family.guardianId,
+      ADMIN_ID,
       "First Term results published",
       `The First Term Examination report for ${s.first_name} (Grade ${s.grade}) is now available. Overall percentage: ${pct}%.`,
       "/dashboard/exams",
@@ -1390,9 +1600,9 @@ async function main() {
     const affected = students.filter(
       (s) => s.classroom.id === a.classroom_id && !s.leavingOn
     );
-    for (const s of affected.slice(0, 6)) {
+    for (const s of affected.slice(0, 10)) {
       notify(
-        s.family.guardianId,
+        ADMIN_ID,
         `Assignment due — ${a.subject}`,
         `${a.title} for ${s.first_name} is due on ${a.dueDate}.`,
         "/dashboard/academics",
@@ -1404,7 +1614,7 @@ async function main() {
   // Staff notifications.
   for (const s of staffRows) {
     if (s.designation.includes("Principal")) {
-      notify(s.id, "Term 2 fee collection", "Term 2 collection stands at 21% of the target. Eight Term 1 balances are more than 60 days overdue.", "/dashboard/finance", null, ts("2026-10-02", 9, 5));
+      notify(s.id, "Term 2 fee collection", `Term 2 collection stands at 18% of the target. Forty-two Term 1 balances are more than 60 days overdue across ${students.length} students.`, "/dashboard/finance", null, ts("2026-10-02", 9, 5));
     } else if (s.department === "Mathematics") {
       notify(s.id, "Marks upload pending", "Please complete the Mid-Term marks upload by 28 November.", "/dashboard/exams", null, ts("2026-10-01", 10, 20));
     } else if (s.department === "Science") {
@@ -1476,11 +1686,22 @@ async function main() {
   console.log(`  distinct fee totals: ${new Set(invoices.map((i) => i.total)).size} across ${invoices.length} invoices`);
   console.log(`  school days marked: ${days.length} (holidays excluded)`);
 
+  // Summary of class distribution
+  console.log("\nClass distribution:");
+  for (const g of GRADES) {
+    const gradeRooms = classroomsByGrade.get(g);
+    for (const room of gradeRooms) {
+      const count = enrollments.filter((e) => e.classroom_id === room.id).length;
+      console.log(`  Grade ${g}-${room.section}: ${count} students (Room ${room.room})`);
+    }
+  }
+
   console.log("\nDone! Seeded accounts (password: from SEED_PASSWORD):");
   console.log("  Admin   : kaizxark@gmail.com (existing account, untouched)");
-  console.log(`  Staff   : ${staffJobs[0].email} … ${staffJobs[9].email}`);
+  console.log(`  Staff   : ${staffJobs[0].email} … ${staffJobs[staffJobs.length - 1].email} (${staffJobs.length} accounts)`);
   console.log(`  Guardian : ${families[0].guardianEmail} … ${families[families.length - 1].guardianEmail}`);
   console.log(`             (${families.length} guardian logins — one per household, siblings share one)`);
+  console.log(`  Students : ${students.length} (Grades 1–10, sections A/B/C)`);
 }
 
 main().catch((e) => {

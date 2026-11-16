@@ -104,7 +104,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
     let totalAssessed = 0;
     let totalCollected = 0;
     let totalPending = 0;
-    let defaulterCount = 0;
+    const defaulterStudentIds = new Set<string>();
 
     if (invoices.length > 0) {
       invoices.forEach((inv) => {
@@ -115,7 +115,8 @@ export function ReportsView({ onBack }: ReportsViewProps) {
         totalCollected += paid;
         if (out > 0) {
           totalPending += out;
-          defaulterCount++;
+          const sId = String((inv as any).student_id || (inv as any).studentId || inv.student || "");
+          if (sId) defaulterStudentIds.add(sId.toLowerCase());
         }
       });
     }
@@ -124,8 +125,31 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       totalAssessed,
       totalCollected,
       totalPending,
-      defaulterCount,
+      defaulterCount: defaulterStudentIds.size,
     };
+  }, [invoices]);
+
+  // Aggregated per-student fee summary mapping (Term 1 + Term 2)
+  const studentFeeMap = useMemo(() => {
+    const map = new Map<string, { total: number; paid: number; due: number }>();
+    invoices.forEach((inv) => {
+      const sId = String((inv as any).student_id || (inv as any).studentId || "").toLowerCase();
+      const sName = String(inv.student || "").toLowerCase();
+      const amt = Number(inv.total ?? inv.amount ?? 0);
+      const paid = Number(inv.paid ?? (inv.status?.toLowerCase() === "paid" ? amt : 0));
+      const due = Number(inv.outstanding ?? Math.max(0, amt - paid));
+
+      const keys = [sId, sName].filter(Boolean);
+      for (const k of keys) {
+        const cur = map.get(k) || { total: 0, paid: 0, due: 0 };
+        map.set(k, {
+          total: cur.total + amt,
+          paid: cur.paid + paid,
+          due: cur.due + due,
+        });
+      }
+    });
+    return map;
   }, [invoices]);
 
   // --- Calculations for Attendance Report ---
@@ -178,19 +202,18 @@ export function ReportsView({ onBack }: ReportsViewProps) {
       "Status",
     ];
     const rows = students.map((s) => {
-      const inv = invoices.find((i) => i.student_id === s.id || i.student === s.name);
-      const total = inv ? Number(inv.total ?? inv.amount ?? 0) : 0;
-      const paid = inv ? Number(inv.paid ?? (inv.status?.toLowerCase() === "paid" ? total : 0)) : 0;
-      const due = inv ? Number(inv.outstanding ?? Math.max(0, total - paid)) : 0;
-      const isPaid = s.fees?.toLowerCase() === "paid" || due === 0;
+      const fee = (s.id && studentFeeMap.get(String(s.id).toLowerCase())) ||
+                  studentFeeMap.get(s.name.toLowerCase()) ||
+                  { total: 0, paid: 0, due: 0 };
+      const isPaid = s.fees?.toLowerCase() === "paid" || fee.due === 0;
       return [
         s.usn || `STU-${s.id}`,
         s.name,
         s.grade || "Unassigned",
         s.section || "—",
-        total,
-        paid,
-        due,
+        fee.total,
+        fee.paid,
+        fee.due,
         isPaid ? "Paid" : "Pending",
       ];
     });
@@ -336,7 +359,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
               Fee Collections & Defaulters
             </h3>
             <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--text-muted)]">
-              Term 1 fee collection ledger, tracking {formatInr(feeStats.totalPending)} pending dues and overdue accounts.
+              Annual fee collection ledger, tracking {formatInr(feeStats.totalPending)} pending dues across {feeStats.defaulterCount} pupil accounts.
             </p>
           </div>
           <div className="mt-5 pt-3 border-t border-[var(--border)] flex items-center gap-2">
@@ -726,14 +749,20 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                           }
                         }
                         if (selectedGrade !== "all" && s.grade !== selectedGrade) return false;
-                        if (filterDefaultersOnly && s.fees?.toLowerCase() === "paid") return false;
+                        if (filterDefaultersOnly) {
+                          const fee = (s.id && studentFeeMap.get(String(s.id).toLowerCase())) ||
+                                      studentFeeMap.get(s.name.toLowerCase());
+                          if (!fee || fee.due === 0) return false;
+                        }
                         return true;
                       })
                       .map((s) => {
-                        const inv = invoices.find((i) => i.student_id === s.id || i.student === s.name);
-                        const total = inv ? Number(inv.total ?? inv.amount ?? 0) : 0;
-                        const paid = inv ? Number(inv.paid ?? (inv.status?.toLowerCase() === "paid" ? total : 0)) : 0;
-                        const due = inv ? Number(inv.outstanding ?? Math.max(0, total - paid)) : 0;
+                        const fee = (s.id && studentFeeMap.get(String(s.id).toLowerCase())) ||
+                                    studentFeeMap.get(s.name.toLowerCase()) ||
+                                    { total: 0, paid: 0, due: 0 };
+                        const total = fee.total;
+                        const paid = fee.paid;
+                        const due = fee.due;
                         const isPaid = s.fees?.toLowerCase() === "paid" || due === 0;
                         return (
                           <tr key={s.id}>
@@ -1041,7 +1070,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                   className="w-full text-xs py-2 px-3 rounded-lg bg-[var(--bg-input)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-[var(--brand)]"
                   defaultValue="all"
                 >
-                  <option value="all">All Enrolled Classes (Grade 6–10)</option>
+                  <option value="all">All Enrolled Classes (Grade 1–10)</option>
                   {availableGrades.map((g) => (
                     <option key={g} value={g}>
                       {g}

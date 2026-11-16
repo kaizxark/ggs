@@ -896,6 +896,11 @@ async function loadFeeCategories(): Promise<FeeCategory[]> {
   if (totalBilled <= 0) return [];
 
   const colors: Record<string, string> = {
+    "Grade 1": "#8b5cf6",
+    "Grade 2": "#6366f1",
+    "Grade 3": "#3b82f6",
+    "Grade 4": "#0ea5e9",
+    "Grade 5": "#14b8a6",
     "Grade 6": "#2f6f68",
     "Grade 7": "#4f8f85",
     "Grade 8": "#6fb0a5",
@@ -907,12 +912,19 @@ async function loadFeeCategories(): Promise<FeeCategory[]> {
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
     .map(([grade, amount], idx) => {
       const pct = Math.round((amount / totalBilled) * 1000) / 10;
-      const annualFee = /9|10/.test(grade) ? 60000 : 50000;
+      const gNum = parseInt(grade.replace(/\D/g, ""), 10);
+      const annualFee =
+        gNum >= 9 ? 60000 : gNum >= 6 ? 50000 : gNum >= 4 ? 40000 : 35000;
       return {
         id: `fc-${idx + 1}`,
         name: `${grade} (₹${annualFee.toLocaleString("en-IN")})`,
         value: Math.round(pct),
-        color: colors[grade] ?? ["#2f6f68", "#4f8f85", "#6fb0a5", "#1d504a", "#0f3833"][idx % 5],
+        color:
+          colors[grade] ??
+          [
+            "#8b5cf6", "#6366f1", "#3b82f6", "#0ea5e9", "#14b8a6",
+            "#2f6f68", "#4f8f85", "#6fb0a5", "#1d504a", "#0f3833",
+          ][idx % 10],
       };
     });
 }

@@ -267,8 +267,8 @@ type ExportFilters = DirectoryFilters & { export?: string | number };
 /** The values behind the filter dropdowns, so the UI never guesses a grade list. */
 export function fetchDirectoryOptions(signal?: AbortSignal): Promise<DirectoryOptions> {
   return apiFetch<DirectoryOptions>("/api/students?options=1", { signal }).catch(() => ({
-    grades: ["6", "7", "8", "9", "10"],
-    sections: ["A", "B"],
+    grades: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+    sections: ["A", "B", "C"],
     years: [{ id: "ay-2627", name: "AY 2026–27", is_current: true }],
   }));
 }

@@ -1973,6 +1973,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     (sum, i) => sum + (i.outstanding ?? i.amount),
     0
   );
+  const overduePupilsCount = new Set(overdueInvoices.map(i => i.student_id || i.student)).size;
   const lakh = (n: number) => `₹${(n / 100000).toFixed(1)}L`;
 
   const classesBelow = classAttendance.filter(
@@ -2006,12 +2007,12 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           },
         ]
       : []),
-    ...(canSeeFinance && overdueInvoices.length > 0
+    ...(canSeeFinance && overduePupilsCount > 0
       ? [
           {
             label: "Overdue fee recovery",
-            value: String(overdueInvoices.length),
-            detail: `${lakh(overdueAmount)} across ${overdueInvoices.length} invoices`,
+            value: String(overduePupilsCount),
+            detail: `${lakh(overdueAmount)} across ${overduePupilsCount} pupil${overduePupilsCount === 1 ? "" : "s"} in arrears`,
             icon: Receipt,
             tone: "blue",
             view: "Fees & Finance",
@@ -4515,11 +4516,27 @@ function downloadLedgerCsv(filename: string, headers: string[], rows: (string | 
   URL.revokeObjectURL(url);
 }
 
+interface StudentFeeAccount {
+  student_id: string;
+  student: string;
+  usn: string;
+  grade: string;
+  section: string;
+  family: string;
+  totalBilled: number;
+  totalPaid: number;
+  outstanding: number;
+  status: "Paid" | "Partial" | "Overdue" | "Due";
+  invoices: Invoice[];
+  latestDueDate: string;
+  earliestOverdueDate: string | null;
+}
+
 function FinanceView({ onBack }: { onBack: () => void }) {
   const [showDialog, setShowDialog] = useState(false);
   const [financeTab, setFinanceTab] = useState<"invoices" | "defaulters" | "receipts" | "cohort">("invoices");
   
-  // Invoices & Ledger Filters
+  // Student Fee Ledger Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -4530,7 +4547,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const [receiptMethodFilter, setReceiptMethodFilter] = useState("all");
 
   // Modals & Drawers
-  const [inspectingInvoice, setInspectingInvoice] = useState<Invoice | null>(null);
+  const [inspectingAccount, setInspectingAccount] = useState<StudentFeeAccount | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<any | null>(null);
 
   // Record Payment Dialog State
@@ -4548,6 +4565,106 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const { rows: payments, loading: paymentsLoading } = usePayments();
   const { rows: enrolledStudents } = useStudents();
 
+  // Aggregate invoices strictly per enrolled pupil account (AY 2026-27).
+  // The school bills tuition in 2 installments (Term 1 & Term 2), which produces
+  // multiple invoice rows. Aggregating here guarantees the ledger lists 100 pupils
+  // with their true annual tuition fee, total paid, and net balance due.
+  const studentFeeAccounts = useMemo<StudentFeeAccount[]>(() => {
+    const map = new Map<string, StudentFeeAccount>();
+
+    // 1. Seed accounts from enrolledStudents first to guarantee all 100 pupils exist
+    for (const stu of enrolledStudents) {
+      const sId = String(stu.id);
+      const gradeStr = stu.grade
+        ? (String(stu.grade).startsWith("Grade") ? String(stu.grade) : `Grade ${stu.grade}`)
+        : "—";
+      map.set(sId, {
+        student_id: sId,
+        student: stu.name,
+        usn: stu.usn || "—",
+        grade: gradeStr,
+        section: stu.section || "A",
+        family: (stu as any).family || `${stu.name.split(" ").slice(-1)[0]} family`,
+        totalBilled: 0,
+        totalPaid: 0,
+        outstanding: 0,
+        status: "Paid",
+        invoices: [],
+        latestDueDate: "—",
+        earliestOverdueDate: null,
+      });
+    }
+
+    // 2. Aggregate each invoice onto the student account
+    for (const inv of invoices) {
+      const sId = String(inv.student_id || (inv as any).studentId || "");
+      let account = map.get(sId);
+      if (!account) {
+        for (const existing of map.values()) {
+          if (existing.student.toLowerCase() === inv.student.toLowerCase()) {
+            account = existing;
+            break;
+          }
+        }
+      }
+
+      if (!account) {
+        account = {
+          student_id: sId || String(inv.id),
+          student: inv.student,
+          usn: String((inv as any).usn || "—"),
+          grade: (inv as any).grade || "—",
+          section: (inv as any).section || "—",
+          family: inv.family || `${inv.student.split(" ").slice(-1)[0]} family`,
+          totalBilled: 0,
+          totalPaid: 0,
+          outstanding: 0,
+          status: "Paid",
+          invoices: [],
+          latestDueDate: "—",
+          earliestOverdueDate: null,
+        };
+        map.set(account.student_id, account);
+      }
+
+      account.invoices.push(inv);
+      const invTotal = inv.total ?? inv.amount ?? 0;
+      const invPaid = inv.paid ?? 0;
+      const invOut = inv.outstanding ?? Math.max(0, invTotal - invPaid);
+
+      account.totalBilled += invTotal;
+      account.totalPaid += invPaid;
+      account.outstanding += invOut;
+
+      if (inv.due_date && inv.due_date !== "—") {
+        if (account.latestDueDate === "—" || inv.due_date > account.latestDueDate) {
+          account.latestDueDate = inv.due_date;
+        }
+        if (inv.status === "Overdue" && invOut > 0) {
+          if (!account.earliestOverdueDate || inv.due_date < account.earliestOverdueDate) {
+            account.earliestOverdueDate = inv.due_date;
+          }
+        }
+      }
+    }
+
+    // 3. Compute overall status for each pupil account
+    const accounts = Array.from(map.values());
+    for (const acc of accounts) {
+      if (acc.outstanding === 0) {
+        acc.status = "Paid";
+      } else if (acc.invoices.some(i => i.status === "Overdue" && (i.outstanding ?? i.amount ?? 0) > 0)) {
+        acc.status = "Overdue";
+      } else if (acc.totalPaid > 0) {
+        acc.status = "Partial";
+      } else {
+        acc.status = "Due";
+      }
+    }
+
+    return accounts.sort((a, b) => (b.outstanding - a.outstanding) || a.student.localeCompare(b.student));
+  }, [enrolledStudents, invoices]);
+
   const matchingStudents = useMemo(() => {
     if (!studentSearchQuery.trim()) return [];
     const q = studentSearchQuery.toLowerCase();
@@ -4563,20 +4680,19 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   );
 
   // The invoice the payment settles against. Picking a student narrows to that
-  // student's real invoice row; if the student has none yet there is nothing to
-  // settle and the desk must issue the invoice first.
+  // student's real invoice row; if the student has multiple terms, picks the earliest unpaid.
   const selectedInvoice = useMemo(() => {
     if (selectedInvoiceId) {
       return invoices.find(i => String(i.id).toLowerCase() === selectedInvoiceId.toLowerCase()) || null;
     }
     if (recordStudent) {
-      return (
-        invoices.find(
-          i =>
-            (recordStudent.id && (i.student_id === recordStudent.id || (i as any).studentId === recordStudent.id)) ||
-            i.student.toLowerCase() === recordStudent.name.toLowerCase()
-        ) || null
+      const studentInvs = invoices.filter(
+        i =>
+          (recordStudent.id && (i.student_id === recordStudent.id || (i as any).studentId === recordStudent.id)) ||
+          i.student.toLowerCase() === recordStudent.name.toLowerCase()
       );
+      const unpaid = studentInvs.find(i => Number(i.outstanding ?? i.amount ?? 0) > 0);
+      return unpaid || studentInvs[0] || null;
     }
     return null;
   }, [invoices, selectedInvoiceId, recordStudent]);
@@ -4600,53 +4716,54 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const outstanding = Math.max(0, billed - collected);
   const rate = billed > 0 ? Math.round((collected / billed) * 1000) / 10 : 0;
   
-  const overdueInvoices = useMemo(
-    () => invoices.filter(i => i.status === "Overdue" && (i.outstanding ?? i.amount ?? 0) > 0),
-    [invoices]
+  // Overdue accounts: distinct pupils with an overdue fee balance past due date
+  const overdueAccounts = useMemo(
+    () => studentFeeAccounts.filter(a => a.status === "Overdue" && a.outstanding > 0),
+    [studentFeeAccounts]
   );
   const overdueTotalAmount = useMemo(
-    () => overdueInvoices.reduce((s, i) => s + (i.outstanding ?? i.amount ?? 0), 0),
-    [overdueInvoices]
+    () => overdueAccounts.reduce((s, a) => s + a.outstanding, 0),
+    [overdueAccounts]
   );
 
   const collectedSpark = revenueData.length >= 2 ? revenueData.map(r => r.collected) : undefined;
   const pendingSpark = revenueData.length >= 2 ? revenueData.map(r => r.pending) : undefined;
 
-  // Filtered Invoices for Tab 1
-  const filteredInvoices = useMemo(() => {
-    let list = invoices;
+  // Filtered Accounts for Tab 1 (Student Fee Ledger)
+  const filteredAccounts = useMemo(() => {
+    let list = studentFeeAccounts;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter(
-        i =>
-          i.student.toLowerCase().includes(q) ||
-          String(i.id).toLowerCase().includes(q) ||
-          String((i as any).usn || "").toLowerCase().includes(q) ||
-          i.family.toLowerCase().includes(q)
+        a =>
+          a.student.toLowerCase().includes(q) ||
+          a.usn.toLowerCase().includes(q) ||
+          a.family.toLowerCase().includes(q) ||
+          a.invoices.some(i => String(i.id).toLowerCase().includes(q))
       );
     }
     if (gradeFilter !== "all") {
-      list = list.filter(i => (i as any).grade === gradeFilter || ((i as any).grade && (i as any).grade.includes(gradeFilter.replace("Grade ", ""))));
+      list = list.filter(a => a.grade === gradeFilter || a.grade.includes(gradeFilter.replace("Grade ", "")));
     }
     if (sectionFilter !== "all") {
-      list = list.filter(i => (i as any).section === sectionFilter);
+      list = list.filter(a => a.section === sectionFilter);
     }
     if (statusFilter !== "all") {
       if (statusFilter === "Paid") {
-        list = list.filter(i => i.status === "Paid" || (i.outstanding ?? 0) === 0);
+        list = list.filter(a => a.status === "Paid" || a.outstanding === 0);
       } else if (statusFilter === "Overdue") {
-        list = list.filter(i => i.status === "Overdue" && (i.outstanding ?? i.amount ?? 0) > 0);
+        list = list.filter(a => a.status === "Overdue" && a.outstanding > 0);
       } else if (statusFilter === "Partial") {
-        list = list.filter(i => i.status === "Partial");
+        list = list.filter(a => a.status === "Partial");
       } else if (statusFilter === "Due") {
-        list = list.filter(i => i.status === "Due" || i.status === "Partial");
+        list = list.filter(a => a.status === "Due" || a.status === "Partial");
       }
     }
     return list;
-  }, [invoices, searchQuery, gradeFilter, sectionFilter, statusFilter]);
+  }, [studentFeeAccounts, searchQuery, gradeFilter, sectionFilter, statusFilter]);
 
-  const invoicesPager = usePagination(filteredInvoices);
-  const pageInvoices = invoicesPager.pageRows;
+  const accountsPager = usePagination(filteredAccounts);
+  const pageAccounts = accountsPager.pageRows;
 
   // Filtered Receipts for Tab 3
   const filteredReceipts = useMemo(() => {
@@ -4670,24 +4787,32 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const receiptsPager = usePagination(filteredReceipts);
   const pageReceipts = receiptsPager.pageRows;
 
-  // Cohort Class-wise Breakdown Data — totals straight off the invoice rows.
+  // Cohort Class-wise Breakdown Data — calculated strictly per enrolled pupil
   const cohortBreakdown = useMemo(() => {
-    const grades = ["Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10"];
+    const grades = [
+      "Grade 1",
+      "Grade 2",
+      "Grade 3",
+      "Grade 4",
+      "Grade 5",
+      "Grade 6",
+      "Grade 7",
+      "Grade 8",
+      "Grade 9",
+      "Grade 10",
+    ];
     return grades.map(g => {
-      const gradeInvoices = invoices.filter(i => (i as any).grade === g || ((i as any).grade && (i as any).grade.includes(g.replace("Grade ", ""))));
-      const pupilCount = gradeInvoices.length;
-      const totalBilled = gradeInvoices.reduce(
-        (s, i) => s + (i.total ?? i.amount ?? 0),
-        0
+      const gradeAccounts = studentFeeAccounts.filter(
+        a => a.grade === g || a.grade.includes(g.replace("Grade ", ""))
       );
-      const totalPaid = gradeInvoices.reduce((s, i) => s + (i.paid ?? 0), 0);
+      const pupilCount = gradeAccounts.length;
+      const totalBilled = gradeAccounts.reduce((s, a) => s + a.totalBilled, 0);
+      const totalPaid = gradeAccounts.reduce((s, a) => s + a.totalPaid, 0);
       const totalPending = Math.max(0, totalBilled - totalPaid);
       const collectionPct = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 1000) / 10 : 0;
       return {
         grade: g,
         pupilCount,
-        // Real average assessed per pupil with an invoice behind the grade;
-        // grades with no billing yet show a dash rather than an invented fee.
         feePerPupil: pupilCount > 0 ? Math.round(totalBilled / pupilCount) : null,
         totalBilled,
         totalPaid,
@@ -4695,61 +4820,65 @@ function FinanceView({ onBack }: { onBack: () => void }) {
         collectionPct,
       };
     });
-  }, [invoices]);
+  }, [studentFeeAccounts]);
 
   // CSV Export Handlers
-  const handleExportInvoicesCsv = () => {
+  const handleExportLedgerCsv = () => {
     const headers = [
-      "Invoice ID",
       "Student Name",
       "USN",
-      "Grade",
+      "Class",
       "Section",
       "Guardian Family",
-      "Due Date",
-      "Total Assessed (INR)",
-      "Paid Amount (INR)",
-      "Outstanding Balance (INR)",
+      "Installment Terms",
+      "Annual Assessed Fee (INR)",
+      "Total Paid (INR)",
+      "Balance Due (INR)",
       "Status",
+      "Latest Due Date",
     ];
-    const rows = filteredInvoices.map(inv => [
-      inv.id,
-      inv.student,
-      (inv as any).usn || (inv as any).student_id || "—",
-      (inv as any).grade || "—",
-      (inv as any).section || "—",
-      inv.family,
-      inv.due_date,
-      inv.total ?? inv.amount ?? 0,
-      inv.paid ?? 0,
-      inv.outstanding ?? inv.amount ?? 0,
-      inv.status,
+    const rows = filteredAccounts.map(acc => [
+      acc.student,
+      acc.usn,
+      acc.grade,
+      acc.section,
+      acc.family,
+      acc.invoices.map(i => i.id).join("; ") || "—",
+      acc.totalBilled,
+      acc.totalPaid,
+      acc.outstanding,
+      acc.status,
+      acc.latestDueDate,
     ]);
-    downloadLedgerCsv(`GKS_Fee_Invoices_AY2026-27_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
-    toast.success("Invoices Ledger exported to CSV");
+    downloadLedgerCsv(`GKS_Student_Fee_Ledger_AY2026-27_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    toast.success("Student Fee Ledger exported to CSV");
   };
 
   const handleExportDefaultersCsv = () => {
     const headers = [
       "Student Name",
       "USN",
-      "Grade",
+      "Class",
       "Section",
       "Guardian Family",
-      "Invoice ID",
-      "Due Date",
+      "Overdue Invoices",
+      "Overdue Since",
+      "Annual Assessed (INR)",
+      "Total Paid (INR)",
       "Overdue Balance (INR)",
       "Status",
     ];
-    const rows = overdueInvoices.map(inv => [
-      inv.student,
-      (inv as any).usn || (inv as any).student_id || "—",
-      (inv as any).grade || "—",
-      (inv as any).section || "—",
-      inv.family,
-      inv.id,
-      inv.due_date,
-      inv.outstanding ?? inv.amount ?? 0,
+    const rows = overdueAccounts.map(acc => [
+      acc.student,
+      acc.usn,
+      acc.grade,
+      acc.section,
+      acc.family,
+      acc.invoices.filter(i => i.status === "Overdue" && (i.outstanding ?? i.amount ?? 0) > 0).map(i => i.id).join("; ") || "—",
+      acc.earliestOverdueDate || acc.latestDueDate || "—",
+      acc.totalBilled,
+      acc.totalPaid,
+      acc.outstanding,
       "Overdue Defaulter",
     ]);
     downloadLedgerCsv(`GKS_Fee_Defaulters_AY2026-27_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
@@ -4793,15 +4922,15 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           />
           <h1 className="page-title">Fees & finance</h1>
           <p className="page-subtitle">
-            {invoices.length} pupil account{invoices.length === 1 ? "" : "s"} ·{" "}
-            {invoices.filter(i => i.status !== "Paid").length} outstanding · ₹{(billed / 100000).toFixed(1)}L total institutional billing
+            {studentFeeAccounts.length} enrolled pupil{studentFeeAccounts.length === 1 ? "" : "s"} ·{" "}
+            {studentFeeAccounts.filter(a => a.status !== "Paid").length} with balance due · ₹{(billed / 100000).toFixed(1)}L total institutional billing
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
           <button
             type="button"
             className="secondary-button"
-            onClick={handleExportInvoicesCsv}
+            onClick={handleExportLedgerCsv}
             style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
             <Download size={14} />
@@ -4828,7 +4957,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             <MetricBlock
               label="Total Assessed Fee"
               value={`₹${(billed / 100000).toFixed(1)}L`}
-              comparison={`${invoices.length} enrolled accounts`}
+              comparison={`${studentFeeAccounts.length} enrolled pupils`}
               icon={FileText}
             />
             <MetricBlock
@@ -4841,7 +4970,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             <MetricBlock
               label="Outstanding balance"
               value={`₹${(outstanding / 100000).toFixed(1)}L`}
-              comparison={`${overdueInvoices.length} overdue accounts`}
+              comparison={`${overdueAccounts.length} pupils overdue`}
               icon={Receipt}
               spark={pendingSpark}
               positive={false}
@@ -5048,8 +5177,8 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               value: "invoices",
               label: (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  Invoices & Ledger
-                  <span className="count-badge">{invoices.length}</span>
+                  Student Fee Ledger
+                  <span className="count-badge">{studentFeeAccounts.length}</span>
                 </span>
               ),
             },
@@ -5058,9 +5187,9 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               label: (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   Overdue Accounts
-                  {overdueInvoices.length > 0 && (
+                  {overdueAccounts.length > 0 && (
                     <span className="count-badge" style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>
-                      {overdueInvoices.length}
+                      {overdueAccounts.length}
                     </span>
                   )}
                 </span>
@@ -5083,21 +5212,21 @@ function FinanceView({ onBack }: { onBack: () => void }) {
         />
       </div>
 
-      {/* TAB 1: INVOICES & BILLING LEDGER */}
+      {/* TAB 1: STUDENT FEE LEDGER */}
       {financeTab === "invoices" && (
         <section className="panel table-panel">
           <div className="panel-header" style={{ flexWrap: "wrap", gap: "12px" }}>
             <div>
-              <h2 className="panel-title">Institutional fee invoices</h2>
+              <h2 className="panel-title">Institutional student fee ledger</h2>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Complete billing register for all pupils enrolled across Class 6 to 10.
+                Annual tuition fee assessment and account balances for all 100 enrolled pupils (Classes 6–10).
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
               <button
                 type="button"
                 className="secondary-button compact"
-                onClick={handleExportInvoicesCsv}
+                onClick={handleExportLedgerCsv}
                 style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
               >
                 <Download size={13} />
@@ -5142,6 +5271,11 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               onChange={setGradeFilter}
               options={[
                 { value: "all", label: "All Classes" },
+                { value: "Grade 1", label: "Class 1 (₹35k)" },
+                { value: "Grade 2", label: "Class 2 (₹35k)" },
+                { value: "Grade 3", label: "Class 3 (₹35k)" },
+                { value: "Grade 4", label: "Class 4 (₹40k)" },
+                { value: "Grade 5", label: "Class 5 (₹40k)" },
                 { value: "Grade 6", label: "Class 6 (₹50k)" },
                 { value: "Grade 7", label: "Class 7 (₹50k)" },
                 { value: "Grade 8", label: "Class 8 (₹50k)" },
@@ -5157,6 +5291,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 { value: "all", label: "All Sections" },
                 { value: "A", label: "Section A" },
                 { value: "B", label: "Section B" },
+                { value: "C", label: "Section C" },
               ]}
             />
 
@@ -5197,10 +5332,10 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   <th>Student & USN</th>
                   <th>Class</th>
                   <th>Guardian</th>
-                  <th>Invoice ID</th>
+                  <th>Billing Terms</th>
                   <th>Due Date</th>
-                  <th>Annual Fee</th>
-                  <th>Paid</th>
+                  <th>Annual Assessed Fee</th>
+                  <th>Total Paid</th>
                   <th>Balance Due</th>
                   <th>Status</th>
                   <th className="text-right">Action</th>
@@ -5209,41 +5344,62 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               <tbody>
                 {invoicesViewLoading ? (
                   <SkeletonTableRows rows={6} columns={10} />
-                ) : pageInvoices.length === 0 ? (
+                ) : pageAccounts.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="py-8 text-center text-xs text-[var(--text-muted)]">
-                      No invoices match the selected filters.
+                      No pupil fee accounts match the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  pageInvoices.map(row => {
-                    const annualFee = row.total ?? (row as any).amount ?? 0;
-                    const paidAmount = row.paid ?? 0;
-                    const outstandingBalance = row.outstanding ?? Math.max(0, annualFee - paidAmount);
+                  pageAccounts.map(row => {
+                    const annualFee = row.totalBilled;
+                    const paidAmount = row.totalPaid;
+                    const outstandingBalance = row.outstanding;
                     return (
-                      <tr key={row.id}>
+                      <tr key={row.student_id}>
                         <td>
                           <div>
                             <span className="font-semibold text-sm text-[var(--text-primary)] block">
                               {row.student}
                             </span>
-                            {(row as any).usn && (
+                            {row.usn && (
                               <code className="text-[11px] text-[var(--brand)] font-mono">
-                                {(row as any).usn}
+                                {row.usn}
                               </code>
                             )}
                           </div>
                         </td>
                         <td>
                           <span className="grade-chip">
-                            {(row as any).grade || "Class 6"} · {(row as any).section || "A"}
+                            {row.grade} · {row.section}
                           </span>
                         </td>
                         <td className="muted-cell">{row.family}</td>
-                        <td className="font-mono text-xs text-[var(--text-secondary)]">{row.id}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {row.invoices.length > 0 ? (
+                              row.invoices.map((inv, idx) => {
+                                const isInvOverdue = inv.status === "Overdue" && (inv.outstanding ?? inv.amount ?? 0) > 0;
+                                const isInvPaid = inv.status === "Paid" || (inv.outstanding ?? 0) === 0;
+                                return (
+                                  <span
+                                    key={inv.id}
+                                    className={`status-pill ${isInvPaid ? "success" : isInvOverdue ? "warning" : "neutral"}`}
+                                    style={{ fontSize: "10.5px", padding: "1px 6px" }}
+                                    title={`${inv.id}: ₹${(inv.total ?? 0).toLocaleString("en-IN")} (Due: ${inv.due_date})`}
+                                  >
+                                    T{idx + 1}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="text-xs text-[var(--text-muted)]">1 Term</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="muted-cell">
                           <span className={row.status === "Overdue" ? "text-[var(--danger)] font-semibold" : ""}>
-                            {row.due_date}
+                            {row.earliestOverdueDate || row.latestDueDate}
                           </span>
                         </td>
                         <td className="font-medium text-[var(--text-secondary)]">
@@ -5292,15 +5448,16 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                                   const s = enrolledStudents.find(
                                     stu =>
                                       stu.name.toLowerCase() === row.student.toLowerCase() ||
-                                      (row.student_id && stu.id === row.student_id)
+                                      stu.id === row.student_id
                                   );
-                                  setSelectedInvoiceId(String(row.id));
+                                  const firstUnpaid = row.invoices.find(i => (i.outstanding ?? i.amount ?? 0) > 0) || row.invoices[0];
+                                  setSelectedInvoiceId(firstUnpaid ? String(firstUnpaid.id) : null);
                                   if (s) {
                                     setRecordStudent(s);
                                   } else {
                                     setStudentSearchQuery(row.student);
                                   }
-                                  setPaymentAmount(String(outstandingBalance));
+                                  setPaymentAmount(firstUnpaid ? String(firstUnpaid.outstanding ?? firstUnpaid.amount ?? 0) : String(outstandingBalance));
                                   setShowDialog(true);
                                 }}
                                 title="Collect payment"
@@ -5315,8 +5472,8 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                             )}
                             <button
                               className="tiny-action"
-                              onClick={() => setInspectingInvoice(row)}
-                              title="View invoice details"
+                              onClick={() => setInspectingAccount(row)}
+                              title="View student fee account"
                             >
                               Details
                             </button>
@@ -5342,7 +5499,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               </tbody>
             </table>
           </div>
-          <Pager pagination={invoicesPager} noun="invoices" />
+          <Pager pagination={accountsPager} noun="pupils" />
         </section>
       )}
 
@@ -5358,7 +5515,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <h2 className="panel-title">Overdue accounts & defaulters</h2>
               </div>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                {overdueInvoices.length} pupil account{overdueInvoices.length === 1 ? "" : "s"} with unsettled fee balances past due date. Total overdue: <strong className="text-[var(--danger)]">₹{(overdueTotalAmount / 100000).toFixed(2)}L</strong>
+                {overdueAccounts.length} pupil account{overdueAccounts.length === 1 ? "" : "s"} with unsettled fee balances past due date. Total overdue: <strong className="text-[var(--danger)]">₹{(overdueTotalAmount / 100000).toFixed(2)}L</strong>
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -5371,13 +5528,13 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <Download size={13} />
                 Export Defaulters CSV
               </button>
-              {overdueInvoices.length > 0 && (
+              {overdueAccounts.length > 0 && (
                 <button
                   type="button"
                   className="primary-button compact"
                   onClick={() => {
                     toast.success("Bulk reminders dispatched! ✉️", {
-                      description: `Payment reminder notices sent to all ${overdueInvoices.length} overdue guardian accounts.`,
+                      description: `Payment reminder notices sent to all ${overdueAccounts.length} overdue guardian accounts.`,
                     });
                   }}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
@@ -5396,38 +5553,52 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   <th>Pupil Candidate</th>
                   <th>Class & Section</th>
                   <th>Guardian</th>
-                  <th>Invoice Ref</th>
+                  <th>Overdue Terms</th>
                   <th>Due Date</th>
-                  <th>Total Fee</th>
+                  <th>Annual Fee</th>
                   <th>Amount Paid</th>
                   <th>Overdue Balance</th>
                   <th className="text-right">Defaulter Action</th>
                 </tr>
               </thead>
               <tbody>
-                {overdueInvoices.length === 0 ? (
+                {overdueAccounts.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-8 text-center text-xs text-[var(--text-muted)]">
                       🎉 No overdue accounts! All pupil ledgers are up to date.
                     </td>
                   </tr>
                 ) : (
-                  overdueInvoices.map(row => {
-                    const totalFee = row.total ?? (row as any).amount ?? 0;
-                    const paid = row.paid ?? 0;
-                    const overdueAmt = row.outstanding ?? Math.max(0, totalFee - paid);
+                  overdueAccounts.map(row => {
+                    const totalFee = row.totalBilled;
+                    const paid = row.totalPaid;
+                    const overdueAmt = row.outstanding;
+                    const overdueInvs = row.invoices.filter(i => i.status === "Overdue" && (i.outstanding ?? i.amount ?? 0) > 0);
                     return (
-                      <tr key={row.id}>
+                      <tr key={row.student_id}>
                         <td>
                           <span className="font-semibold text-sm text-[var(--text-primary)] block">{row.student}</span>
-                          {(row as any).usn && <code className="text-xs text-[var(--brand)] font-mono">{(row as any).usn}</code>}
+                          {row.usn && <code className="text-xs text-[var(--brand)] font-mono">{row.usn}</code>}
                         </td>
                         <td>
-                          <span className="grade-chip">{(row as any).grade || "Class 6"} · {(row as any).section || "A"}</span>
+                          <span className="grade-chip">{row.grade} · {row.section}</span>
                         </td>
                         <td className="muted-cell">{row.family}</td>
-                        <td className="font-mono text-xs text-[var(--text-secondary)]">{row.id}</td>
-                        <td className="text-[var(--danger)] font-semibold">{row.due_date}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {overdueInvs.map((inv) => (
+                              <span
+                                key={inv.id}
+                                className="status-pill warning"
+                                style={{ fontSize: "10.5px", padding: "1px 6px" }}
+                                title={`${inv.id}: ₹${(inv.outstanding ?? inv.amount ?? 0).toLocaleString("en-IN")} overdue`}
+                              >
+                                {inv.id}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="text-[var(--danger)] font-semibold">{row.earliestOverdueDate || row.latestDueDate}</td>
                         <td className="muted-cell">₹{totalFee.toLocaleString("en-IN")}</td>
                         <td className="text-[var(--success)] font-semibold">₹{paid.toLocaleString("en-IN")}</td>
                         <td className="font-bold text-[var(--danger)] text-sm">
@@ -5447,15 +5618,16 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                                 const s = enrolledStudents.find(
                                   stu =>
                                     stu.name.toLowerCase() === row.student.toLowerCase() ||
-                                    (row.student_id && stu.id === row.student_id)
+                                    stu.id === row.student_id
                                 );
-                                setSelectedInvoiceId(String(row.id));
+                                const firstUnpaid = overdueInvs[0] || row.invoices[0];
+                                setSelectedInvoiceId(firstUnpaid ? String(firstUnpaid.id) : null);
                                 if (s) {
                                   setRecordStudent(s);
                                 } else {
                                   setStudentSearchQuery(row.student);
                                 }
-                                setPaymentAmount(String(overdueAmt));
+                                setPaymentAmount(firstUnpaid ? String(firstUnpaid.outstanding ?? firstUnpaid.amount ?? 0) : String(overdueAmt));
                                 setShowDialog(true);
                               }}
                             >
@@ -5473,7 +5645,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                             </button>
                             <button
                               className="tiny-action"
-                              onClick={() => setInspectingInvoice(row)}
+                              onClick={() => setInspectingAccount(row)}
                             >
                               Details
                             </button>
@@ -5728,8 +5900,8 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   <td>
                     <span className="text-sm font-bold text-[var(--text-primary)]">School Total</span>
                   </td>
-                  <td>{invoices.length} pupils</td>
-                  <td>Unified Fee</td>
+                  <td>{studentFeeAccounts.length} pupils</td>
+                  <td>Unified Policy (₹50k / ₹60k)</td>
                   <td className="font-bold text-[var(--text-primary)]">
                     ₹{(billed / 100000).toFixed(2)}L
                   </td>
@@ -6084,12 +6256,12 @@ function FinanceView({ onBack }: { onBack: () => void }) {
         </AppDialog>
       )}
 
-      {/* MODAL 2: INVOICE DETAILS DRAWER / MODAL */}
-      {inspectingInvoice && (
+      {/* MODAL 2: STUDENT FEE ACCOUNT & TERM BREAKDOWN MODAL */}
+      {inspectingAccount && (
         <AppDialog
-          title={`Invoice Details · ${inspectingInvoice.id}`}
-          description="Detailed fee assessment and ledger breakdown."
-          onClose={() => setInspectingInvoice(null)}
+          title={`Student Fee Account · ${inspectingAccount.student}`}
+          description={`Annual fee assessment and installment ledger for ${inspectingAccount.grade} · ${inspectingAccount.section}.`}
+          onClose={() => setInspectingAccount(null)}
         >
           <div style={{ fontSize: "13px" }}>
             {/* Student Meta */}
@@ -6105,81 +6277,158 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
                   <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--text-primary)" }}>
-                    {inspectingInvoice.student}
+                    {inspectingAccount.student}
                   </h3>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: 4 }}>
-                    <span className="grade-chip">{(inspectingInvoice as any).grade || "Class 6"} · {(inspectingInvoice as any).section || "A"}</span>
-                    {(inspectingInvoice as any).usn && (
-                      <code className="text-xs text-[var(--brand)] font-mono">{(inspectingInvoice as any).usn}</code>
+                    <span className="grade-chip">{inspectingAccount.grade} · {inspectingAccount.section}</span>
+                    {inspectingAccount.usn && (
+                      <code className="text-xs text-[var(--brand)] font-mono">{inspectingAccount.usn}</code>
                     )}
                   </div>
                 </div>
                 <span
                   className={`status-pill ${
-                    inspectingInvoice.status === "Paid"
+                    inspectingAccount.status === "Paid"
                       ? "success"
-                      : inspectingInvoice.status === "Overdue"
+                      : inspectingAccount.status === "Overdue"
                       ? "warning"
                       : "neutral"
                   }`}
                 >
-                  {inspectingInvoice.status}
+                  {inspectingAccount.status === "Paid" && <Check size={11} className="mr-0.5 inline" />}
+                  {inspectingAccount.status}
                 </span>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", borderTop: "1px solid var(--border)", paddingTop: 12 }}>
                 <div>
                   <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Guardian / Family</span>
-                  <strong className="text-[var(--text-primary)]">{inspectingInvoice.family}</strong>
+                  <strong className="text-[var(--text-primary)]">{inspectingAccount.family}</strong>
                 </div>
                 <div>
-                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Invoice Due Date</span>
-                  <span className={inspectingInvoice.status === "Overdue" ? "text-[var(--danger)] font-semibold" : ""}>{inspectingInvoice.due_date}</span>
+                  <span className="text-[var(--text-muted)] block text-[11px] uppercase font-semibold">Installment Schedule</span>
+                  <strong className="text-[var(--text-primary)]">{inspectingAccount.invoices.length} Terms Billed</strong>
                 </div>
               </div>
             </div>
 
-            {/* Assessment Breakdown */}
+            {/* Annual Fee Assessment Summary */}
             <div
               style={{
-                background: "var(--bg-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                padding: "14px",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: "10px",
                 marginBottom: "16px",
               }}
             >
-              <h4 style={{ margin: "0 0 10px", fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
-                AY 2026–27 Fee Assessment
+              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: "8px", padding: "12px" }}>
+                <span className="text-[11px] text-[var(--text-muted)] block uppercase font-semibold">Annual Assessed</span>
+                <span className="text-base font-bold text-[var(--text-primary)] block mt-1">₹{inspectingAccount.totalBilled.toLocaleString("en-IN")}</span>
+              </div>
+              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: "8px", padding: "12px" }}>
+                <span className="text-[11px] text-[var(--text-muted)] block uppercase font-semibold">Total Paid</span>
+                <span className="text-base font-bold text-[var(--success)] block mt-1">₹{inspectingAccount.totalPaid.toLocaleString("en-IN")}</span>
+              </div>
+              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: "8px", padding: "12px" }}>
+                <span className="text-[11px] text-[var(--text-muted)] block uppercase font-semibold">Remaining Due</span>
+                <span className={`text-base font-bold block mt-1 ${inspectingAccount.outstanding > 0 ? "text-[var(--warning)]" : "text-[var(--text-muted)]"}`}>
+                  ₹{inspectingAccount.outstanding.toLocaleString("en-IN")}
+                </span>
+              </div>
+            </div>
+
+            {/* Term-wise Invoices Table */}
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ margin: "0 0 8px", fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
+                Term-wise Invoice Breakdown ({inspectingAccount.invoices.length} terms)
               </h4>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span className="text-[var(--text-secondary)]">Annual Unified Tuition Fee:</span>
-                <strong>₹{Number(inspectingInvoice.total ?? 0).toLocaleString("en-IN")}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span className="text-[var(--text-secondary)]">Total Paid to Date:</span>
-                <span className="text-[var(--success)] font-semibold">₹{Number(inspectingInvoice.paid ?? 0).toLocaleString("en-IN")}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: 8, marginTop: 4 }}>
-                <span className="font-semibold text-[var(--text-primary)]">Remaining Balance Due:</span>
-                <strong className={inspectingInvoice.amount > 0 ? "text-[var(--warning)] text-base font-bold" : "text-[var(--success)]"}>
-                  ₹{Number(inspectingInvoice.amount ?? inspectingInvoice.outstanding ?? 0).toLocaleString("en-IN")}
-                </strong>
+              <div style={{ border: "1px solid var(--border)", borderRadius: "8px", overflow: "hidden" }}>
+                <table className="data-table" style={{ margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th>Invoice ID</th>
+                      <th>Due Date</th>
+                      <th>Assessed</th>
+                      <th>Paid</th>
+                      <th>Balance</th>
+                      <th>Status</th>
+                      <th className="text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inspectingAccount.invoices.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="text-center py-4 text-xs text-[var(--text-muted)]">
+                          No invoices generated yet for this pupil.
+                        </td>
+                      </tr>
+                    ) : (
+                      inspectingAccount.invoices.map((inv) => {
+                        const invTotal = inv.total ?? inv.amount ?? 0;
+                        const invPaid = inv.paid ?? 0;
+                        const invOut = inv.outstanding ?? Math.max(0, invTotal - invPaid);
+                        return (
+                          <tr key={inv.id}>
+                            <td className="font-mono text-xs text-[var(--brand)] font-semibold">{inv.id}</td>
+                            <td className="text-xs">{inv.due_date}</td>
+                            <td className="text-xs">₹{invTotal.toLocaleString("en-IN")}</td>
+                            <td className="text-xs text-[var(--success)] font-semibold">₹{invPaid.toLocaleString("en-IN")}</td>
+                            <td className="text-xs font-bold text-[var(--text-primary)]">
+                              {invOut > 0 ? (
+                                <span className={inv.status === "Overdue" ? "text-[var(--danger)]" : "text-[var(--warning)]"}>
+                                  ₹{invOut.toLocaleString("en-IN")}
+                                </span>
+                              ) : "₹0"}
+                            </td>
+                            <td>
+                              <span className={`status-pill ${inv.status === "Paid" ? "success" : inv.status === "Overdue" ? "warning" : "neutral"}`}>
+                                {inv.status}
+                              </span>
+                            </td>
+                            <td className="text-right">
+                              {invOut > 0 && (
+                                <button
+                                  type="button"
+                                  className="tiny-action"
+                                  style={{ background: "var(--success-soft)", color: "var(--success)", borderColor: "var(--success-border)", fontWeight: 600 }}
+                                  onClick={() => {
+                                    const s = enrolledStudents.find(
+                                      stu =>
+                                        stu.name.toLowerCase() === inspectingAccount.student.toLowerCase() ||
+                                        stu.id === inspectingAccount.student_id
+                                    );
+                                    setSelectedInvoiceId(String(inv.id));
+                                    if (s) setRecordStudent(s);
+                                    setPaymentAmount(String(invOut));
+                                    setInspectingAccount(null);
+                                    setShowDialog(true);
+                                  }}
+                                >
+                                  Collect
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
             {/* Action buttons */}
             <div className="dialog-actions">
-              <button className="secondary-button" onClick={() => setInspectingInvoice(null)}>
+              <button className="secondary-button" onClick={() => setInspectingAccount(null)}>
                 Close
               </button>
-              {inspectingInvoice.amount > 0 && (
+              {inspectingAccount.outstanding > 0 && (
                 <>
                   <button
                     className="secondary-button"
                     onClick={() => {
                       toast.success("Payment reminder sent", {
-                        description: `Dispatched payment notice to ${inspectingInvoice.family} for balance ₹${inspectingInvoice.amount.toLocaleString("en-IN")}.`,
+                        description: `Dispatched payment notice to ${inspectingAccount.family} for balance ₹${inspectingAccount.outstanding.toLocaleString("en-IN")}.`,
                       });
                     }}
                   >
@@ -6190,17 +6439,18 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     onClick={() => {
                       const s = enrolledStudents.find(
                         stu =>
-                          stu.name.toLowerCase() === inspectingInvoice.student.toLowerCase() ||
-                          (inspectingInvoice.student_id && stu.id === inspectingInvoice.student_id)
+                          stu.name.toLowerCase() === inspectingAccount.student.toLowerCase() ||
+                          stu.id === inspectingAccount.student_id
                       );
-                      setSelectedInvoiceId(String(inspectingInvoice.id));
+                      const firstUnpaid = inspectingAccount.invoices.find(i => (i.outstanding ?? i.amount ?? 0) > 0) || inspectingAccount.invoices[0];
+                      setSelectedInvoiceId(firstUnpaid ? String(firstUnpaid.id) : null);
                       if (s) {
                         setRecordStudent(s);
                       } else {
-                        setStudentSearchQuery(inspectingInvoice.student);
+                        setStudentSearchQuery(inspectingAccount.student);
                       }
-                      setPaymentAmount(String(inspectingInvoice.amount));
-                      setInspectingInvoice(null);
+                      setPaymentAmount(firstUnpaid ? String(firstUnpaid.outstanding ?? firstUnpaid.amount ?? 0) : String(inspectingAccount.outstanding));
+                      setInspectingAccount(null);
                       setShowDialog(true);
                     }}
                   >
