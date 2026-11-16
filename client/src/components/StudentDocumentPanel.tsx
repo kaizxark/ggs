@@ -571,7 +571,9 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
                             <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
                               {displayTitle}
                               {isVerified && (
-                                <ShieldCheck size={14} style={{ color: "var(--success)" }} title="Verified by Administration" />
+                                <span title="Verified by Administration" style={{ display: "inline-flex", alignItems: "center" }}>
+                                  <ShieldCheck size={14} style={{ color: "var(--success)" }} />
+                                </span>
                               )}
                             </div>
                             <div className="muted-cell" style={{ fontSize: "11.5px", marginTop: "1px", display: "flex", alignItems: "center", gap: "5px" }}>
