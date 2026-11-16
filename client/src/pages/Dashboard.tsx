@@ -42,6 +42,7 @@ import {
   Menu,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Plus,
   Printer,
   Receipt,
@@ -207,6 +208,15 @@ import { DateDropdowns } from "../components/DateDropdowns";
 import { SmoothFilterDropdown } from "../components/SmoothFilterDropdown";
 import { SegmentedControl } from "../components/SegmentedControl";
 import SmoothScroll, { smoothScrollTo, usePageScrollLock } from "../components/SmoothScroll";
+import {
+  COHORT_BANDS,
+  DEFAULT_FEE_STRUCTURE,
+  formatFeeInr,
+  getCohortBand,
+  getFeeForGrade,
+  parseGradeNumber,
+  useFeeStructure,
+} from "../lib/fee-structure";
 import {
   effectiveRole,
   isSuperAdminId,
@@ -4548,7 +4558,80 @@ interface StudentFeeAccount {
 
 function FinanceView({ onBack }: { onBack: () => void }) {
   const [showDialog, setShowDialog] = useState(false);
-  const [financeTab, setFinanceTab] = useState<"invoices" | "defaulters" | "receipts" | "cohort">("invoices");
+  const [financeTab, setFinanceTab] = useState<"invoices" | "defaulters" | "receipts" | "cohort" | "structure">("invoices");
+
+  // Institutional Fee Structure Hook (AY 2026-27 policy: 1-4: 30k, 5-7: 35k, 8-10: 40k)
+  const {
+    structure: feeStructure,
+    updateStructure,
+    resetToDefault,
+    saving: feeSaving,
+    cohortBands,
+  } = useFeeStructure();
+
+  const currentUser = useCurrentUser();
+  const isAdmin =
+    !currentUser ||
+    currentUser.role === "admin" ||
+    currentUser.role === "super_admin" ||
+    currentUser.role === "principal";
+
+  const [showFeeStructureModal, setShowFeeStructureModal] = useState(false);
+  const [editingFees, setEditingFees] = useState<Record<number, number>>(() => ({ ...DEFAULT_FEE_STRUCTURE }));
+  const [cohortPreset, setCohortPreset] = useState<{ primary: number; middle: number; secondary: number }>({
+    primary: 30000,
+    middle: 35000,
+    secondary: 40000,
+  });
+
+  const openFeeStructureModal = () => {
+    setEditingFees({ ...feeStructure });
+    setCohortPreset({
+      primary: feeStructure[1] ?? 30000,
+      middle: feeStructure[5] ?? 35000,
+      secondary: feeStructure[10] ?? 40000,
+    });
+    setShowFeeStructureModal(true);
+  };
+
+  const handleSaveFeeStructure = async () => {
+    const res = await updateStructure(editingFees);
+    if (res.success) {
+      toast.success("Institutional fee structure updated and published!");
+      setShowFeeStructureModal(false);
+    } else {
+      toast.error(res.error || "Failed to update fee structure");
+    }
+  };
+
+  const handleResetFeeStructure = async () => {
+    const confirmReset = window.confirm(
+      "Reset fee structure to official school policy defaults?\n\n• Classes 1–4: ₹30,000 / year\n• Classes 5–7: ₹35,000 / year\n• Classes 8–10: ₹40,000 / year"
+    );
+    if (!confirmReset) return;
+    const res = await resetToDefault();
+    if (res.success) {
+      toast.success("Fee structure reset to official default policy.");
+      setShowFeeStructureModal(false);
+    } else {
+      toast.error(res.error || "Failed to reset fee structure");
+    }
+  };
+
+  const applyCohortPreset = (cohort: "primary" | "middle" | "secondary", amount: number) => {
+    setEditingFees((prev) => {
+      const next = { ...prev };
+      if (cohort === "primary") {
+        [1, 2, 3, 4].forEach((g) => { next[g] = amount; });
+      } else if (cohort === "middle") {
+        [5, 6, 7].forEach((g) => { next[g] = amount; });
+      } else if (cohort === "secondary") {
+        [8, 9, 10].forEach((g) => { next[g] = amount; });
+      }
+      return next;
+    });
+    toast.success(`Applied ₹${amount.toLocaleString("en-IN")} to ${cohort === "primary" ? "Classes 1–4" : cohort === "middle" ? "Classes 5–7" : "Classes 8–10"}`);
+  };
   
   // Student Fee Ledger Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -4940,7 +5023,19 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             {studentFeeAccounts.filter(a => a.status !== "Paid").length} with balance due · ₹{(billed / 100000).toFixed(1)}L total institutional billing
           </p>
         </div>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          {isAdmin && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={openFeeStructureModal}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              title="Configure institutional fee tiers per class or cohort band"
+            >
+              <SlidersHorizontal size={14} />
+              Fee Structure
+            </button>
+          )}
           <button
             type="button"
             className="secondary-button"
@@ -5111,6 +5206,17 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 Official school policy: Unified annual tuition fee.
               </p>
             </div>
+            {isAdmin && (
+              <button
+                type="button"
+                className="secondary-button compact"
+                onClick={openFeeStructureModal}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
+              >
+                <SlidersHorizontal size={13} />
+                Edit structure
+              </button>
+            )}
           </div>
           <div className="fee-mix">
             <div className="pie-wrap">
@@ -5172,9 +5278,19 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   </strong>
                 </div>
               ))}
-              <div style={{ marginTop: "10px", padding: "8px 10px", background: "var(--bg-raised)", borderRadius: "8px", fontSize: "11px", color: "var(--text-muted)" }}>
-                <div>Class 6–8: <strong className="text-[var(--text-primary)]">₹50,000 / year</strong></div>
-                <div style={{ marginTop: "2px" }}>Class 9–10: <strong className="text-[var(--text-primary)]">₹60,000 / year</strong></div>
+              <div style={{ marginTop: "10px", padding: "8px 10px", background: "var(--bg-raised)", borderRadius: "8px", fontSize: "11px", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Class 1–4 (Primary):</span>
+                  <strong className="text-[var(--text-primary)]">{formatFeeInr(feeStructure[1] ?? 30000)} / yr</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Class 5–7 (Middle):</span>
+                  <strong className="text-[var(--text-primary)]">{formatFeeInr(feeStructure[5] ?? 35000)} / yr</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Class 8–10 (Secondary):</span>
+                  <strong className="text-[var(--text-primary)]">{formatFeeInr(feeStructure[10] ?? 40000)} / yr</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -5221,6 +5337,19 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             {
               value: "cohort",
               label: "Class-wise Analysis",
+            },
+            {
+              value: "structure",
+              label: (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  Fee Structure Policy
+                  {isAdmin && (
+                    <span className="count-badge" style={{ background: "var(--brand-soft)", color: "var(--brand)" }}>
+                      Editable
+                    </span>
+                  )}
+                </span>
+              ),
             },
           ]}
         />
@@ -5285,16 +5414,16 @@ function FinanceView({ onBack }: { onBack: () => void }) {
               onChange={setGradeFilter}
               options={[
                 { value: "all", label: "All Classes" },
-                { value: "Grade 1", label: "Class 1 (₹35k)" },
-                { value: "Grade 2", label: "Class 2 (₹35k)" },
-                { value: "Grade 3", label: "Class 3 (₹35k)" },
-                { value: "Grade 4", label: "Class 4 (₹40k)" },
-                { value: "Grade 5", label: "Class 5 (₹40k)" },
-                { value: "Grade 6", label: "Class 6 (₹50k)" },
-                { value: "Grade 7", label: "Class 7 (₹50k)" },
-                { value: "Grade 8", label: "Class 8 (₹50k)" },
-                { value: "Grade 9", label: "Class 9 (₹60k)" },
-                { value: "Grade 10", label: "Class 10 (₹60k)" },
+                { value: "Grade 1", label: `Class 1 (${formatFeeInr(feeStructure[1] ?? 30000)})` },
+                { value: "Grade 2", label: `Class 2 (${formatFeeInr(feeStructure[2] ?? 30000)})` },
+                { value: "Grade 3", label: `Class 3 (${formatFeeInr(feeStructure[3] ?? 30000)})` },
+                { value: "Grade 4", label: `Class 4 (${formatFeeInr(feeStructure[4] ?? 30000)})` },
+                { value: "Grade 5", label: `Class 5 (${formatFeeInr(feeStructure[5] ?? 35000)})` },
+                { value: "Grade 6", label: `Class 6 (${formatFeeInr(feeStructure[6] ?? 35000)})` },
+                { value: "Grade 7", label: `Class 7 (${formatFeeInr(feeStructure[7] ?? 35000)})` },
+                { value: "Grade 8", label: `Class 8 (${formatFeeInr(feeStructure[8] ?? 40000)})` },
+                { value: "Grade 9", label: `Class 9 (${formatFeeInr(feeStructure[9] ?? 40000)})` },
+                { value: "Grade 10", label: `Class 10 (${formatFeeInr(feeStructure[10] ?? 40000)})` },
               ]}
             />
 
@@ -5871,7 +6000,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     <td className="font-medium text-[var(--text-secondary)]">
                       {row.feePerPupil != null
                         ? `₹${row.feePerPupil.toLocaleString("en-IN")} / pupil`
-                        : "—"}
+                        : `${formatFeeInr(feeStructure[parseGradeNumber(row.grade) ?? 1] ?? 35000)} / pupil`}
                     </td>
                     <td className="font-semibold text-[var(--text-primary)]">
                       ₹{(row.totalBilled / 100000).toFixed(2)}L
@@ -5915,7 +6044,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     <span className="text-sm font-bold text-[var(--text-primary)]">School Total</span>
                   </td>
                   <td>{studentFeeAccounts.length} pupils</td>
-                  <td>Unified Policy (₹50k / ₹60k)</td>
+                  <td>Unified Policy ({formatFeeInr(feeStructure[1] ?? 30000)} / {formatFeeInr(feeStructure[5] ?? 35000)} / {formatFeeInr(feeStructure[10] ?? 40000)})</td>
                   <td className="font-bold text-[var(--text-primary)]">
                     ₹{(billed / 100000).toFixed(2)}L
                   </td>
@@ -5955,6 +6084,602 @@ function FinanceView({ onBack }: { onBack: () => void }) {
             </table>
           </div>
         </section>
+      )}
+
+      {/* TAB 5: INSTITUTIONAL FEE STRUCTURE POLICY */}
+      {financeTab === "structure" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Header Banner */}
+          <section className="panel" style={{ padding: "20px 24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "16px" }}>
+              <div>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                  <span className="count-badge" style={{ background: "var(--brand-soft)", color: "var(--brand)", fontSize: "11px", fontWeight: 700 }}>
+                    AY 2026–27 OFFICIAL POLICY
+                  </span>
+                  <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                    Published & Synced via Supabase Realtime
+                  </span>
+                </div>
+                <h2 className="panel-title" style={{ fontSize: "20px" }}>
+                  Institutional Fee Structure & Cohort Policies
+                </h2>
+                <p className="text-sm text-[var(--text-secondary)]" style={{ marginTop: "4px", maxWidth: "750px" }}>
+                  Default policy mandates <strong>₹30,000 / year</strong> for Primary (Classes 1–4), <strong>₹35,000 / year</strong> for Middle School (Classes 5–7), and <strong>₹40,000 / year</strong> for Secondary (Classes 8–10). Invoices are billed semestrally in two equal installments (Term 1 & Term 2). Administrators can edit the schedule per class or cohort band.
+                </p>
+              </div>
+
+              {isAdmin && (
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleResetFeeStructure}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12.5px" }}
+                    title="Reset to 30k (Classes 1-4), 35k (Classes 5-7), 40k (Classes 8-10)"
+                  >
+                    <RotateCcw size={13} />
+                    Reset to defaults
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={openFeeStructureModal}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12.5px" }}
+                  >
+                    <SlidersHorizontal size={14} />
+                    Edit fee structure
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Three Cohort Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+            {cohortBands.map((band) => {
+              const representativeFee = feeStructure[band.grades[0]] ?? band.defaultAmount;
+              const termFee = Math.round(representativeFee / 2);
+              const cohortPupils = studentFeeAccounts.filter(a => {
+                const g = parseGradeNumber(a.grade);
+                return g !== null && band.grades.includes(g);
+              }).length;
+              const projectedBilling = cohortPupils * representativeFee;
+
+              return (
+                <div
+                  key={band.id}
+                  className="panel"
+                  style={{
+                    padding: "20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "14px",
+                    borderTop: `3px solid ${band.color}`,
+                    position: "relative",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                          color: band.color,
+                        }}
+                      >
+                        {band.name}
+                      </span>
+                      <h3 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text-primary)", margin: "2px 0 0" }}>
+                        {band.label}
+                      </h3>
+                    </div>
+                    <span
+                      className="grade-chip"
+                      style={{
+                        background: band.bg,
+                        color: band.color,
+                        border: `1px solid ${band.border}`,
+                        fontSize: "11px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {cohortPupils} Pupils
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: 0, minHeight: "36px" }}>
+                    {band.description}
+                  </p>
+
+                  <div
+                    style={{
+                      background: "var(--bg-raised)",
+                      borderRadius: "10px",
+                      padding: "12px 14px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>
+                        Annual Assessment:
+                      </span>
+                      <span style={{ fontSize: "20px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+                        {formatFeeInr(representativeFee)}
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}> / yr</span>
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", color: "var(--text-muted)", borderTop: "1px dashed var(--border)", paddingTop: "6px" }}>
+                      <span>Semestral Installments:</span>
+                      <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>
+                        {formatFeeInr(termFee)} × 2 terms
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", color: "var(--text-muted)" }}>
+                      <span>Projected Total Billing:</span>
+                      <span style={{ fontWeight: 600, color: "var(--brand)" }}>
+                        ₹{(projectedBilling / 100000).toFixed(2)}L
+                      </span>
+                    </div>
+                  </div>
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="secondary-button compact"
+                      onClick={() => {
+                        setEditingFees({ ...feeStructure });
+                        setCohortPreset({
+                          primary: feeStructure[1] ?? 30000,
+                          middle: feeStructure[5] ?? 35000,
+                          secondary: feeStructure[10] ?? 40000,
+                        });
+                        setShowFeeStructureModal(true);
+                      }}
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: "12px",
+                        marginTop: "auto",
+                      }}
+                    >
+                      <SlidersHorizontal size={12} />
+                      Adjust {band.name} Fee
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Detailed Class-by-Class Table */}
+          <section className="panel table-panel">
+            <div className="panel-header">
+              <div>
+                <h3 className="panel-title">Class-by-Class Fee Schedule</h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Detailed tuition schedule for Classes 1 through 10. Split equally across Term 1 & Term 2.
+                </p>
+              </div>
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  onClick={openFeeStructureModal}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
+                >
+                  <Pencil size={12} />
+                  Edit Schedule
+                </button>
+              )}
+            </div>
+
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Class / Grade</th>
+                    <th>Educational Wing</th>
+                    <th>Enrolled Pupils</th>
+                    <th>Term 1 Installment (50%)</th>
+                    <th>Term 2 Installment (50%)</th>
+                    <th>Unified Annual Tuition</th>
+                    <th>Policy Status</th>
+                    {isAdmin && <th className="text-right">Action</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((g) => {
+                    const annual = feeStructure[g] ?? (g <= 4 ? 30000 : g <= 7 ? 35000 : 40000);
+                    const defaultVal = DEFAULT_FEE_STRUCTURE[g];
+                    const isCustom = annual !== defaultVal;
+                    const term1 = Math.round(annual / 2);
+                    const term2 = annual - term1;
+                    const band = getCohortBand(g);
+                    const pupilsInGrade = studentFeeAccounts.filter(
+                      a => parseGradeNumber(a.grade) === g
+                    ).length;
+
+                    return (
+                      <tr key={g}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span className="font-bold text-sm text-[var(--text-primary)]">
+                              Class {g}
+                            </span>
+                            <span className="grade-chip" style={{ fontSize: "11px" }}>
+                              Grade {g}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontSize: "12px",
+                              fontWeight: 500,
+                              color: band.color,
+                            }}
+                          >
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: band.color }} />
+                            {band.name}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="text-xs text-[var(--text-secondary)] font-medium">
+                            {pupilsInGrade} {pupilsInGrade === 1 ? "pupil" : "pupils"}
+                          </span>
+                        </td>
+                        <td className="font-mono text-xs text-[var(--text-secondary)]">
+                          {formatFeeInr(term1)}
+                        </td>
+                        <td className="font-mono text-xs text-[var(--text-secondary)]">
+                          {formatFeeInr(term2)}
+                        </td>
+                        <td>
+                          <span className="font-bold text-sm text-[var(--text-primary)]">
+                            {formatFeeInr(annual)}
+                          </span>
+                          <span className="text-[11px] text-[var(--text-muted)] font-normal"> / year</span>
+                        </td>
+                        <td>
+                          {isCustom ? (
+                            <span
+                              className="count-badge"
+                              style={{
+                                background: "rgba(59, 130, 246, 0.12)",
+                                color: "#3b82f6",
+                                border: "1px solid rgba(59, 130, 246, 0.25)",
+                                fontSize: "11px",
+                              }}
+                            >
+                              Custom Override
+                            </span>
+                          ) : (
+                            <span
+                              className="count-badge"
+                              style={{
+                                background: "rgba(16, 185, 129, 0.12)",
+                                color: "#10b981",
+                                border: "1px solid rgba(16, 185, 129, 0.25)",
+                                fontSize: "11px",
+                              }}
+                            >
+                              Official Default
+                            </span>
+                          )}
+                        </td>
+                        {isAdmin && (
+                          <td className="text-right">
+                            <button
+                              type="button"
+                              className="secondary-button compact"
+                              onClick={() => {
+                                setEditingFees({ ...feeStructure });
+                                setShowFeeStructureModal(true);
+                              }}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "11.5px", padding: "4px 8px" }}
+                            >
+                              <Pencil size={11} />
+                              Edit
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* MODAL: EDIT FEE STRUCTURE */}
+      {showFeeStructureModal && (
+        <AppDialog
+          title="Edit institutional fee structure"
+          description="Configure annual tuition fees for Global Kids School (AY 2026–27). Set fees by educational cohort band or customize individual classes."
+          onClose={() => setShowFeeStructureModal(false)}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Quick Cohort Band Presets */}
+            <div
+              style={{
+                background: "var(--bg-raised)",
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                padding: "16px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                <div>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", display: "block" }}>
+                    Batch Update by Cohort Band
+                  </span>
+                  <span style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>
+                    Quickly apply uniform fees to all classes in an educational wing.
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                {/* Primary Wing */}
+                <div
+                  style={{
+                    padding: "12px",
+                    background: "var(--bg-panel)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#10b981" }}>Primary (Classes 1–4)</span>
+                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Policy: 30k</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input
+                      type="number"
+                      step={1000}
+                      min={0}
+                      value={cohortPreset.primary}
+                      onChange={(e) => setCohortPreset((p) => ({ ...p, primary: Number(e.target.value) }))}
+                      style={{ fontSize: "13px", fontWeight: 600, padding: "6px 8px", height: "34px" }}
+                      placeholder="30000"
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button compact"
+                      onClick={() => applyCohortPreset("primary", cohortPreset.primary)}
+                      style={{ whiteSpace: "nowrap", fontSize: "11.5px", height: "34px", padding: "0 10px" }}
+                    >
+                      Apply 1–4
+                    </button>
+                  </div>
+                </div>
+
+                {/* Middle School */}
+                <div
+                  style={{
+                    padding: "12px",
+                    background: "var(--bg-panel)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}>Middle (Classes 5–7)</span>
+                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Policy: 35k</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input
+                      type="number"
+                      step={1000}
+                      min={0}
+                      value={cohortPreset.middle}
+                      onChange={(e) => setCohortPreset((p) => ({ ...p, middle: Number(e.target.value) }))}
+                      style={{ fontSize: "13px", fontWeight: 600, padding: "6px 8px", height: "34px" }}
+                      placeholder="35000"
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button compact"
+                      onClick={() => applyCohortPreset("middle", cohortPreset.middle)}
+                      style={{ whiteSpace: "nowrap", fontSize: "11.5px", height: "34px", padding: "0 10px" }}
+                    >
+                      Apply 5–7
+                    </button>
+                  </div>
+                </div>
+
+                {/* Secondary Wing */}
+                <div
+                  style={{
+                    padding: "12px",
+                    background: "var(--bg-panel)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#8b5cf6" }}>Secondary (Classes 8–10)</span>
+                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Policy: 40k</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input
+                      type="number"
+                      step={1000}
+                      min={0}
+                      value={cohortPreset.secondary}
+                      onChange={(e) => setCohortPreset((p) => ({ ...p, secondary: Number(e.target.value) }))}
+                      style={{ fontSize: "13px", fontWeight: 600, padding: "6px 8px", height: "34px" }}
+                      placeholder="40000"
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button compact"
+                      onClick={() => applyCohortPreset("secondary", cohortPreset.secondary)}
+                      style={{ whiteSpace: "nowrap", fontSize: "11.5px", height: "34px", padding: "0 10px" }}
+                    >
+                      Apply 8–10
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Individual Class Inputs */}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
+                  Individual Class Fees (INR / year)
+                </span>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                  Term installments are auto-calculated at 50% each
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: "10px",
+                  maxHeight: "360px",
+                  overflowY: "auto",
+                  paddingRight: "4px",
+                }}
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((g) => {
+                  const val = editingFees[g] ?? (g <= 4 ? 30000 : g <= 7 ? 35000 : 40000);
+                  const band = getCohortBand(g);
+                  const half = Math.round(val / 2);
+
+                  return (
+                    <div
+                      key={g}
+                      style={{
+                        padding: "10px 12px",
+                        background: "var(--bg-raised)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
+                            Class {g}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              padding: "1px 5px",
+                              borderRadius: "4px",
+                              background: band.bg,
+                              color: band.color,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {band.name}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginTop: "2px" }}>
+                          2 terms × {formatFeeInr(half)}
+                        </span>
+                      </div>
+
+                      <div style={{ width: "110px" }}>
+                        <input
+                          type="number"
+                          step={500}
+                          min={0}
+                          value={val}
+                          onChange={(e) => {
+                            const num = Number(e.target.value);
+                            setEditingFees((prev) => ({ ...prev, [g]: num }));
+                          }}
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: 700,
+                            textAlign: "right",
+                            padding: "6px 8px",
+                            height: "34px",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="dialog-actions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleResetFeeStructure}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px", color: "var(--text-muted)" }}
+              >
+                <RotateCcw size={12} />
+                Reset to default policy (30k/35k/40k)
+              </button>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setShowFeeStructureModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={feeSaving}
+                  onClick={handleSaveFeeStructure}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {feeSaving ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      Save & Publish Structure
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </AppDialog>
       )}
 
       {/* MODAL 1: RECORD PAYMENT */}
