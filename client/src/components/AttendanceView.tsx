@@ -681,18 +681,9 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
       <div className="page-intro att-intro">
         <div>
           <Breadcrumb parent="Global Kids School" current="Attendance" onParentClick={onBack} />
-          <div className="att-title-row">
-            <h1 className="page-title" style={{ margin: 0 }}>
-              Attendance
-            </h1>
-            <span
-              className="live-pulse-badge"
-              title="Live — updates when any class teacher saves a register"
-            >
-              <span className="live-pulse-dot" />
-              LIVE
-            </span>
-          </div>
+          <h1 className="page-title">
+            Attendance
+          </h1>
           <p className="page-subtitle" style={{ marginTop: "4px" }}>
             {isManager
               ? currentTab === "overview"
@@ -717,7 +708,7 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
             onChange={(value) => setActiveTab(value as "register" | "overview")}
             indicatorVariant="brand"
             options={[
-              { value: "overview", label: "Live overview", icon: <Activity size={14} /> },
+              { value: "overview", label: "Overview", icon: <Activity size={14} /> },
               { value: "register", label: "Class register", icon: <ClipboardCheck size={14} /> },
             ]}
           />
@@ -1415,7 +1406,7 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
               onClick={() => setActiveTab("overview")}
             >
               <ArrowLeft size={13} />
-              Back to live overview
+              Back to overview
             </button>
             <span className="att-register-back-note">
               {selectedClass?.label ?? "Selected class"} ·{" "}
