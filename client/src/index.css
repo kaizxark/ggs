@@ -621,8 +621,8 @@ button.breadcrumb-root:hover { color: var(--brand); }
    being squeezed into 35% of the width and wrapping awkwardly. Handing it more
    room costs the chart column little, because the chart is fluid anyway. */
 .dashboard-grid-top { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: stretch; }
-.dashboard-grid-top > .panel { display: flex; flex-direction: column; height: 100%; }
-.dashboard-grid-top > .panel > .class-watch-list { flex: 1; }
+.dashboard-grid-top > .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.dashboard-grid-top > .panel > .class-watch-list { flex: 1 1 0; min-height: 0; }
 .dashboard-grid-mid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; }
 .dashboard-grid-mid > .panel { display: flex; flex-direction: column; height: 100%; }
 .dashboard-grid-mid > .panel > .attention-list,
@@ -918,6 +918,25 @@ button.breadcrumb-root:hover { color: var(--brand); }
   flex-direction: column;
   gap: 6px;
   padding: 14px 18px 20px;
+  max-height: 330px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(24, 24, 27, 0.22) transparent;
+}
+.class-watch-list::-webkit-scrollbar {
+  width: 6px;
+}
+.class-watch-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.class-watch-list::-webkit-scrollbar-thumb {
+  background: rgba(24, 24, 27, 0.2);
+  border-radius: 999px;
+}
+.class-watch-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(24, 24, 27, 0.35);
 }
 .class-watch-row {
   display: flex;

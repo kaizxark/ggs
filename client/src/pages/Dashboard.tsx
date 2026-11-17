@@ -2297,7 +2297,12 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
               {classAttendance.length} classes
             </span>
           </div>
-          <div className="class-watch-list">
+          <div
+            className="class-watch-list"
+            tabIndex={0}
+            role="region"
+            aria-label="Classrooms attendance list"
+          >
             {classAttendanceLoading ? (
               <SkeletonRegion label="Loading class attendance">
                 <SkeletonList rows={5} avatar={false} />
