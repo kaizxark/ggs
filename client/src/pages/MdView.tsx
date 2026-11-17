@@ -50,9 +50,8 @@ interface ClassAttendanceItem {
   teacherName: string;
   enrolled: number;
   present: number;
-  late: number;
   absent: number;
-  leave: number;
+  unmarked: number;
   rate: number;
   status: "high" | "average" | "low";
   absentees: string[];
@@ -96,10 +95,8 @@ interface MdViewData {
     date: string;
     overallRate: number;
     presentCount: number;
-    lateCount: number;
     absentCount: number;
-    leaveCount: number;
-    attendingCount: number;
+    unmarkedCount: number;
     classesReported: number;
     classesTotal: number;
     classes: ClassAttendanceItem[];
@@ -181,8 +178,9 @@ function clockDate(date: Date): string {
 interface GradeAttendance {
   grade: string;
   enrolled: number;
-  attending: number;
+  present: number;
   absent: number;
+  unmarked: number;
   rate: number;
   classes: ClassAttendanceItem[];
 }
@@ -205,17 +203,20 @@ function groupAttendance(classes: ClassAttendanceItem[]): GradeAttendance[] {
   const groups = new Map<string, GradeAttendance>();
 
   for (const item of classes) {
+    const unmark = item.unmarked ?? Math.max(0, item.enrolled - (item.present + item.absent));
     const group = groups.get(item.grade) ?? {
       grade: item.grade,
       enrolled: 0,
-      attending: 0,
+      present: 0,
       absent: 0,
+      unmarked: 0,
       rate: 0,
       classes: [],
     };
     group.enrolled += item.enrolled;
-    group.attending += item.present + item.late;
+    group.present += item.present;
     group.absent += item.absent;
+    group.unmarked += unmark;
     group.classes.push(item);
     groups.set(item.grade, group);
   }
@@ -227,7 +228,7 @@ function groupAttendance(classes: ClassAttendanceItem[]): GradeAttendance[] {
       // one must not be pulled towards the small one.
       rate:
         group.enrolled > 0
-          ? Math.round((group.attending / group.enrolled) * 1000) / 10
+          ? Math.round((group.present / group.enrolled) * 1000) / 10
           : 0,
     }))
     .sort((a, b) => {
@@ -343,13 +344,9 @@ function AttendanceBoard({
     [attendance.classes]
   );
 
-  const unmarked = Math.max(
+  const unmarked = attendance.unmarkedCount ?? Math.max(
     0,
-    totalStudents -
-      (attendance.presentCount +
-        attendance.lateCount +
-        attendance.leaveCount +
-        attendance.absentCount)
+    totalStudents - (attendance.presentCount + attendance.absentCount)
   );
 
   const belowTarget = attendance.classes.filter(
@@ -371,22 +368,12 @@ function AttendanceBoard({
 
         <div>
           <Composition
-            label={`Attendance: ${attendance.presentCount} present, ${attendance.lateCount} late, ${attendance.leaveCount} on leave, ${attendance.absentCount} absent`}
+            label={`Attendance: ${attendance.presentCount} present, ${attendance.absentCount} absent, ${unmarked} unmarked`}
             segments={[
               {
                 key: "present",
                 value: attendance.presentCount,
                 className: "mdv-seg-present",
-              },
-              {
-                key: "late",
-                value: attendance.lateCount,
-                className: "mdv-seg-late",
-              },
-              {
-                key: "leave",
-                value: attendance.leaveCount,
-                className: "mdv-seg-leave",
               },
               {
                 key: "absent",
@@ -407,23 +394,17 @@ function AttendanceBoard({
               <dd>{count(attendance.presentCount)}</dd>
             </div>
             <div>
-              <dt>Late</dt>
-              <dd>{count(attendance.lateCount)}</dd>
-            </div>
-            <div>
-              <dt>On leave</dt>
-              <dd>{count(attendance.leaveCount)}</dd>
-            </div>
-            <div>
               <dt>Absent</dt>
               <dd>{count(attendance.absentCount)}</dd>
             </div>
-            {unmarked > 0 && (
-              <div>
-                <dt>Unmarked</dt>
-                <dd>{count(unmarked)}</dd>
-              </div>
-            )}
+            <div>
+              <dt>Unmarked</dt>
+              <dd>{count(unmarked)}</dd>
+            </div>
+            <div>
+              <dt>Total Enrolled</dt>
+              <dd>{count(totalStudents)}</dd>
+            </div>
           </dl>
 
           <p className="mdv-note" data-clear={belowTarget === 0 ? "true" : "false"}>
@@ -444,8 +425,9 @@ function AttendanceBoard({
           <tr>
             <th>Grade</th>
             <th className="num mdv-col-optional">Enrolled</th>
-            <th className="num">Attending</th>
+            <th className="num">Present</th>
             <th className="num mdv-col-optional">Absent</th>
+            <th className="num mdv-col-optional">Unmarked</th>
             <th className="num">Attendance</th>
           </tr>
         </thead>
@@ -479,9 +461,12 @@ function AttendanceBoard({
                   <td className="mdv-cell-num num mdv-col-optional">
                     {count(group.enrolled)}
                   </td>
-                  <td className="mdv-cell-num num">{count(group.attending)}</td>
+                  <td className="mdv-cell-num num">{count(group.present)}</td>
                   <td className="mdv-cell-num num mdv-col-optional">
                     {count(group.absent)}
+                  </td>
+                  <td className="mdv-cell-num num mdv-col-optional">
+                    {count(group.unmarked)}
                   </td>
                   <td>
                     <Rate
@@ -521,10 +506,13 @@ function AttendanceBoard({
                         {count(item.enrolled)}
                       </td>
                       <td className="mdv-cell-num num">
-                        {count(item.present + item.late)}
+                        {count(item.present)}
                       </td>
                       <td className="mdv-cell-num num mdv-col-optional">
                         {count(item.absent)}
+                      </td>
+                      <td className="mdv-cell-num num mdv-col-optional">
+                        {count(item.unmarked ?? Math.max(0, item.enrolled - (item.present + item.absent)))}
                       </td>
                       <td>
                         <Rate
@@ -789,16 +777,12 @@ function RosterDialog({
             <dd>{item.present}</dd>
           </div>
           <div>
-            <dt>Late</dt>
-            <dd>{item.late}</dd>
-          </div>
-          <div>
-            <dt>Leave</dt>
-            <dd>{item.leave}</dd>
-          </div>
-          <div>
             <dt>Absent</dt>
             <dd>{item.absent}</dd>
+          </div>
+          <div>
+            <dt>Unmarked</dt>
+            <dd>{item.unmarked ?? Math.max(0, item.enrolled - (item.present + item.absent))}</dd>
           </div>
         </dl>
 

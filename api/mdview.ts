@@ -58,10 +58,9 @@ async function fetchAllRows<T = Record<string, unknown>>(
   return all;
 }
 
-// In-memory cache for 4 seconds to serve multi-TV setups instantaneously
-let cachedData: unknown = null;
-let cachedAt = 0;
-const CACHE_TTL_MS = 4_000;
+// In-memory cache for 3 seconds to serve multi-TV setups instantaneously
+const cacheStore = new Map<string, { data: unknown; cachedAt: number }>();
+const CACHE_TTL_MS = 3_000;
 
 function isAuthorized(req: Request): boolean {
   const authHeader = req.headers.get("authorization") ?? "";
@@ -139,9 +138,14 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
 
+  const url = new URL(req.url, "http://localhost");
+  const cacheKey = url.searchParams.get("date") || "default";
+  const bypass = url.searchParams.has("bypass") || url.searchParams.has("refresh");
   const now = Date.now();
-  if (cachedData && now - cachedAt < CACHE_TTL_MS) {
-    return Response.json(cachedData, {
+  const cached = cacheStore.get(cacheKey);
+
+  if (!bypass && cached && now - cached.cachedAt < CACHE_TTL_MS) {
+    return Response.json(cached.data, {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Cache-Control": "no-store, must-revalidate",
@@ -193,16 +197,35 @@ export async function GET(req: Request): Promise<Response> {
       classroomStudents.set(e.classroom_id, list);
     }
 
-    // 2. Fetch latest attendance
-    const latestAttRow = await restRows<{ attendance_date: string }>(
-      "attendance",
-      `organisation_id=eq.${ORG_ID}&order=attendance_date.desc&limit=1&select=attendance_date`
-    );
-    const targetDate = latestAttRow[0]?.attendance_date || "2026-10-01";
+    // 2. Resolve date for attendance
+    const requestedDate = url.searchParams.get("date");
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+    let targetDate = requestedDate || today;
+    if (!requestedDate) {
+      // Check if today has attendance records
+      const todayCount = await restRows<{ id: string }>(
+        "attendance",
+        `organisation_id=eq.${ORG_ID}&attendance_date=eq.${today}&limit=1&select=id`
+      );
+      if (!todayCount || todayCount.length === 0) {
+        // Fall back to the most recent recorded attendance date
+        const latestAttRow = await restRows<{ attendance_date: string }>(
+          "attendance",
+          `organisation_id=eq.${ORG_ID}&order=attendance_date.desc&limit=1&select=attendance_date`
+        );
+        targetDate = latestAttRow[0]?.attendance_date || today;
+      }
+    }
 
     const attendanceRecords = await fetchAllRows<{
       student_id: string;
-      status: "present" | "absent" | "late" | "leave";
+      status: string;
     }>("attendance", "student_id,status", `attendance_date=eq.${targetDate}`);
 
     const attendanceByStudent = new Map(
@@ -284,9 +307,8 @@ export async function GET(req: Request): Promise<Response> {
 
     // Compute class-by-class attendance & fees
     let totalStudentsPresent = 0;
-    let totalStudentsLate = 0;
     let totalStudentsAbsent = 0;
-    let totalStudentsLeave = 0;
+    let totalStudentsUnmarked = 0;
     let classesReportedCount = 0;
 
     const classAttendanceMetrics = [];
@@ -299,9 +321,8 @@ export async function GET(req: Request): Promise<Response> {
         : "Unassigned";
 
       let pres = 0;
-      let late = 0;
       let abs = 0;
-      let leave = 0;
+      let unmarked = 0;
       const absentNames: string[] = [];
 
       let clsBilled = 0;
@@ -312,13 +333,15 @@ export async function GET(req: Request): Promise<Response> {
 
       for (const sId of studentIds) {
         const att = attendanceByStudent.get(sId);
-        if (att === "present") pres++;
-        else if (att === "late") late++;
-        else if (att === "absent") {
+        if (att === "present" || att === "late") {
+          pres++;
+        } else if (att === "absent" || att === "leave") {
           abs++;
           const stu = studentMap.get(sId);
-          if (stu && absentNames.length < 6) absentNames.push(stu.name);
-        } else if (att === "leave") leave++;
+          if (stu && absentNames.length < 8) absentNames.push(stu.name);
+        } else {
+          unmarked++;
+        }
 
         const fee = studentFees.get(sId);
         if (fee) {
@@ -331,15 +354,14 @@ export async function GET(req: Request): Promise<Response> {
       }
 
       totalStudentsPresent += pres;
-      totalStudentsLate += late;
       totalStudentsAbsent += abs;
-      totalStudentsLeave += leave;
+      totalStudentsUnmarked += unmarked;
 
-      const totalMarked = pres + late + abs + leave;
+      const totalMarked = pres + abs;
       if (totalMarked > 0) classesReportedCount++;
 
       const attRate = studentIds.length > 0
-        ? Math.round(((pres + late) / studentIds.length) * 1000) / 10
+        ? Math.round((pres / studentIds.length) * 1000) / 10
         : 0;
 
       const feeRate = clsBilled > 0
@@ -359,9 +381,8 @@ export async function GET(req: Request): Promise<Response> {
         teacherName,
         enrolled: studentIds.length,
         present: pres,
-        late,
         absent: abs,
-        leave,
+        unmarked,
         rate: attRate,
         status: attStatus,
         absentees: absentNames,
@@ -386,7 +407,7 @@ export async function GET(req: Request): Promise<Response> {
 
     const totalEnrolled = students.length;
     const overallAttRate = totalEnrolled > 0
-      ? Math.round(((totalStudentsPresent + totalStudentsLate) / totalEnrolled) * 1000) / 10
+      ? Math.round((totalStudentsPresent / totalEnrolled) * 1000) / 10
       : 0;
 
     const overallFeeRate = totalBilled > 0
@@ -423,10 +444,8 @@ export async function GET(req: Request): Promise<Response> {
         date: targetDate,
         overallRate: overallAttRate,
         presentCount: totalStudentsPresent,
-        lateCount: totalStudentsLate,
         absentCount: totalStudentsAbsent,
-        leaveCount: totalStudentsLeave,
-        attendingCount: totalStudentsPresent + totalStudentsLate,
+        unmarkedCount: totalStudentsUnmarked,
         classesReported: classesReportedCount,
         classesTotal: sortedClassrooms.length,
         classes: classAttendanceMetrics,
@@ -445,8 +464,7 @@ export async function GET(req: Request): Promise<Response> {
       },
     };
 
-    cachedData = responsePayload;
-    cachedAt = now;
+    cacheStore.set(cacheKey, { data: responsePayload, cachedAt: now });
 
     return Response.json(responsePayload, {
       headers: {
