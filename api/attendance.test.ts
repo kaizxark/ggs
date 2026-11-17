@@ -75,6 +75,14 @@ function stubNetwork() {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
 
+    // The real Supabase gateway answers a request URL past roughly 24 KB with a
+    // bare `400 Bad Request`, and nothing in the body to say why. Reproducing
+    // that here is what keeps a thousand-pupil school from silently breaking
+    // the register again.
+    if (String(input).length > 24_000) {
+      return new Response("Bad Request", { status: 400 });
+    }
+
     if (url.pathname.includes("/auth/v1/user")) {
       return Response.json({ id: CALLER_ID, email: "teacher@school.test" });
     }
@@ -411,5 +419,35 @@ describe("what the register shows", () => {
     expect(body.classes).toHaveLength(0);
     expect(body.canMarkAny).toBe(false);
     expect(body.message).toContain("not the class teacher of any class");
+  });
+
+  it("loads a register for a school too large to fit in one request URL", async () => {
+    // A thousand pupils is an ordinary school, and their ids are 37 KB of query
+    // string — past the gateway limit. The register used to fail with a bare
+    // "try again" because of it.
+    for (let index = 0; index < 1_000; index += 1) {
+      const id = `a0000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+      store.students.push({
+        id,
+        first_name: `Pupil${index}`,
+        last_name: "Test",
+        usn: `GGS${index}`,
+      });
+      store.enrollments.push({
+        student_id: id,
+        classroom_id: CLASSROOM_ID,
+        roll_no: String(index + 3),
+        active: true,
+      });
+    }
+
+    const response = await get("?date=2026-01-15");
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.roster).toHaveLength(1_002);
+    expect(
+      body.roster.filter((pupil: { name: string }) => pupil.name === "Pupil999 Test")
+    ).toHaveLength(1);
   });
 });

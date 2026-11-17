@@ -696,7 +696,10 @@ export function useStudentCountsView(enabled = true) {
 async function loadInvoices(): Promise<Invoice[]> {
   const [invoices, students, classrooms, enrollments, payments] = await Promise.all([
     fetchAll("invoices", "id,invoice_no,student_id,due_on,total,paid_amount,status").catch(() => []),
-    fetchAll("students", "id,first_name,last_name,status,usn,grade,section,email").catch(() => []),
+    // `grade` and `section` live on classrooms, not on students: asking for them
+    // here made PostgREST answer 400 ("column students.grade does not exist"),
+    // the catch swallowed it, and every invoice lost its pupil's name.
+    fetchAll("students", "id,first_name,last_name,status,usn,email").catch(() => []),
     fetchAll("classrooms", "id,grade,section").catch(() => []),
     fetchAll("enrollments", "student_id,classroom_id,active").catch(() => []),
     fetchAll("payments", "id,invoice_id,amount,paid_at,receipt_no").catch(() => []),

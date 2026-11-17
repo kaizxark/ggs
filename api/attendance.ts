@@ -162,6 +162,50 @@ async function restAllRows<T = Json>(
   return results.flat();
 }
 
+/**
+ * Read every row matching a long list of ids.
+ *
+ * PostgREST takes `in.(...)` lists in the query string, and the gateway in front
+ * of it rejects a request URL past roughly 24 KB with a bare `400 Bad Request`.
+ * A school with a thousand pupils produces a 37 KB URL for a single
+ * `students?id=in.(...)` call, which is why the register failed to load at all.
+ * Long id lists are therefore split into batches and the pages merged, so the
+ * request size depends on the batch and not on the size of the school.
+ *
+ * 250 UUIDs is about 9 KB of query string: a thousand pupils is four requests
+ * instead of one impossible one, and there is room left for a longer scope.
+ */
+const ID_BATCH_SIZE = 250;
+
+async function restAllRowsIn<T = Json>(
+  table: string,
+  select: string,
+  scope: string,
+  column: string,
+  ids: string[],
+  order = ""
+): Promise<T[]> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return [];
+
+  const batches: string[][] = [];
+  for (let index = 0; index < unique.length; index += ID_BATCH_SIZE) {
+    batches.push(unique.slice(index, index + ID_BATCH_SIZE));
+  }
+
+  const results = await Promise.all(
+    batches.map((batch) =>
+      restAllRows<T>(
+        table,
+        select,
+        `${scope}&${column}=in.(${batch.join(",")})`,
+        order
+      )
+    )
+  );
+  return results.flat();
+}
+
 /** The school the caller belongs to, read from their own profile row. */
 async function callerOrganisation(caller: Caller): Promise<string | null> {
   const rows = await restRows<{ organisation_id?: string | null }>(
@@ -354,11 +398,12 @@ async function loadEnrollments(
   classroomIds: string[]
 ): Promise<EnrollmentRecord[]> {
   if (classroomIds.length === 0) return [];
-  return restAllRows<EnrollmentRecord>(
+  return restAllRowsIn<EnrollmentRecord>(
     "enrollments",
     "student_id,classroom_id,roll_no",
-    `organisation_id=eq.${encodeURIComponent(orgId)}` +
-      `&active=eq.true&classroom_id=in.(${classroomIds.join(",")})`
+    `organisation_id=eq.${encodeURIComponent(orgId)}&active=eq.true`,
+    "classroom_id",
+    classroomIds
   );
 }
 
@@ -367,11 +412,12 @@ async function loadStudents(
   studentIds: string[]
 ): Promise<StudentRecord[]> {
   if (studentIds.length === 0) return [];
-  return restAllRows<StudentRecord>(
+  return restAllRowsIn<StudentRecord>(
     "students",
     "id,first_name,last_name,usn",
-    `organisation_id=eq.${encodeURIComponent(orgId)}` +
-      `&id=in.(${studentIds.join(",")})`
+    `organisation_id=eq.${encodeURIComponent(orgId)}`,
+    "id",
+    studentIds
   );
 }
 
@@ -388,13 +434,14 @@ async function loadAttendance(
   to: string
 ): Promise<AttendanceRow[]> {
   if (classroomIds.length === 0) return [];
-  return restAllRows<AttendanceRow>(
+  return restAllRowsIn<AttendanceRow>(
     "attendance",
     "student_id,classroom_id,attendance_date,status",
     `organisation_id=eq.${encodeURIComponent(orgId)}` +
-      `&classroom_id=in.(${classroomIds.join(",")})` +
       `&attendance_date=gte.${encodeURIComponent(from)}` +
       `&attendance_date=lte.${encodeURIComponent(to)}`,
+    "classroom_id",
+    classroomIds,
     "order=attendance_date.desc"
   );
 }
@@ -406,12 +453,13 @@ async function loadDayMarks(
   date: string
 ): Promise<AttendanceMarkRow[]> {
   if (classroomIds.length === 0) return [];
-  return restAllRows<AttendanceMarkRow>(
+  return restAllRowsIn<AttendanceMarkRow>(
     "attendance",
     "id,student_id,classroom_id,attendance_date,status,notes,created_at",
     `organisation_id=eq.${encodeURIComponent(orgId)}` +
-      `&classroom_id=in.(${classroomIds.join(",")})` +
-      `&attendance_date=eq.${encodeURIComponent(date)}`
+      `&attendance_date=eq.${encodeURIComponent(date)}`,
+    "classroom_id",
+    classroomIds
   );
 }
 
@@ -422,10 +470,6 @@ function compareRoster(a: Roster, b: Roster): number {
   if (Number.isFinite(ra) && Number.isFinite(rb) && ra !== rb) return ra - rb;
   return a.name.localeCompare(b.name);
 }
-
-/* ------------------------------------------------------------------ */
-/* Assembling the bootstrap                                            */
-/* ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
 /* Assembling the bootstrap                                            */
