@@ -1125,10 +1125,14 @@ export default function MdView() {
     }
   });
 
-  const [usernameInput, setUsernameInput] = useState("admin");
+  const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+
+  useEffect(() => {
+    document.title = "Executive Wallboard";
+  }, []);
 
   const [view, setView] = useState<"attendance" | "fees">("attendance");
   const [auto, setAuto] = useState(true);
@@ -1339,7 +1343,7 @@ export default function MdView() {
             <img src="/global-kids-logo.svg" alt="" />
           </div>
 
-          <h1>Chairman's Wallboard</h1>
+          <h1>Executive Wallboard</h1>
           <p className="mdv-lede">
             Global Kids School · Attendance & Finance Live Dashboard
           </p>
@@ -1352,6 +1356,8 @@ export default function MdView() {
                 value={usernameInput}
                 onChange={(event) => setUsernameInput(event.target.value)}
                 autoComplete="username"
+                placeholder="Enter username"
+                autoFocus={!usernameInput}
                 required
               />
             </label>
@@ -1363,7 +1369,8 @@ export default function MdView() {
                 value={passwordInput}
                 onChange={(event) => setPasswordInput(event.target.value)}
                 autoComplete="current-password"
-                autoFocus
+                placeholder="••••••••"
+                autoFocus={Boolean(usernameInput)}
                 required
               />
             </label>
@@ -1399,11 +1406,11 @@ export default function MdView() {
       {/* 1. Header Bar */}
       <header className="mdv-bar">
         <div className="mdv-id">
-          <span className="mdv-wordmark">Global Kids School</span>
+          <span className="mdv-wordmark">Executive Wallboard</span>
           <span className="mdv-context">
             {data
-              ? `${data.totalClassrooms} Classrooms · ${count(data.totalStudents)} Students`
-              : "Loading Executive Wallboard"}
+              ? `Global Kids School · ${data.totalClassrooms} Classrooms · ${count(data.totalStudents)} Students`
+              : "Global Kids School · Live Telemetry"}
           </span>
         </div>
 

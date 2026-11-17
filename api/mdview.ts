@@ -121,7 +121,7 @@ export async function POST(req: Request): Promise<Response> {
   return Response.json(
     {
       error: "invalid_credentials",
-      message: "Invalid username or password for Chairman Wallboard.",
+      message: "Invalid username or password for Executive Wallboard.",
     },
     { status: 401, headers: { "Access-Control-Allow-Origin": "*" } }
   );
@@ -132,7 +132,7 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json(
       {
         error: "unauthorized",
-        message: "Sign in with Chairman credentials to view this wallboard.",
+        message: "Sign in with executive credentials to view this wallboard.",
       },
       { status: 401, headers: { "Access-Control-Allow-Origin": "*" } }
     );
