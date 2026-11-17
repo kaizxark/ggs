@@ -1,20 +1,11 @@
 /**
- * Chairman's wallboard — /mdview
+ * Chairman / Managing Director Executive Wallboard — /mdview
  *
- * A single-screen read of the school: attendance today, and where the fees
- * stand. It is displayed on a television in the chairman's office, so the
- * page answers two questions at a glance — "is anything wrong today?" and
- * "which part of the school is it?" — and nothing else.
- *
- * The layout is one printed page rather than a grid of cards: a figure that
- * carries the view, a composition bar that explains it, then a table of
- * grades. Class-level detail is one click (or one tap) away instead of being
- * printed twenty-four times. That is the whole redesign: the previous screen
- * repeated the same four facts in four bordered boxes, then repeated the
- * class list in twenty-four more, and the repetition is what made it feel
- * loud.
- *
- * The data contract is unchanged; `api/mdview.ts` still owns it.
+ * Designed as a 100vh television / wallboard executive display.
+ * Fits entirely within the viewport without requiring page-level scroll,
+ * featuring interactive Recharts graphs for both Attendance and Fees,
+ * a top-level KPI executive summary strip, and a scrollable grade/class
+ * breakdown panel with section absentee rosters and live payment receipts.
  */
 
 import {
@@ -33,7 +24,24 @@ import {
   Minimize2,
   RefreshCw,
   X,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  Receipt,
+  Layers,
+  ArrowUpRight,
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ReferenceLine,
+  Cell,
+} from "recharts";
 
 import "./MdView.css";
 
@@ -116,10 +124,9 @@ interface MdViewData {
 }
 
 /* ------------------------------------------------------------------ */
-/* Formatting                                                          */
+/* Formatting helpers                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Indian compact currency: ₹2.72 Cr, ₹41.2 L, ₹9,500. */
 function money(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "₹0";
   if (value >= 1e7) return `₹${(value / 1e7).toFixed(2)} Cr`;
@@ -136,6 +143,7 @@ function percent(value: number): string {
 }
 
 function prettyDate(iso: string): string {
+  if (!iso) return "Today";
   const date = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleDateString("en-IN", {
@@ -164,17 +172,9 @@ function clockDate(date: Date): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Grade grouping                                                      */
+/* Grade grouping logic                                                */
 /* ------------------------------------------------------------------ */
 
-/**
- * The wallboard is read at grade level, not class level.
- *
- * Ten grades fit on a screen and answer "how is the school doing?"; thirty
- * classrooms do not, and answering the same question with thirty rows turns
- * a glance into a scan. The sections are still here — one click down — for
- * the moment the chairman asks "which class?".
- */
 interface GradeAttendance {
   grade: string;
   enrolled: number;
@@ -187,6 +187,7 @@ interface GradeAttendance {
 
 interface GradeFees {
   grade: string;
+  enrolled: number;
   billed: number;
   collected: number;
   outstanding: number;
@@ -203,7 +204,8 @@ function groupAttendance(classes: ClassAttendanceItem[]): GradeAttendance[] {
   const groups = new Map<string, GradeAttendance>();
 
   for (const item of classes) {
-    const unmark = item.unmarked ?? Math.max(0, item.enrolled - (item.present + item.absent));
+    const unmark =
+      item.unmarked ?? Math.max(0, item.enrolled - (item.present + item.absent));
     const group = groups.get(item.grade) ?? {
       grade: item.grade,
       enrolled: 0,
@@ -224,8 +226,6 @@ function groupAttendance(classes: ClassAttendanceItem[]): GradeAttendance[] {
   return [...groups.values()]
     .map((group) => ({
       ...group,
-      // Summed, not averaged: a grade with one small section and one large
-      // one must not be pulled towards the small one.
       rate:
         group.enrolled > 0
           ? Math.round((group.present / group.enrolled) * 1000) / 10
@@ -244,12 +244,14 @@ function groupFees(classes: ClassFeeItem[]): GradeFees[] {
   for (const item of classes) {
     const group = groups.get(item.grade) ?? {
       grade: item.grade,
+      enrolled: 0,
       billed: 0,
       collected: 0,
       outstanding: 0,
       rate: 0,
       classes: [],
     };
+    group.enrolled += item.enrolled;
     group.billed += item.billed;
     group.collected += item.collected;
     group.outstanding += item.outstanding;
@@ -272,59 +274,112 @@ function groupFees(classes: ClassFeeItem[]): GradeFees[] {
     });
 }
 
-/** Where a figure stops being fine and starts needing a look. */
-const ATTENDANCE_ATTENTION = 85;
-const COLLECTION_ATTENTION = 65;
+const ATTENDANCE_TARGET = 85;
+const COLLECTION_TARGET = 65;
 
-function share(value: number, total: number): string {
-  if (total <= 0) return "0%";
-  return `${Math.max(0, Math.min(100, (value / total) * 100))}%`;
+/* ------------------------------------------------------------------ */
+/* Chart Tooltips                                                      */
+/* ------------------------------------------------------------------ */
+
+interface AttendanceChartDatum {
+  gradeLabel: string;
+  gradeNum: string;
+  rate: number;
+  present: number;
+  absent: number;
+  unmarked: number;
+  enrolled: number;
 }
 
-/* ------------------------------------------------------------------ */
-/* Shared pieces                                                       */
-/* ------------------------------------------------------------------ */
-
-function Composition({
-  label,
-  segments,
+function AttendanceChartTooltip({
+  active,
+  payload,
 }: {
-  label: string;
-  segments: { key: string; value: number; className: string }[];
+  active?: boolean;
+  payload?: Array<{ payload: AttendanceChartDatum }>;
 }) {
-  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
+  if (!active || !payload || !payload.length) return null;
+  const d = payload[0].payload;
+  const isGood = d.rate >= ATTENDANCE_TARGET;
+
   return (
-    <div className="mdv-composition" role="img" aria-label={label}>
-      {segments.map((segment) => (
-        <i
-          key={segment.key}
-          className={segment.className}
-          style={{ width: share(segment.value, total) }}
-        />
-      ))}
+    <div className="mdv-chart-tooltip">
+      <div className="mdv-tooltip-head">
+        <strong>Grade {d.gradeNum}</strong>
+        <span className={`mdv-pill ${isGood ? "mdv-pill--good" : "mdv-pill--warn"}`}>
+          {d.rate}% Rate
+        </span>
+      </div>
+      <div className="mdv-tooltip-metrics">
+        <div>
+          <span>Present</span>
+          <strong className="text-sage">{count(d.present)}</strong>
+        </div>
+        <div>
+          <span>Absent</span>
+          <strong className="text-crimson">{count(d.absent)}</strong>
+        </div>
+        <div>
+          <span>Unmarked</span>
+          <strong className="text-muted">{count(d.unmarked)}</strong>
+        </div>
+        <div>
+          <span>Enrolled</span>
+          <strong>{count(d.enrolled)}</strong>
+        </div>
+      </div>
     </div>
   );
 }
 
-function Rate({
-  value,
-  watch,
+interface FeesChartDatum {
+  gradeLabel: string;
+  gradeNum: string;
+  billed: number;
+  collected: number;
+  outstanding: number;
+  rate: number;
+}
+
+function FeesChartTooltip({
+  active,
+  payload,
 }: {
-  value: number;
-  watch: boolean;
+  active?: boolean;
+  payload?: Array<{ payload: FeesChartDatum }>;
 }) {
+  if (!active || !payload || !payload.length) return null;
+  const d = payload[0].payload;
+  const isGood = d.rate >= COLLECTION_TARGET;
+
   return (
-    <div className="mdv-rate" data-watch={watch ? "true" : "false"}>
-      <span className="mdv-track">
-        <i style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
-      </span>
-      <span className="mdv-pct">{percent(value)}</span>
+    <div className="mdv-chart-tooltip">
+      <div className="mdv-tooltip-head">
+        <strong>Grade {d.gradeNum}</strong>
+        <span className={`mdv-pill ${isGood ? "mdv-pill--good" : "mdv-pill--warn"}`}>
+          {d.rate}% Collected
+        </span>
+      </div>
+      <div className="mdv-tooltip-metrics">
+        <div>
+          <span>Collected</span>
+          <strong className="text-sage">{money(d.collected)}</strong>
+        </div>
+        <div>
+          <span>Outstanding</span>
+          <strong className="text-amber">{money(d.outstanding)}</strong>
+        </div>
+        <div>
+          <span>Total Billed</span>
+          <strong>{money(d.billed)}</strong>
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Attendance                                                          */
+/* Attendance View                                                     */
 /* ------------------------------------------------------------------ */
 
 function AttendanceBoard({
@@ -344,196 +399,291 @@ function AttendanceBoard({
     [attendance.classes]
   );
 
-  const unmarked = attendance.unmarkedCount ?? Math.max(
-    0,
-    totalStudents - (attendance.presentCount + attendance.absentCount)
-  );
+  const unmarked =
+    attendance.unmarkedCount ??
+    Math.max(
+      0,
+      totalStudents - (attendance.presentCount + attendance.absentCount)
+    );
 
-  const belowTarget = attendance.classes.filter(
-    (item) => item.rate < ATTENDANCE_ATTENTION
-  ).length;
+  const belowTargetCount = groups.filter((g) => g.rate < ATTENDANCE_TARGET).length;
+  const highestGrade = useMemo(() => {
+    if (!groups.length) return null;
+    return [...groups].sort((a, b) => b.rate - a.rate)[0];
+  }, [groups]);
+
+  const chartData: AttendanceChartDatum[] = useMemo(() => {
+    return groups.map((g) => ({
+      gradeLabel: `Gr ${g.grade}`,
+      gradeNum: g.grade,
+      rate: g.rate,
+      present: g.present,
+      absent: g.absent,
+      unmarked: g.unmarked,
+      enrolled: g.enrolled,
+    }));
+  }, [groups]);
 
   return (
-    <>
-      <section className="mdv-hero">
-        <div>
-          <div className="mdv-figure">
+    <div className="mdv-board-container">
+      {/* 1. Executive Summary Strip */}
+      <section className="mdv-kpi-strip" aria-label="Attendance summary metrics">
+        <div className="mdv-kpi-card mdv-kpi-card--primary">
+          <span className="mdv-kpi-label">Overall Attendance</span>
+          <div className="mdv-kpi-val">
             {attendance.overallRate.toFixed(1)}
-            <span>%</span>
+            <small>%</small>
           </div>
-          <span className="mdv-figure-label">
-            Attendance · <b>{prettyDate(attendance.date)}</b>
+          <span className="mdv-kpi-meta">
+            Target: 85% · <b>{prettyDate(attendance.date)}</b>
           </span>
         </div>
 
-        <div>
-          <Composition
-            label={`Attendance: ${attendance.presentCount} present, ${attendance.absentCount} absent, ${unmarked} unmarked`}
-            segments={[
-              {
-                key: "present",
-                value: attendance.presentCount,
-                className: "mdv-seg-present",
-              },
-              {
-                key: "absent",
-                value: attendance.absentCount,
-                className: "mdv-seg-absent",
-              },
-              {
-                key: "unmarked",
-                value: unmarked,
-                className: "mdv-seg-unmarked",
-              },
-            ]}
-          />
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Present Today</span>
+          <div className="mdv-kpi-val text-sage">
+            {count(attendance.presentCount)}
+          </div>
+          <span className="mdv-kpi-meta">
+            Verified in active classrooms
+          </span>
+        </div>
 
-          <dl className="mdv-legend">
-            <div>
-              <dt>Present</dt>
-              <dd>{count(attendance.presentCount)}</dd>
-            </div>
-            <div>
-              <dt>Absent</dt>
-              <dd>{count(attendance.absentCount)}</dd>
-            </div>
-            <div>
-              <dt>Unmarked</dt>
-              <dd>{count(unmarked)}</dd>
-            </div>
-            <div>
-              <dt>Total Enrolled</dt>
-              <dd>{count(totalStudents)}</dd>
-            </div>
-          </dl>
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Absent Today</span>
+          <div className="mdv-kpi-val text-crimson">
+            {count(attendance.absentCount)}
+          </div>
+          <span className="mdv-kpi-meta">
+            Unexcused absences on record
+          </span>
+        </div>
 
-          <p className="mdv-note" data-clear={belowTarget === 0 ? "true" : "false"}>
-            {belowTarget === 0 ? (
-              "Every class is above the 85% mark."
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Unmarked</span>
+          <div className="mdv-kpi-val text-muted">
+            {count(unmarked)}
+          </div>
+          <span className="mdv-kpi-meta">
+            Enrolled without roll-call log
+          </span>
+        </div>
+
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Grades on Target</span>
+          <div className="mdv-kpi-val">
+            {groups.length - belowTargetCount}
+            <small> / {groups.length}</small>
+          </div>
+          <span className="mdv-kpi-meta">
+            {belowTargetCount === 0 ? (
+              <span className="text-sage font-medium">All grades ≥ 85%</span>
             ) : (
-              <>
-                <b>{belowTarget}</b> of {attendance.classesTotal} classes below 85%
-              </>
+              <span className="text-amber font-medium">{belowTargetCount} grades below target</span>
             )}
-          </p>
+          </span>
         </div>
       </section>
 
-      <div className="mdv-table-wrap">
-      <table className="mdv-table">
-        <thead>
-          <tr>
-            <th>Grade</th>
-            <th className="num mdv-col-optional">Enrolled</th>
-            <th className="num">Present</th>
-            <th className="num mdv-col-optional">Absent</th>
-            <th className="num mdv-col-optional">Unmarked</th>
-            <th className="num">Attendance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((group) => {
-            const open = expanded.has(group.grade);
-            return (
-              <Fragment key={group.grade}>
-                <tr
-                  className="mdv-row"
-                  onClick={() => onToggleGrade(group.grade)}
-                >
-                  <td>
-                    <button
-                      type="button"
-                      className="mdv-row-label"
-                      aria-expanded={open}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onToggleGrade(group.grade);
-                      }}
-                    >
-                      <ChevronRight size={14} className="mdv-chevron" />
-                      <strong>Grade {group.grade}</strong>
-                      <em>
-                        {group.classes.length}{" "}
-                        {group.classes.length === 1 ? "class" : "classes"}
-                      </em>
-                    </button>
-                  </td>
-                  <td className="mdv-cell-num num mdv-col-optional">
-                    {count(group.enrolled)}
-                  </td>
-                  <td className="mdv-cell-num num">{count(group.present)}</td>
-                  <td className="mdv-cell-num num mdv-col-optional">
-                    {count(group.absent)}
-                  </td>
-                  <td className="mdv-cell-num num mdv-col-optional">
-                    {count(group.unmarked)}
-                  </td>
-                  <td>
-                    <Rate
-                      value={group.rate}
-                      watch={group.rate < ATTENDANCE_ATTENTION}
-                    />
-                  </td>
-                </tr>
+      {/* 2. Side-by-Side Chart and Drill-down Split */}
+      <div className="mdv-split">
+        {/* Left: Recharts BarChart */}
+        <section className="mdv-panel mdv-panel--chart">
+          <header className="mdv-panel-head">
+            <div>
+              <h2>Grade-Wise Attendance Rate</h2>
+              <p>Live attendance percentage across Grades 1 through 10</p>
+            </div>
+            <div className="mdv-legend-pills">
+              <span className="mdv-pill mdv-pill--good">
+                <i /> ≥ 85% On Track
+              </span>
+              <span className="mdv-pill mdv-pill--warn">
+                <i /> &lt; 85% Attention
+              </span>
+            </div>
+          </header>
 
-                {open &&
-                  group.classes.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="mdv-row mdv-row--section"
-                      onClick={() => onOpenClass(item)}
-                    >
-                      <td>
-                        <button
-                          type="button"
-                          className="mdv-row-label"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenClass(item);
-                          }}
-                        >
-                          <span className="mdv-sub">
-                            <strong>Section {item.section}</strong>
-                            <em>
-                              {item.teacherName === "Unassigned"
-                                ? "No class teacher"
-                                : item.teacherName}
-                            </em>
-                          </span>
-                        </button>
-                      </td>
-                      <td className="mdv-cell-num num mdv-col-optional">
-                        {count(item.enrolled)}
-                      </td>
-                      <td className="mdv-cell-num num">
-                        {count(item.present)}
-                      </td>
-                      <td className="mdv-cell-num num mdv-col-optional">
-                        {count(item.absent)}
-                      </td>
-                      <td className="mdv-cell-num num mdv-col-optional">
-                        {count(item.unmarked ?? Math.max(0, item.enrolled - (item.present + item.absent)))}
-                      </td>
-                      <td>
-                        <Rate
-                          value={item.rate}
-                          watch={item.rate < ATTENDANCE_ATTENTION}
-                        />
-                      </td>
-                    </tr>
+          <div className="mdv-chart-body">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 20, right: 16, left: -16, bottom: 4 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="rgba(36, 30, 24, 0.08)"
+                />
+                <XAxis
+                  dataKey="gradeLabel"
+                  axisLine={{ stroke: "rgba(36, 30, 24, 0.15)" }}
+                  tickLine={false}
+                  tick={{ fill: "#5a4f44", fontSize: 12, fontWeight: 600 }}
+                />
+                <YAxis
+                  domain={[0, 100]}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#7a6e5f", fontSize: 11 }}
+                  unit="%"
+                />
+                <Tooltip
+                  content={<AttendanceChartTooltip />}
+                  cursor={{ fill: "rgba(36, 30, 24, 0.04)" }}
+                />
+                <ReferenceLine
+                  y={ATTENDANCE_TARGET}
+                  stroke="#b45309"
+                  strokeDasharray="4 4"
+                  strokeWidth={1.5}
+                  label={{
+                    value: "85% Target",
+                    fill: "#b45309",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    position: "insideTopRight",
+                    offset: -8,
+                  }}
+                />
+                <Bar dataKey="rate" radius={[4, 4, 0, 0]} maxBarSize={38}>
+                  {chartData.map((entry, idx) => (
+                    <Cell
+                      key={`cell-${idx}`}
+                      fill={entry.rate >= ATTENDANCE_TARGET ? "#15803d" : "#d97706"}
+                    />
                   ))}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <footer className="mdv-panel-foot">
+            {highestGrade && (
+              <span>
+                Highest attendance: <b>Grade {highestGrade.grade}</b> ({highestGrade.rate}%)
+              </span>
+            )}
+            <span>Click any section in the breakdown table to view absent students</span>
+          </footer>
+        </section>
+
+        {/* Right: Grade & Class Breakdown Table */}
+        <section className="mdv-panel mdv-panel--table">
+          <header className="mdv-panel-head">
+            <div>
+              <h2>Classrooms & Sections</h2>
+              <p>Expand a grade to see section breakdown & absent rolls</p>
+            </div>
+            <span className="mdv-badge-count">{groups.length} Grades</span>
+          </header>
+
+          <div className="mdv-scrollable-content">
+            <table className="mdv-table">
+              <thead>
+                <tr>
+                  <th>Grade / Section</th>
+                  <th className="num">Present</th>
+                  <th className="num">Absent</th>
+                  <th className="num">Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((group) => {
+                  const open = expanded.has(group.grade);
+                  return (
+                    <Fragment key={group.grade}>
+                      <tr
+                        className="mdv-row"
+                        onClick={() => onToggleGrade(group.grade)}
+                      >
+                        <td>
+                          <button
+                            type="button"
+                            className="mdv-row-btn"
+                            aria-expanded={open}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleGrade(group.grade);
+                            }}
+                          >
+                            <ChevronRight
+                              size={14}
+                              className={`mdv-chevron ${open ? "mdv-chevron--open" : ""}`}
+                            />
+                            <strong>Grade {group.grade}</strong>
+                            <em>
+                              {group.classes.length}{" "}
+                              {group.classes.length === 1 ? "sec" : "secs"} · {group.enrolled} stu
+                            </em>
+                          </button>
+                        </td>
+                        <td className="num text-sage font-mono">
+                          {count(group.present)}
+                        </td>
+                        <td className="num text-crimson font-mono">
+                          {count(group.absent)}
+                        </td>
+                        <td className="num">
+                          <span
+                            className={`mdv-rate-tag ${
+                              group.rate >= ATTENDANCE_TARGET
+                                ? "mdv-rate-tag--good"
+                                : "mdv-rate-tag--warn"
+                            }`}
+                          >
+                            {percent(group.rate)}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {open &&
+                        group.classes.map((cls) => (
+                          <tr
+                            key={cls.id}
+                            className="mdv-row mdv-row--sub"
+                            onClick={() => onOpenClass(cls)}
+                            title="Click to view absentee roster"
+                          >
+                            <td>
+                              <div className="mdv-sub-label">
+                                <span className="mdv-sub-tag">Sec {cls.section}</span>
+                                <span className="mdv-sub-teacher">
+                                  {cls.teacherName === "Unassigned"
+                                    ? "No Class Teacher"
+                                    : cls.teacherName}
+                                  {cls.room ? ` · Rm ${cls.room}` : ""}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="num text-sage font-mono">
+                              {count(cls.present)}
+                            </td>
+                            <td className="num text-crimson font-mono">
+                              {count(cls.absent)}
+                            </td>
+                            <td className="num">
+                              <span className="mdv-sub-rate">
+                                {percent(cls.rate)}
+                                <ArrowUpRight size={11} className="mdv-sub-arrow" />
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
-    </>
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Fees                                                                */
+/* Fees View                                                           */
 /* ------------------------------------------------------------------ */
 
 function FeesBoard({
@@ -547,191 +697,326 @@ function FeesBoard({
 }) {
   const { fees } = data;
   const groups = useMemo(() => groupFees(fees.classes), [fees.classes]);
+  const [activeTab, setActiveTab] = useState<"grades" | "receipts">("grades");
+
+  const chartData: FeesChartDatum[] = useMemo(() => {
+    return groups.map((g) => ({
+      gradeLabel: `Gr ${g.grade}`,
+      gradeNum: g.grade,
+      billed: g.billed,
+      collected: g.collected,
+      outstanding: g.outstanding,
+      rate: g.rate,
+    }));
+  }, [groups]);
+
+  const topGradeCollection = useMemo(() => {
+    if (!groups.length) return null;
+    return [...groups].sort((a, b) => b.rate - a.rate)[0];
+  }, [groups]);
 
   return (
-    <>
-      <section className="mdv-hero">
-        <div>
-          <div className="mdv-figure">
+    <div className="mdv-board-container">
+      {/* 1. Executive Summary Strip */}
+      <section className="mdv-kpi-strip" aria-label="Fee collection summary metrics">
+        <div className="mdv-kpi-card mdv-kpi-card--primary">
+          <span className="mdv-kpi-label">Collection Rate</span>
+          <div className="mdv-kpi-val">
             {fees.collectionRate.toFixed(1)}
-            <span>%</span>
+            <small>%</small>
           </div>
-          <span className="mdv-figure-label">
-            Collected · <b>{money(fees.totalBilled)} billed</b>
+          <span className="mdv-kpi-meta">
+            Target: 65% · <b>{money(fees.totalBilled)} billed</b>
           </span>
         </div>
 
-        <div>
-          <Composition
-            label={`Collected ${money(fees.totalCollected)} of ${money(fees.totalBilled)} billed`}
-            segments={[
-              {
-                key: "collected",
-                value: fees.totalCollected,
-                className: "mdv-seg-collected",
-              },
-              {
-                key: "outstanding",
-                value: fees.totalOutstanding,
-                className: "mdv-seg-outstanding",
-              },
-            ]}
-          />
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Total Collected</span>
+          <div className="mdv-kpi-val text-sage">
+            {money(fees.totalCollected)}
+          </div>
+          <span className="mdv-kpi-meta">
+            Realized cash & digital receipts
+          </span>
+        </div>
 
-          <dl className="mdv-legend">
-            <div>
-              <dt>Billed</dt>
-              <dd>{money(fees.totalBilled)}</dd>
-            </div>
-            <div>
-              <dt>Collected</dt>
-              <dd>{money(fees.totalCollected)}</dd>
-            </div>
-            <div>
-              <dt>Outstanding</dt>
-              <dd>{money(fees.totalOutstanding)}</dd>
-            </div>
-            <div>
-              <dt>Overdue</dt>
-              <dd>{money(fees.totalOverdue)}</dd>
-            </div>
-          </dl>
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Outstanding Fees</span>
+          <div className="mdv-kpi-val text-amber">
+            {money(fees.totalOutstanding)}
+          </div>
+          <span className="mdv-kpi-meta">
+            Balance pending collection
+          </span>
+        </div>
 
-          <p
-            className="mdv-note"
-            data-clear={fees.overdueInvoicesCount === 0 ? "true" : "false"}
-          >
-            {fees.overdueInvoicesCount === 0 ? (
-              "No invoice is past its due date."
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Overdue Balance</span>
+          <div className="mdv-kpi-val text-crimson">
+            {money(fees.totalOverdue)}
+          </div>
+          <span className="mdv-kpi-meta">
+            {fees.overdueInvoicesCount > 0 ? (
+              <span className="text-crimson font-medium">{fees.overdueInvoicesCount} invoices past due</span>
             ) : (
-              <>
-                <b>{count(fees.overdueInvoicesCount)}</b> invoices past their
-                due date · {money(fees.totalOverdue)}
-              </>
+              <span className="text-sage font-medium">No overdue invoices</span>
             )}
-          </p>
+          </span>
+        </div>
+
+        <div className="mdv-kpi-card">
+          <span className="mdv-kpi-label">Total Invoices</span>
+          <div className="mdv-kpi-val">
+            {count(fees.paidInvoicesCount)}
+            <small> / {count(fees.paidInvoicesCount + fees.partialInvoicesCount + fees.overdueInvoicesCount)}</small>
+          </div>
+          <span className="mdv-kpi-meta">
+            Fully settled student accounts
+          </span>
         </div>
       </section>
 
-      <div className="mdv-table-wrap">
-      <table className="mdv-table">
-        <thead>
-          <tr>
-            <th>Grade</th>
-            <th className="num mdv-col-optional">Billed</th>
-            <th className="num">Collected</th>
-            <th className="num mdv-col-optional">Outstanding</th>
-            <th className="num">Collection</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((group) => {
-            const open = expanded.has(group.grade);
-            return (
-              <Fragment key={group.grade}>
-                <tr
-                  className="mdv-row"
-                  onClick={() => onToggleGrade(group.grade)}
-                >
-                  <td>
-                    <button
-                      type="button"
-                      className="mdv-row-label"
-                      aria-expanded={open}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onToggleGrade(group.grade);
-                      }}
-                    >
-                      <ChevronRight size={14} className="mdv-chevron" />
-                      <strong>Grade {group.grade}</strong>
-                      <em>
-                        {group.classes.length}{" "}
-                        {group.classes.length === 1 ? "class" : "classes"}
-                      </em>
-                    </button>
-                  </td>
-                  <td className="mdv-cell-num num mdv-col-optional">
-                    {money(group.billed)}
-                  </td>
-                  <td className="mdv-cell-num num">{money(group.collected)}</td>
-                  <td className="mdv-cell-num num mdv-col-optional">
-                    {money(group.outstanding)}
-                  </td>
-                  <td>
-                    <Rate
-                      value={group.rate}
-                      watch={group.rate < COLLECTION_ATTENTION}
-                    />
-                  </td>
-                </tr>
+      {/* 2. Side-by-Side Chart and Breakdown Split */}
+      <div className="mdv-split">
+        {/* Left: Recharts Grouped BarChart */}
+        <section className="mdv-panel mdv-panel--chart">
+          <header className="mdv-panel-head">
+            <div>
+              <h2>Grade-Wise Fee Collections</h2>
+              <p>Collected vs Outstanding amounts across Grades 1 through 10</p>
+            </div>
+            <div className="mdv-legend-pills">
+              <span className="mdv-pill mdv-pill--good">
+                <i /> Collected
+              </span>
+              <span className="mdv-pill mdv-pill--amber">
+                <i /> Outstanding
+              </span>
+            </div>
+          </header>
 
-                {open &&
-                  group.classes.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="mdv-row mdv-row--section"
-                      data-static="true"
-                    >
-                      <td>
-                        <span className="mdv-row-label mdv-row-label--static">
-                          <span className="mdv-sub">
-                            <strong>Section {item.section}</strong>
-                            <em>
-                              {item.paidStudents} paid · {item.pendingStudents}{" "}
-                              pending
-                            </em>
-                          </span>
-                        </span>
-                      </td>
-                      <td className="mdv-cell-num num mdv-col-optional">
-                        {money(item.billed)}
-                      </td>
-                      <td className="mdv-cell-num num">
-                        {money(item.collected)}
-                      </td>
-                      <td className="mdv-cell-num num mdv-col-optional">
-                        {money(item.outstanding)}
-                      </td>
-                      <td>
-                        <Rate
-                          value={item.rate}
-                          watch={item.rate < COLLECTION_ATTENTION}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
-      </div>
+          <div className="mdv-chart-body">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 20, right: 16, left: 0, bottom: 4 }}
+                barGap={4}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="rgba(36, 30, 24, 0.08)"
+                />
+                <XAxis
+                  dataKey="gradeLabel"
+                  axisLine={{ stroke: "rgba(36, 30, 24, 0.15)" }}
+                  tickLine={false}
+                  tick={{ fill: "#5a4f44", fontSize: 12, fontWeight: 600 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#7a6e5f", fontSize: 11 }}
+                  tickFormatter={(val) => money(val)}
+                />
+                <Tooltip
+                  content={<FeesChartTooltip />}
+                  cursor={{ fill: "rgba(36, 30, 24, 0.04)" }}
+                />
+                <Bar
+                  dataKey="collected"
+                  name="Collected"
+                  fill="#15803d"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={22}
+                />
+                <Bar
+                  dataKey="outstanding"
+                  name="Outstanding"
+                  fill="#ea580c"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={22}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
-      {fees.recentPayments.length > 0 && (
-        <section className="mdv-stream">
-          <h3>Latest receipts</h3>
-          <div className="mdv-receipts">
-            {fees.recentPayments.slice(0, 4).map((payment) => (
-              <div className="mdv-receipt" key={payment.id}>
-                <div style={{ minWidth: 0 }}>
-                  <b>{payment.studentName}</b>
-                  <span>
-                    {payment.classLabel} · {payment.method}
-                  </span>
-                </div>
-                <em>{money(payment.amount)}</em>
+          <footer className="mdv-panel-foot">
+            {topGradeCollection && (
+              <span>
+                Leading grade: <b>Grade {topGradeCollection.grade}</b> ({topGradeCollection.rate}% collected · {money(topGradeCollection.collected)})
+              </span>
+            )}
+            <span>Live payments sync automatically</span>
+          </footer>
+        </section>
+
+        {/* Right: Grade Breakdown or Recent Receipts */}
+        <section className="mdv-panel mdv-panel--table">
+          <header className="mdv-panel-head">
+            <div>
+              <h2>{activeTab === "grades" ? "Grade Financials" : "Live Receipts Stream"}</h2>
+              <p>
+                {activeTab === "grades"
+                  ? "Billed, collected and outstanding fee totals"
+                  : "Latest 25 verified payment transactions"}
+              </p>
+            </div>
+            <div className="mdv-tab-pills" role="tablist">
+              <button
+                type="button"
+                className={`mdv-tab-btn ${activeTab === "grades" ? "mdv-tab-btn--active" : ""}`}
+                onClick={() => setActiveTab("grades")}
+              >
+                <Layers size={13} />
+                Grades
+              </button>
+              <button
+                type="button"
+                className={`mdv-tab-btn ${activeTab === "receipts" ? "mdv-tab-btn--active" : ""}`}
+                onClick={() => setActiveTab("receipts")}
+              >
+                <Receipt size={13} />
+                Receipts ({fees.recentPayments.length})
+              </button>
+            </div>
+          </header>
+
+          <div className="mdv-scrollable-content">
+            {activeTab === "grades" ? (
+              <table className="mdv-table">
+                <thead>
+                  <tr>
+                    <th>Grade / Section</th>
+                    <th className="num">Collected</th>
+                    <th className="num">Pending</th>
+                    <th className="num">Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map((group) => {
+                    const open = expanded.has(group.grade);
+                    return (
+                      <Fragment key={group.grade}>
+                        <tr
+                          className="mdv-row"
+                          onClick={() => onToggleGrade(group.grade)}
+                        >
+                          <td>
+                            <button
+                              type="button"
+                              className="mdv-row-btn"
+                              aria-expanded={open}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleGrade(group.grade);
+                              }}
+                            >
+                              <ChevronRight
+                                size={14}
+                                className={`mdv-chevron ${open ? "mdv-chevron--open" : ""}`}
+                              />
+                              <strong>Grade {group.grade}</strong>
+                              <em>
+                                {group.classes.length}{" "}
+                                {group.classes.length === 1 ? "sec" : "secs"} · {money(group.billed)}
+                              </em>
+                            </button>
+                          </td>
+                          <td className="num text-sage font-mono">
+                            {money(group.collected)}
+                          </td>
+                          <td className="num text-amber font-mono">
+                            {money(group.outstanding)}
+                          </td>
+                          <td className="num">
+                            <span
+                              className={`mdv-rate-tag ${
+                                group.rate >= COLLECTION_TARGET
+                                  ? "mdv-rate-tag--good"
+                                  : "mdv-rate-tag--warn"
+                              }`}
+                            >
+                              {percent(group.rate)}
+                            </span>
+                          </td>
+                        </tr>
+
+                        {open &&
+                          group.classes.map((cls) => (
+                            <tr
+                              key={cls.id}
+                              className="mdv-row mdv-row--sub mdv-row--static"
+                            >
+                              <td>
+                                <div className="mdv-sub-label">
+                                  <span className="mdv-sub-tag">Sec {cls.section}</span>
+                                  <span className="mdv-sub-teacher">
+                                    {cls.paidStudents} paid · {cls.pendingStudents} pending
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="num text-sage font-mono">
+                                {money(cls.collected)}
+                              </td>
+                              <td className="num text-amber font-mono">
+                                {money(cls.outstanding)}
+                              </td>
+                              <td className="num">
+                                <span className="mdv-sub-rate">
+                                  {percent(cls.rate)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div className="mdv-receipts-list">
+                {fees.recentPayments.length === 0 ? (
+                  <p className="mdv-empty-msg">No recent receipts on record.</p>
+                ) : (
+                  fees.recentPayments.map((p) => (
+                    <div className="mdv-receipt-item" key={p.id}>
+                      <div className="mdv-receipt-left">
+                        <div className="mdv-receipt-name">{p.studentName}</div>
+                        <div className="mdv-receipt-meta">
+                          <span>{p.classLabel}</span>
+                          <span>·</span>
+                          <span className="font-mono">{p.receiptNo}</span>
+                          <span>·</span>
+                          <span className="mdv-pay-badge">{p.method}</span>
+                        </div>
+                      </div>
+                      <div className="mdv-receipt-right">
+                        <div className="mdv-receipt-amount">{money(p.amount)}</div>
+                        <div className="mdv-receipt-time">
+                          {p.paidAt
+                            ? new Date(p.paidAt).toLocaleTimeString("en-IN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: true,
+                              })
+                            : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
-            ))}
+            )}
           </div>
         </section>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Roster dialog                                                       */
+/* Roster Dialog                                                       */
 /* ------------------------------------------------------------------ */
 
 function RosterDialog({
@@ -741,7 +1026,7 @@ function RosterDialog({
   item: ClassAttendanceItem;
   onClose: () => void;
 }) {
-  const hidden = Math.max(0, item.absent - item.absentees.length);
+  const hiddenCount = Math.max(0, item.absent - item.absentees.length);
 
   return (
     <div className="mdv-scrim" onClick={onClose}>
@@ -752,56 +1037,61 @@ function RosterDialog({
         aria-labelledby="mdv-roster-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <header>
+        <header className="mdv-dialog-head">
           <div>
             <h2 id="mdv-roster-title">{item.label}</h2>
             <p>
               {item.teacherName === "Unassigned"
-                ? "No class teacher"
+                ? "No Class Teacher"
                 : item.teacherName}
               {item.room ? ` · Room ${item.room}` : ""}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="mdv-dialog-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
             <X size={16} />
           </button>
         </header>
 
-        <dl className="mdv-dialog-stats">
+        <div className="mdv-dialog-stats">
           <div>
-            <dt>Enrolled</dt>
-            <dd>{item.enrolled}</dd>
+            <span>Enrolled</span>
+            <strong>{item.enrolled}</strong>
           </div>
           <div>
-            <dt>Present</dt>
-            <dd>{item.present}</dd>
+            <span>Present</span>
+            <strong className="text-sage">{item.present}</strong>
           </div>
           <div>
-            <dt>Absent</dt>
-            <dd>{item.absent}</dd>
+            <span>Absent</span>
+            <strong className="text-crimson">{item.absent}</strong>
           </div>
           <div>
-            <dt>Unmarked</dt>
-            <dd>{item.unmarked ?? Math.max(0, item.enrolled - (item.present + item.absent))}</dd>
+            <span>Rate</span>
+            <strong>{percent(item.rate)}</strong>
           </div>
-        </dl>
+        </div>
 
         <div className="mdv-dialog-body">
-          <h3>Absent on record</h3>
+          <h3>Absentees on Record ({item.absent})</h3>
           {item.absentees.length > 0 ? (
-            <ul>
+            <ul className="mdv-roster-list">
               {item.absentees.map((name, index) => (
                 <li key={`${name}-${index}`}>
-                  {name}
-                  <span>Unexcused</span>
+                  <span className="mdv-roster-name">{name}</span>
+                  <span className="mdv-roster-status">Unexcused</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mdv-empty">Nobody was marked absent.</p>
+            <p className="mdv-empty-msg">No students marked absent for this classroom today.</p>
           )}
-          {hidden > 0 && (
-            <p className="mdv-more">and {hidden} more not listed here.</p>
+          {hiddenCount > 0 && (
+            <p className="mdv-dialog-more">and {hiddenCount} more unlisted absentees.</p>
           )}
         </div>
       </div>
@@ -810,12 +1100,11 @@ function RosterDialog({
 }
 
 /* ------------------------------------------------------------------ */
-/* Page                                                                */
+/* Main Wallboard Component                                            */
 /* ------------------------------------------------------------------ */
 
 const AUTH_KEY = "mdview_auth";
 const AUTH_TOKEN = "admin123";
-const CYCLE_MS = 15_000;
 const POLL_MS = 10_000;
 
 export default function MdView() {
@@ -842,9 +1131,7 @@ export default function MdView() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<ClassAttendanceItem | null>(
-    null
-  );
+  const [selectedClass, setSelectedClass] = useState<ClassAttendanceItem | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [now, setNow] = useState(() => new Date());
 
@@ -856,14 +1143,12 @@ export default function MdView() {
     };
   }, []);
 
-  /* Clock — ticks every second, but only re-renders when the minute changes,
-     because the wallboard shows hours and minutes and a per-second render of
-     a whole table for a digit nobody reads is waste. */
+  /* Clock tick */
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setNow((previous) => {
+      setNow((prev) => {
         const next = new Date();
-        return next.getMinutes() === previous.getMinutes() ? previous : next;
+        return next.getMinutes() === prev.getMinutes() ? prev : next;
       });
     }, 1000);
     return () => window.clearInterval(timer);
@@ -908,8 +1193,6 @@ export default function MdView() {
         setLastUpdated(new Date());
       } catch {
         if (!mounted.current) return;
-        // The last good reading stays on the wall; a blank screen tells the
-        // chairman nothing, an old number with a note tells them to look.
         setError("Connection lost — retrying");
       } finally {
         if (initial && mounted.current) setLoading(false);
@@ -923,8 +1206,7 @@ export default function MdView() {
     void fetchData(true);
   }, [isAuthenticated, fetchData]);
 
-  /* Poll. A hidden tab (or a TV whose browser has been backgrounded) does not
-     need to hit the database. */
+  /* Poll every 10 seconds */
   useEffect(() => {
     if (!isAuthenticated) return;
     const timer = window.setInterval(() => {
@@ -948,6 +1230,7 @@ export default function MdView() {
           password: passwordInput,
         }),
       });
+
       const payload = (await response.json()) as {
         ok?: boolean;
         message?: string;
@@ -984,8 +1267,7 @@ export default function MdView() {
     });
   }, []);
 
-  /* Keyboard: 1 and 2 for the views, R to refresh, F for fullscreen. The
-     wallboard is often driven from a keyboard tucked under the screen. */
+  /* Keyboard shortcuts */
   useEffect(() => {
     if (!isAuthenticated || selectedClass) return;
     const onKey = (event: KeyboardEvent) => {
@@ -1010,7 +1292,7 @@ export default function MdView() {
   }, [selectedClass]);
 
   /* ------------------------------------------------------------------ */
-  /* Sign in                                                             */
+  /* Login Screen                                                        */
   /* ------------------------------------------------------------------ */
 
   if (!isAuthenticated) {
@@ -1021,9 +1303,9 @@ export default function MdView() {
             <img src="/global-kids-logo.svg" alt="" />
           </div>
 
-          <h1>Chairman's wallboard</h1>
+          <h1>Chairman's Wallboard</h1>
           <p className="mdv-lede">
-            Global Kids School · attendance and fees
+            Global Kids School · Attendance & Finance Live Dashboard
           </p>
 
           <form onSubmit={handleLogin}>
@@ -1055,7 +1337,7 @@ export default function MdView() {
               className="mdv-submit"
               disabled={loginLoading}
             >
-              {loginLoading ? "Checking…" : "Open the wallboard"}
+              {loginLoading ? "Verifying…" : "Open Executive Wallboard"}
               {!loginLoading && <ChevronRight size={15} />}
             </button>
 
@@ -1073,23 +1355,24 @@ export default function MdView() {
   }
 
   /* ------------------------------------------------------------------ */
-  /* Board                                                               */
+  /* Wallboard Screen (100vh)                                           */
   /* ------------------------------------------------------------------ */
 
   return (
     <div className="mdv">
+      {/* 1. Header Bar */}
       <header className="mdv-bar">
         <div className="mdv-id">
           <span className="mdv-wordmark">Global Kids School</span>
           <span className="mdv-context">
             {data
-              ? `${data.totalClassrooms} classrooms · ${count(data.totalStudents)} students`
-              : "Loading the school's numbers"}
+              ? `${data.totalClassrooms} Classrooms · ${count(data.totalStudents)} Students`
+              : "Loading Executive Wallboard"}
           </span>
         </div>
 
         <div className="mdv-mode">
-          <div className="mdv-switch" role="group" aria-label="Choose a view">
+          <div className="mdv-switch" role="group" aria-label="Select view">
             <button
               type="button"
               aria-pressed={view === "attendance"}
@@ -1102,7 +1385,7 @@ export default function MdView() {
               aria-pressed={view === "fees"}
               onClick={() => setView("fees")}
             >
-              Fees
+              Fees & Revenue
             </button>
           </div>
 
@@ -1113,8 +1396,8 @@ export default function MdView() {
             onClick={() => setAuto((current) => !current)}
             title={
               auto
-                ? "Switch between the two views every 15 seconds"
-                : "The wallboard is staying on this view"
+                ? "Auto-cycling between views every 15s"
+                : "Auto-cycle paused"
             }
           >
             Auto
@@ -1134,16 +1417,16 @@ export default function MdView() {
             <button
               type="button"
               onClick={() => void fetchData(false)}
-              aria-label="Refresh now"
-              title="Refresh now"
+              aria-label="Refresh data"
+              title="Refresh data"
             >
               <RefreshCw size={15} />
             </button>
             <button
               type="button"
               onClick={toggleFullscreen}
-              aria-label={isFullscreen ? "Leave fullscreen" : "Enter fullscreen"}
-              title={isFullscreen ? "Leave fullscreen" : "Enter fullscreen"}
+              aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
             >
               {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
@@ -1160,6 +1443,7 @@ export default function MdView() {
         </div>
       </header>
 
+      {/* 2. Auto-cycle Progress Line */}
       <div className="mdv-progress" aria-hidden="true">
         <i
           key={`${view}-${auto}`}
@@ -1177,11 +1461,12 @@ export default function MdView() {
         <div className="mdv-notice" role="status">
           <b>{error}.</b>
           {lastUpdated && (
-            <span>Showing the reading from {clockTime(lastUpdated)}.</span>
+            <span>Displaying reading from {clockTime(lastUpdated)}.</span>
           )}
         </div>
       )}
 
+      {/* 3. Main Dashboard Body (100vh container) */}
       {!data ? (
         <div className="mdv-standby">
           {loading ? (
@@ -1189,7 +1474,7 @@ export default function MdView() {
               <div className="mdv-standby-line">
                 <i />
               </div>
-              <p>Loading</p>
+              <p>Connecting to Executive Wallboard…</p>
             </>
           ) : (
             <>
@@ -1199,7 +1484,7 @@ export default function MdView() {
                 className="mdv-submit mdv-retry"
                 onClick={() => void fetchData(true)}
               >
-                Try again
+                Try Again
               </button>
             </>
           )}
@@ -1223,20 +1508,30 @@ export default function MdView() {
         </main>
       )}
 
+      {/* 4. Footer */}
       <footer className="mdv-foot">
-        <span>Academic year {data?.academicYear ?? "—"}</span>
-        <span>
-          {lastUpdated
-            ? `Updated ${lastUpdated.toLocaleTimeString("en-IN", {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                hour12: false,
-              })}`
-            : "Waiting for the first reading"}
-        </span>
+        <div className="mdv-foot-left">
+          <span className="mdv-live-dot" />
+          <span>Academic Year {data?.academicYear ?? "2026-27"}</span>
+        </div>
+        <div className="mdv-foot-center">
+          <span className="mdv-kbd-hint">Shortcuts: <b>[1]</b> Attendance · <b>[2]</b> Fees · <b>[F]</b> Fullscreen · <b>[R]</b> Refresh</span>
+        </div>
+        <div className="mdv-foot-right">
+          <span>
+            {lastUpdated
+              ? `Synced ${lastUpdated.toLocaleTimeString("en-IN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: false,
+                })}`
+              : "Connecting…"}
+          </span>
+        </div>
       </footer>
 
+      {/* 5. Absentee Roster Modal */}
       {selectedClass && (
         <RosterDialog
           item={selectedClass}
