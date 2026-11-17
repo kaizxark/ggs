@@ -43,7 +43,6 @@ import {
   ChevronRight,
   ClipboardCheck,
   Clock3,
-  Filter,
   Layers,
   Loader2,
   Minus,
@@ -51,7 +50,6 @@ import {
   RefreshCw,
   Save,
   Search,
-  ShieldAlert,
   ShieldCheck,
   Users,
   UserX,
@@ -61,7 +59,6 @@ import {
 import { Breadcrumb } from "./Breadcrumb";
 import { DateDropdowns } from "./DateDropdowns";
 import { FormSelect } from "./FormSelect";
-import { MetricBlock } from "./MetricBlock";
 import { SegmentedControl } from "./SegmentedControl";
 import {
   SkeletonHealthGrid,
@@ -676,20 +673,6 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
     </button>
   );
 
-  const retry = (
-    <button
-      className="secondary-button compact"
-      style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-      onClick={() => setReloadKey((key) => key + 1)}
-    >
-      <RefreshCw size={14} />
-      Try again
-    </button>
-  );
-
-  const trendSpark = metrics.daily.map((day) => day.percent);
-  const absentSpark = metrics.daily.map((day) => day.absent);
-
   return (
     <div className="page-stack att-page">
       {/* ------------------------------------------------------------ */}
@@ -759,7 +742,7 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
             <div className="empty-state">
               <AlertCircle size={24} />
               <p style={{ maxWidth: "520px", textAlign: "center" }}>{error}</p>
-              {retry}
+              {refresh}
             </div>
           </div>
         ) : (
@@ -873,107 +856,75 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
               </div>
             </section>
 
-            {/* KPI strip */}
-            <div className="metric-grid att-kpis">
-              <MetricBlock
-                label="Attendance"
-                value={metrics.marked > 0 ? `${metrics.percent}%` : "—"}
-                comparison={
-                  metrics.marked > 0
-                    ? `${metrics.present} of ${metrics.marked} marked present`
-                    : "No registers marked yet"
-                }
-                icon={Activity}
-                spark={trendSpark.length > 1 ? trendSpark : undefined}
-                trend={false}
-              />
-              <MetricBlock
-                label="Registers in"
-                value={`${metrics.markedClasses} / ${metrics.totalClasses}`}
-                comparison={
-                  metrics.pendingClasses > 0
-                    ? `${metrics.pendingClasses} still pending`
-                    : "Every class submitted"
-                }
-                icon={ClipboardCheck}
-                trend={false}
-              />
-              <MetricBlock
-                label="Absent"
-                value={metrics.absent.toLocaleString("en-IN")}
-                comparison={
-                  metrics.late > 0 || metrics.leave > 0
-                    ? `${metrics.late} late · ${metrics.leave} on leave`
-                    : "No late arrivals or leave"
-                }
-                icon={UserX}
-                spark={absentSpark.length > 1 ? absentSpark : undefined}
-                positive={false}
-                trend={false}
-              />
-              <MetricBlock
-                label={`Below ${ATTENDANCE_THRESHOLD}%`}
-                value={metrics.belowThreshold.toLocaleString("en-IN")}
-                comparison="pupils below the line this term"
-                icon={ShieldAlert}
-                positive={false}
-                trend={false}
-              />
-            </div>
-
-            {/* Pending registers */}
-            {metrics.pendingClasses > 0 && (
-              <section className="panel att-alert">
-                <div className="att-alert-head">
-                  <div className="att-alert-copy">
-                    <span className="att-alert-icon">
-                      <AlertCircle size={17} />
+            {/* Today's numbers, one quiet bar instead of four tiles */}
+            <section className="att-stats" aria-label="Attendance at a glance">
+              <div className="att-stat-cell">
+                <span className="att-stat-label">Attendance</span>
+                <span className="att-stat-value">
+                  {metrics.marked > 0 ? `${metrics.percent}%` : "—"}
+                  {metrics.marked > 0 && metrics.trendDelta !== 0 && (
+                    <span
+                      className={`att-stat-delta ${
+                        metrics.trendDelta > 0 ? "up" : "down"
+                      }`}
+                      title={
+                        metrics.previousPercent === null
+                          ? undefined
+                          : `Previous recorded day: ${metrics.previousPercent}%`
+                      }
+                    >
+                      {metrics.trendDelta > 0 ? (
+                        <ArrowUpRight size={12} />
+                      ) : (
+                        <ArrowDownRight size={12} />
+                      )}
+                      {Math.abs(metrics.trendDelta)}
                     </span>
-                    <div>
-                      <p className="att-alert-title">
-                        {metrics.pendingClasses} of {metrics.totalClasses} registers still
-                        pending
-                      </p>
-                      <p className="att-alert-sub">
-                        Nudge the class teacher, or open a class to review what is there.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="secondary-button compact"
-                    onClick={() =>
-                      setStatusFilter(statusFilter === "pending" ? "all" : "pending")
-                    }
-                  >
-                    <Filter size={12} />
-                    {statusFilter === "pending" ? "Show all" : "Show pending only"}
-                  </button>
-                </div>
-                <div className="att-alert-chips">
-                  {classes
-                    .filter((option) => (option.markedToday ?? 0) === 0)
-                    .map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        className="att-chip"
-                        onClick={() => setInspectClassId(option.id)}
-                        title={`Open ${option.label}`}
-                      >
-                        <span className="att-chip-name">{option.label}</span>
-                        <span className="att-chip-meta">
-                          {option.classTeacherName ?? "No teacher"}
-                        </span>
-                        <ArrowRight size={12} />
-                      </button>
-                    ))}
-                </div>
-              </section>
-            )}
+                  )}
+                </span>
+                <span className="att-stat-note">
+                  {metrics.marked > 0
+                    ? `${metrics.present} of ${metrics.marked} in today`
+                    : "No register marked yet"}
+                </span>
+              </div>
+
+              <div className="att-stat-cell">
+                <span className="att-stat-label">Registers in</span>
+                <span className="att-stat-value">
+                  {metrics.markedClasses}
+                  <span className="att-stat-of">/{metrics.totalClasses}</span>
+                </span>
+                <span className="att-stat-note">
+                  {metrics.pendingClasses > 0
+                    ? `${metrics.pendingClasses} still pending`
+                    : "Every class submitted"}
+                </span>
+              </div>
+
+              <div className="att-stat-cell">
+                <span className="att-stat-label">Absent</span>
+                <span className="att-stat-value">
+                  {metrics.absent.toLocaleString("en-IN")}
+                </span>
+                <span className="att-stat-note">
+                  {metrics.late > 0 || metrics.leave > 0
+                    ? `${metrics.late} late · ${metrics.leave} on leave`
+                    : "No late arrivals or leave"}
+                </span>
+              </div>
+
+              <div className="att-stat-cell">
+                <span className="att-stat-label">Below {ATTENDANCE_THRESHOLD}%</span>
+                <span className="att-stat-value">
+                  {metrics.belowThreshold.toLocaleString("en-IN")}
+                </span>
+                <span className="att-stat-note">pupils this term</span>
+              </div>
+            </section>
 
             {/* Toolbar */}
-            <section className="panel att-toolbar">
+            <section className="att-toolbar" aria-label="Filter classes">
               <div className="att-filter-row">
                 <button
                   type="button"
@@ -1562,7 +1513,7 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
               <div className="empty-state">
                 <AlertCircle size={24} />
                 <p style={{ maxWidth: "520px", textAlign: "center" }}>{error}</p>
-                {retry}
+                {refresh}
               </div>
             </div>
           ) : classes.length === 0 ? (

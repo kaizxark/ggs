@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Copy, KeyRound, Plus, Shield, Sparkles, UserCheck, X } from "lucide-react";
 
 import { usePageScrollLock } from "@/components/SmoothScroll";
-import { ApiError } from "@/lib/student-directory";
+import { ApiError, todayIso } from "@/lib/student-directory";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/lib/toast";
 import { notifyDataChanged } from "@/lib/live-data";
@@ -79,7 +79,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
     phone: "",
     department: "Grade 6",
     subject: "Mathematics",
-    joined_on: new Date().toISOString().slice(0, 10),
+    joined_on: todayIso(),
     active: true,
   });
 
@@ -359,7 +359,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
                   <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", display: "block" }}>
                     Staff Member
                   </span>
-                  <strong style={{ fontSize: "14px", color: "#fff", display: "block", marginTop: 2 }}>
+                  <strong style={{ fontSize: "14px", color: "var(--text-primary)", display: "block", marginTop: 2 }}>
                     {issuedSlip.name}
                   </strong>
                 </div>
@@ -544,7 +544,7 @@ export function StaffCreateDialog({ onClose, onCreated }: StaffCreateDialogProps
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                   <Shield size={16} className="text-[var(--brand)]" />
-                  <span style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
                     Access Scope & Role Permissions
                   </span>
                 </div>

@@ -1,0 +1,1318 @@
+/* ==========================================================================
+   Chairman's wallboard — /mdview
+   --------------------------------------------------------------------------
+   This screen is the executive wallboard designed as one printed page.
+   Now aligned with the Global Kids School white / warm paper dashboard theme:
+
+   - One surface, divided by delicate hairlines. Clean, crisp light theme.
+   - Type does the work: warm deep charcoal ink, terracotta brand accents,
+     evergreen for strong attendance and collection rates, amber for attention.
+   - The palette is identical to the ERP dashboard: warm paper (#f7f3eb),
+     crisp white panels (#fffdf9), terracotta (#9e3b26), dark ink (#241e18).
+   - Motion is limited to the one thing that needs it — the auto-cycle line
+     that tells you the view is about to change.
+   ========================================================================== */
+
+.mdv,
+.mdv-login {
+  /* Warm paper and terracotta — identical white/light palette to the Global Kids ERP dashboard */
+  --mdv-bg: var(--bg-page, #f7f3eb);
+  --mdv-surface: var(--bg-panel, #fffdf9);
+  --mdv-surface-raised: var(--bg-raised, #f1ebe0);
+  --mdv-text: var(--text-primary, #241e18);
+  --mdv-muted: var(--text-secondary, #5a4f44);
+  --mdv-faint: var(--text-muted, #7a6e5f);
+  --mdv-line: var(--border, rgba(36, 30, 24, 0.12));
+  --mdv-line-soft: var(--border-subtle, rgba(36, 30, 24, 0.08));
+  --mdv-rust: var(--brand, #9e3b26);
+  --mdv-ochre: #b45309;
+  --mdv-sage: #166534;
+}
+
+.mdv {
+  height: calc(100vh / var(--ui-zoom));
+  height: calc(100dvh / var(--ui-zoom));
+  display: flex;
+  flex-direction: column;
+  background: var(--mdv-bg);
+  color: var(--mdv-text);
+  font-family: var(--font-sans);
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mdv *,
+.mdv *::before,
+.mdv *::after {
+  box-sizing: border-box;
+}
+
+.mdv :focus-visible {
+  outline: 2px solid var(--mdv-rust);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Bar
+   -------------------------------------------------------------------------- */
+
+.mdv-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  height: 68px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--mdv-line);
+  background: var(--mdv-bg);
+  flex: 0 0 auto;
+}
+
+.mdv-id {
+  min-width: 0;
+}
+
+.mdv-wordmark {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mdv-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-context {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: var(--mdv-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mdv-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--mdv-line);
+  border-radius: 10px;
+  background: var(--mdv-surface-raised);
+}
+
+.mdv-switch button {
+  height: 30px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mdv-muted);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition:
+    background-color 0.16s var(--ease-out),
+    color 0.16s var(--ease-out),
+    box-shadow 0.16s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+
+.mdv-switch button:hover:not([aria-pressed="true"]) {
+  color: var(--mdv-text);
+  background: rgba(36, 30, 24, 0.04);
+}
+
+.mdv-switch button:active {
+  transform: scale(0.97);
+}
+
+.mdv-switch button[aria-pressed="true"] {
+  background: var(--mdv-surface);
+  color: var(--mdv-text);
+  box-shadow: 0 1px 3px rgba(36, 30, 24, 0.1), 0 1px 1px rgba(36, 30, 24, 0.06);
+  font-weight: 700;
+}
+
+/* Auto-cycle. A labelled switch rather than a bare icon */
+.mdv-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--mdv-line);
+  border-radius: 10px;
+  background: var(--mdv-surface);
+  color: var(--mdv-muted);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition:
+    color 0.16s var(--ease-out),
+    border-color 0.16s var(--ease-out),
+    background-color 0.16s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+
+.mdv-auto:hover {
+  color: var(--mdv-text);
+  border-color: rgba(36, 30, 24, 0.24);
+  background: rgba(36, 30, 24, 0.02);
+}
+
+.mdv-auto:active {
+  transform: scale(0.97);
+}
+
+.mdv-auto[aria-pressed="true"] {
+  color: var(--mdv-text);
+  border-color: rgba(36, 30, 24, 0.2);
+}
+
+.mdv-auto-track {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(36, 30, 24, 0.15);
+  transition: background-color 0.18s var(--ease-out);
+}
+
+.mdv-auto-track i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(36, 30, 24, 0.25);
+  transition:
+    transform 0.18s var(--ease-out),
+    background-color 0.18s var(--ease-out);
+}
+
+.mdv-auto[aria-pressed="true"] .mdv-auto-track {
+  background: var(--mdv-sage);
+}
+
+.mdv-auto[aria-pressed="true"] .mdv-auto-track i {
+  transform: translateX(12px);
+  background: #ffffff;
+}
+
+.mdv-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  min-width: 0;
+}
+
+.mdv-clock {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.mdv-clock b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdv-text);
+}
+
+.mdv-clock span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+.mdv-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.mdv-actions button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mdv-muted);
+  transition:
+    background-color 0.14s var(--ease-out),
+    border-color 0.14s var(--ease-out),
+    color 0.14s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+
+.mdv-actions button:hover {
+  background: rgba(36, 30, 24, 0.06);
+  border-color: var(--mdv-line-soft);
+  color: var(--mdv-text);
+}
+
+.mdv-actions button:active {
+  transform: scale(0.93);
+}
+
+.mdv-actions button[data-danger="true"]:hover {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.08);
+  border-color: rgba(185, 28, 28, 0.15);
+}
+
+/* The auto-cycle line */
+.mdv-progress {
+  height: 2px;
+  width: 100%;
+  background: var(--mdv-line-soft);
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.mdv-progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--mdv-rust);
+  animation: mdv-cycle 15s linear forwards;
+}
+
+.mdv-progress i[data-paused="true"] {
+  animation-play-state: paused;
+}
+
+@keyframes mdv-cycle {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Main
+   -------------------------------------------------------------------------- */
+
+.mdv-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* --------------------------------------------------------------------------
+   Hero — one figure, one composition bar, four facts
+   -------------------------------------------------------------------------- */
+
+.mdv-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.7fr);
+  align-items: end;
+  gap: 48px;
+  padding: 30px 0 26px;
+  border-bottom: 1px solid var(--mdv-line);
+  flex: 0 0 auto;
+}
+
+.mdv-figure {
+  font-family: var(--font-mono);
+  font-size: clamp(56px, 6.4vw, 100px);
+  font-weight: 600;
+  line-height: 0.86;
+  letter-spacing: -0.045em;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdv-text);
+}
+
+.mdv-figure span {
+  margin-left: 4px;
+  font-size: 0.34em;
+  letter-spacing: 0;
+  color: var(--mdv-muted);
+}
+
+.mdv-figure-label {
+  display: block;
+  margin-top: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+.mdv-figure-label b {
+  font-weight: 700;
+  color: var(--mdv-text);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.mdv-composition {
+  display: flex;
+  height: 12px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(36, 30, 24, 0.08);
+}
+
+.mdv-composition i {
+  display: block;
+  height: 100%;
+}
+
+.mdv-seg-present {
+  background: var(--mdv-sage);
+}
+.mdv-seg-late {
+  background: var(--mdv-ochre);
+}
+.mdv-seg-leave {
+  background: #6366f1;
+}
+.mdv-seg-absent {
+  background: #dc2626;
+}
+.mdv-seg-unmarked {
+  background: rgba(36, 30, 24, 0.15);
+}
+.mdv-seg-collected {
+  background: var(--mdv-sage);
+}
+.mdv-seg-outstanding {
+  background: #ea580c;
+}
+
+.mdv-legend {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 18px 0 0;
+}
+
+.mdv-legend > div {
+  padding-left: 14px;
+  border-left: 1px solid var(--mdv-line);
+  min-width: 0;
+}
+
+.mdv-legend > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.mdv-legend dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-legend dd {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 21px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdv-text);
+  white-space: nowrap;
+}
+
+.mdv-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 20px 0 0;
+  font-size: 12.5px;
+  color: var(--mdv-muted);
+}
+
+.mdv-note::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mdv-ochre);
+  flex: 0 0 auto;
+}
+
+.mdv-note[data-clear="true"]::before {
+  background: var(--mdv-sage);
+}
+
+.mdv-note b {
+  font-weight: 700;
+  color: var(--mdv-text);
+}
+
+/* --------------------------------------------------------------------------
+   Table
+   -------------------------------------------------------------------------- */
+
+.mdv-table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mdv-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.mdv-table th {
+  padding: 14px 0 11px;
+  border-bottom: 1px solid var(--mdv-line);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--mdv-muted);
+  white-space: nowrap;
+}
+
+.mdv-table th.num,
+.mdv-table td.num {
+  text-align: right;
+  padding-right: 20px;
+}
+
+.mdv-table td {
+  padding: 0;
+  border-bottom: 1px solid var(--mdv-line-soft);
+  vertical-align: middle;
+}
+
+.mdv-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.mdv-row {
+  transition: background-color 0.12s var(--ease-out);
+}
+
+.mdv-row:hover {
+  background: rgba(36, 30, 24, 0.035);
+}
+
+.mdv-row-label {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.mdv-row-label strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--mdv-text);
+  white-space: nowrap;
+}
+
+.mdv-row-label em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--mdv-muted);
+  white-space: nowrap;
+}
+
+.mdv-chevron {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--mdv-muted);
+  transition: transform 0.18s var(--ease-out);
+}
+
+.mdv-row-label[aria-expanded="true"] .mdv-chevron {
+  transform: rotate(90deg);
+  color: var(--mdv-text);
+}
+
+.mdv-cell-num {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdv-muted);
+}
+
+.mdv-row td.mdv-cell-num {
+  padding: 13px 20px 13px 0;
+}
+
+.mdv-rate {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 13px 0;
+}
+
+.mdv-track {
+  flex: 1 1 auto;
+  min-width: 56px;
+  max-width: 240px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(36, 30, 24, 0.08);
+  overflow: hidden;
+}
+
+.mdv-track i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--mdv-sage);
+  transition: width 0.4s var(--ease-out);
+}
+
+.mdv-pct {
+  width: 66px;
+  flex: 0 0 auto;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdv-text);
+}
+
+.mdv-rate[data-watch="true"] .mdv-pct {
+  color: var(--mdv-ochre);
+}
+
+.mdv-rate[data-watch="true"] .mdv-track i {
+  background: var(--mdv-ochre);
+}
+
+/* Section sub-row */
+.mdv-row--section {
+  background: rgba(36, 30, 24, 0.025);
+}
+
+.mdv-row--section:hover {
+  background: rgba(36, 30, 24, 0.05);
+}
+
+.mdv-row--section .mdv-row-label {
+  padding: 10px 0;
+}
+
+.mdv-row--section .mdv-row-label strong {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--mdv-muted);
+}
+
+.mdv-row--section .mdv-sub {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+  margin-left: 23px;
+  padding-left: 14px;
+  border-left: 1px solid var(--mdv-line);
+}
+
+.mdv-row--section .mdv-sub em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-row-label--static {
+  cursor: default;
+}
+
+.mdv-row[data-static="true"]:hover {
+  background: rgba(36, 30, 24, 0.03);
+}
+
+.mdv-row--section td.mdv-cell-num {
+  padding: 10px 20px 10px 0;
+  font-size: 13px;
+  color: var(--mdv-muted);
+}
+
+.mdv-row--section .mdv-rate {
+  padding: 10px 0;
+}
+
+.mdv-row--section .mdv-track {
+  height: 3px;
+}
+
+.mdv-row--section .mdv-pct {
+  font-size: 13.5px;
+  color: var(--mdv-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Receipts
+   -------------------------------------------------------------------------- */
+
+.mdv-stream {
+  padding: 18px 0 20px;
+  border-top: 1px solid var(--mdv-line);
+  flex: 0 0 auto;
+}
+
+.mdv-stream h3 {
+  margin: 0 0 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+.mdv-receipts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mdv-receipt {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+  border-left: 1px solid var(--mdv-line-soft);
+  min-width: 0;
+}
+
+.mdv-receipt:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.mdv-receipt b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--mdv-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-receipt span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--mdv-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-receipt em {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdv-sage);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+
+.mdv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 38px;
+  padding: 0 28px;
+  border-top: 1px solid var(--mdv-line);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+  flex: 0 0 auto;
+}
+
+.mdv-foot span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   Connection notice
+   -------------------------------------------------------------------------- */
+
+.mdv-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 28px;
+  border-bottom: 1px solid var(--mdv-line);
+  background: rgba(158, 59, 38, 0.08);
+  font-size: 12px;
+  color: var(--mdv-rust);
+  flex: 0 0 auto;
+}
+
+.mdv-notice b {
+  font-weight: 700;
+  color: var(--mdv-text);
+}
+
+/* --------------------------------------------------------------------------
+   Loading / empty
+   -------------------------------------------------------------------------- */
+
+.mdv-standby {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  align-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.mdv-standby p {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+.mdv-standby-line {
+  width: 120px;
+  height: 2px;
+  background: var(--mdv-line);
+  overflow: hidden;
+}
+
+.mdv-standby-line i {
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--mdv-rust);
+  animation: mdv-standby 1.4s ease-in-out infinite;
+}
+
+@keyframes mdv-standby {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Roster dialog
+   -------------------------------------------------------------------------- */
+
+.mdv-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(24, 20, 16, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: mdv-fade 0.16s var(--ease-out);
+}
+
+.mdv-dialog {
+  width: min(520px, 100%);
+  max-height: calc(100dvh / var(--ui-zoom) - 48px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--mdv-line);
+  border-radius: 14px;
+  background: var(--mdv-surface);
+  box-shadow: 0 24px 50px -12px rgba(36, 30, 24, 0.22), 0 0 0 1px rgba(36, 30, 24, 0.06);
+  animation: mdv-rise 0.18s var(--ease-out);
+}
+
+.mdv-dialog header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--mdv-line);
+}
+
+.mdv-dialog h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--mdv-text);
+}
+
+.mdv-dialog header p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: var(--mdv-muted);
+}
+
+.mdv-dialog header button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mdv-muted);
+}
+
+.mdv-dialog header button:hover {
+  background: rgba(36, 30, 24, 0.06);
+  color: var(--mdv-text);
+}
+
+.mdv-dialog-stats {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--mdv-line);
+  background: rgba(36, 30, 24, 0.02);
+}
+
+.mdv-dialog-stats > div {
+  padding-left: 16px;
+  border-left: 1px solid var(--mdv-line);
+}
+
+.mdv-dialog-stats > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.mdv-dialog-stats dt {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+.mdv-dialog-stats dd {
+  margin: 5px 0 0;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mdv-text);
+}
+
+.mdv-dialog-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mdv-dialog-body h3 {
+  margin: 0 0 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+.mdv-dialog-body ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mdv-dialog-body li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--mdv-line-soft);
+  font-size: 13px;
+  color: var(--mdv-text);
+}
+
+.mdv-dialog-body li:last-child {
+  border-bottom: 0;
+}
+
+.mdv-dialog-body li span {
+  font-size: 11px;
+  color: var(--mdv-muted);
+}
+
+.mdv-dialog-body .mdv-empty {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 12.5px;
+  color: var(--mdv-muted);
+}
+
+.mdv-dialog-body .mdv-more {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--mdv-muted);
+}
+
+@keyframes mdv-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes mdv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Sign in
+   -------------------------------------------------------------------------- */
+
+.mdv-login {
+  min-height: calc(100vh / var(--ui-zoom));
+  min-height: calc(100dvh / var(--ui-zoom));
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+  background: var(--mdv-bg);
+  color: var(--mdv-text);
+  font-family: var(--font-sans);
+  line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mdv-login-inner {
+  width: min(380px, 100%);
+  padding: 36px 32px;
+  border-radius: 16px;
+  background: var(--mdv-surface);
+  border: 1px solid var(--mdv-line);
+  box-shadow: 0 20px 40px -15px rgba(36, 30, 24, 0.12), 0 0 0 1px rgba(36, 30, 24, 0.04);
+}
+
+.mdv-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--mdv-surface-raised);
+  border: 1px solid var(--mdv-line);
+}
+
+.mdv-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.mdv-login h1 {
+  margin: 24px 0 6px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--mdv-text);
+}
+
+.mdv-login .mdv-lede {
+  margin: 0 0 26px;
+  font-size: 13px;
+  color: var(--mdv-muted);
+}
+
+.mdv-field {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.mdv-field > span {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mdv-muted);
+}
+
+.mdv-field input {
+  display: block;
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--mdv-line);
+  border-radius: 9px;
+  background: var(--bg-input, #ffffff);
+  color: var(--mdv-text);
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+  transition: border-color 0.16s var(--ease-out), box-shadow 0.16s var(--ease-out);
+}
+
+.mdv-field input::placeholder {
+  color: var(--mdv-faint);
+}
+
+.mdv-field input:focus {
+  outline: none;
+  border-color: var(--mdv-rust);
+  box-shadow: 0 0 0 3px rgba(158, 59, 38, 0.12);
+}
+
+.mdv-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  height: 44px;
+  margin-top: 14px;
+  border: 1px solid rgba(24, 24, 27, 0.08);
+  border-radius: 9px;
+  background: var(--mdv-rust);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  transition:
+    background-color 0.16s var(--ease-out),
+    transform 0.12s var(--ease-out),
+    opacity 0.16s var(--ease-out);
+}
+
+.mdv-submit:hover:not(:disabled) {
+  background: #822f1c;
+}
+
+.mdv-submit:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.mdv-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* The retry on the empty board is the same button, sized to its word. */
+.mdv-retry {
+  width: auto;
+  padding: 0 24px;
+}
+
+.mdv-error {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.mdv-login-foot {
+  margin: 28px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--mdv-line-soft);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mdv-faint);
+}
+
+/* --------------------------------------------------------------------------
+   Small screens
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 980px) {
+  .mdv-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "id right"
+      "mode mode";
+    height: auto;
+    padding: 14px 18px;
+    gap: 12px 14px;
+  }
+
+  .mdv-id {
+    grid-area: id;
+  }
+
+  .mdv-right {
+    grid-area: right;
+  }
+
+  .mdv-mode {
+    grid-area: mode;
+    justify-self: start;
+  }
+
+  .mdv-main {
+    padding: 0 18px;
+  }
+
+  .mdv-hero {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 26px;
+    padding: 24px 0 22px;
+  }
+
+  .mdv-legend {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 0;
+  }
+
+  .mdv-legend > div:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .mdv-col-optional {
+    display: none;
+  }
+
+  .mdv-foot {
+    padding: 0 18px;
+  }
+
+  .mdv-notice {
+    padding-inline: 18px;
+  }
+
+  .mdv-receipts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 0;
+  }
+
+  .mdv-receipt:nth-child(odd) {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .mdv-clock {
+    display: none;
+  }
+
+  .mdv-col-narrow {
+    display: none;
+  }
+
+  .mdv-track {
+    max-width: 80px;
+  }
+
+  .mdv-pct {
+    width: 54px;
+  }
+
+  .mdv-receipts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mdv-receipt {
+    padding: 0;
+    border-left: 0;
+  }
+
+  .mdv-foot {
+    height: auto;
+    padding: 10px 18px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdv *,
+  .mdv-login * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .mdv-progress i {
+    animation: none;
+    width: 0;
+  }
+}

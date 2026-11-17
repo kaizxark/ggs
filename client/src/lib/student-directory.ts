@@ -682,6 +682,43 @@ export function formatMoney(value: number | null | undefined): string {
   return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Today's date in the school's timezone, as YYYY-MM-DD.
+ *
+ * `new Date().toISOString().slice(0, 10)` is the *UTC* date, which in India is
+ * still yesterday until 05:30 — so a receipt taken at 1am was stamped a day
+ * earlier than it happened, and a pupil's join date could land in the wrong
+ * month. Everything the school records dates itself by the school's clock.
+ */
+export function todayIso(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
+ * A rupee amount at dashboard scale — ₹850, ₹45.2K, ₹1.25L, ₹1.2Cr.
+ *
+ * The KPI cards formatted every financial figure as lakhs to one decimal, so a
+ * term collecting ₹48,000 read "₹0.0L": a zero where the number should be, and
+ * a figure that silently disagreed with the same total two screens away. Scale
+ * to the amount instead, with at most two decimals and no trailing zeros.
+ */
+export function formatInrCompact(value: number | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  const sign = n < 0 ? "-" : "";
+  const amount = Math.abs(n);
+  const scale = (v: number) => String(Number(v.toFixed(2)));
+  if (amount >= 1e7) return `${sign}₹${scale(amount / 1e7)}Cr`;
+  if (amount >= 1e5) return `${sign}₹${scale(amount / 1e5)}L`;
+  if (amount >= 1e3) return `${sign}₹${scale(amount / 1e3)}K`;
+  return `${sign}₹${Math.round(amount)}`;
+}
+
 /** A percentage, or an em dash when there is nothing to average. */
 export function formatPercent(value: number | null | undefined): string {
   const n = Number(value);

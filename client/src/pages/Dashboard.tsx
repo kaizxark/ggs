@@ -170,7 +170,11 @@ import {
 } from "../lib/attendance";
 import type { AttendanceRosterStudent } from "@shared/attendance";
 import { useRealtimeInvalidation } from "../lib/use-realtime";
-import { ApiError } from "../lib/student-directory";
+import {
+  ApiError,
+  formatInrCompact,
+  todayIso,
+} from "../lib/student-directory";
 import {
   SkeletonChart,
   SkeletonCircle,
@@ -1992,17 +1996,15 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
     0
   );
   const collectionRate =
-    billed > 0 ? Math.round((collected / billed) * 100) : 0;
+    billed > 0 ? Math.round((collected / billed) * 1000) / 10 : 0;
   const overdueInvoices = invoiceRows.filter(i => i.status === "Overdue");
   const overdueAmount = overdueInvoices.reduce(
     (sum, i) => sum + (i.outstanding ?? i.amount),
     0
   );
   const overduePupilsCount = new Set(overdueInvoices.map(i => i.student_id || i.student)).size;
-  const lakh = (n: number) => `₹${(n / 100000).toFixed(1)}L`;
-
   const classesBelow = classAttendance.filter(
-    c => c.total > 0 && c.value < 92
+    c => c.total > 0 && c.value < ATTENDANCE_THRESHOLD
   ).length;
 
   // Actionable alerts projected straight from the database. A category with
@@ -2025,7 +2027,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           {
             label: "Attendance follow-up",
             value: String(belowThreshold),
-            detail: `${belowThreshold} pupil${belowThreshold === 1 ? "" : "s"} below 90% attendance`,
+            detail: `${belowThreshold} pupil${belowThreshold === 1 ? "" : "s"} below ${ATTENDANCE_THRESHOLD}% attendance`,
             icon: Clock3,
             tone: "amber",
             view: "Attendance",
@@ -2037,7 +2039,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           {
             label: "Overdue fee recovery",
             value: String(overduePupilsCount),
-            detail: `${lakh(overdueAmount)} across ${overduePupilsCount} pupil${overduePupilsCount === 1 ? "" : "s"} in arrears`,
+            detail: `${formatInrCompact(overdueAmount)} across ${overduePupilsCount} pupil${overduePupilsCount === 1 ? "" : "s"} in arrears`,
             icon: Receipt,
             tone: "blue",
             view: "Fees & Finance",
@@ -2049,7 +2051,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           {
             label: "Classes on watch",
             value: String(classesBelow),
-            detail: `${classesBelow} class${classesBelow === 1 ? "" : "es"} below 92%`,
+            detail: `${classesBelow} class${classesBelow === 1 ? "" : "es"} below ${ATTENDANCE_THRESHOLD}%`,
             icon: ClipboardCheck,
             tone: "violet",
             view: "Attendance",
@@ -2123,7 +2125,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
           <MetricBlock
             className="overview-metric"
             label="Fee collection"
-            value={lakh(collected)}
+            value={formatInrCompact(collected)}
             comparison={`${collectionRate}% collected`}
             icon={IndianRupee}
             trend={false}
@@ -2173,11 +2175,11 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
               <>
                 <span>
                   <i className="legend-dot bg-[var(--success)]" />
-                  Present
+                  Present &amp; late
                 </span>
                 <span>
                   <i className="legend-dot bg-[var(--danger)]" />
-                  Absent
+                  Absent &amp; leave
                 </span>
               </>
             )}
@@ -2258,7 +2260,7 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                     }}
                     formatter={(val: number, name: string) => [
                       `${val} students`,
-                      name === "present" ? "Present" : "Absent",
+                      name === "present" ? "Present & late" : "Absent & leave",
                     ]}
                   />
                   <Area
@@ -2321,9 +2323,9 @@ function DashboardView({ onNavigate }: { onNavigate: (view: string) => void }) {
                         style={{
                           width: `${row.value}%`,
                           background:
-                            row.value < 90
+                            row.value < ATTENDANCE_THRESHOLD
                               ? "var(--danger)"
-                              : row.value < 92
+                              : row.value < ATTENDANCE_THRESHOLD + 5
                                 ? "var(--warning)"
                                 : "var(--brand)",
                         }}
@@ -2683,7 +2685,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(() => todayIso());
   const [paymentMethod, setPaymentMethod] = useState("Bank transfer");
   const [paymentReference, setPaymentReference] = useState("");
 
@@ -3050,8 +3052,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           />
           <h1 className="page-title">Fees & finance</h1>
           <p className="page-subtitle">
-            {studentFeeAccounts.length} enrolled pupil{studentFeeAccounts.length === 1 ? "" : "s"} ·{" "}
-            {studentFeeAccounts.filter(a => a.status !== "Paid").length} with balance due · ₹{(billed / 100000).toFixed(1)}L total institutional billing
+            Fee ledger for the 2026–27 academic year — assessed, collected and outstanding.
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
@@ -3096,20 +3097,20 @@ function FinanceView({ onBack }: { onBack: () => void }) {
           <>
             <MetricBlock
               label="Total Assessed Fee"
-              value={`₹${(billed / 100000).toFixed(1)}L`}
+              value={`${formatInrCompact(billed)}`}
               comparison={`${studentFeeAccounts.length} enrolled pupils`}
               icon={FileText}
             />
             <MetricBlock
               label="Collected this term"
-              value={`₹${(collected / 100000).toFixed(1)}L`}
+              value={`${formatInrCompact(collected)}`}
               comparison={`${rate}% collected`}
               icon={IndianRupee}
               spark={collectedSpark}
             />
             <MetricBlock
               label="Outstanding balance"
-              value={`₹${(outstanding / 100000).toFixed(1)}L`}
+              value={`${formatInrCompact(outstanding)}`}
               comparison={`${overdueAccounts.length} pupils overdue`}
               icon={Receipt}
               spark={pendingSpark}
@@ -3285,7 +3286,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="pie-center">
-                    <strong>₹{(billed / 100000).toFixed(1)}L</strong>
+                    <strong>{formatInrCompact(billed)}</strong>
                     <span>total billed</span>
                   </div>
                 </>
@@ -3396,17 +3397,6 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 Annual tuition fee assessment and account balances for all 100 enrolled pupils (Classes 6–10).
               </p>
             </div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-              <button
-                type="button"
-                className="secondary-button compact"
-                onClick={handleExportLedgerCsv}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px" }}
-              >
-                <Download size={13} />
-                Export CSV
-              </button>
-            </div>
           </div>
 
           {/* Filter Bar */}
@@ -3433,7 +3423,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="p-1 rounded text-[var(--text-muted)] hover:text-white"
+                  className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
                   <X size={13} />
                 </button>
@@ -3689,7 +3679,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <h2 className="panel-title">Overdue accounts & defaulters</h2>
               </div>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                {overdueAccounts.length} pupil account{overdueAccounts.length === 1 ? "" : "s"} with unsettled fee balances past due date. Total overdue: <strong className="text-[var(--danger)]">₹{(overdueTotalAmount / 100000).toFixed(2)}L</strong>
+                {overdueAccounts.length} pupil account{overdueAccounts.length === 1 ? "" : "s"} with unsettled fee balances past due date. Total overdue: <strong className="text-[var(--danger)]">{formatInrCompact(overdueTotalAmount)}</strong>
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -3882,7 +3872,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                 <button
                   type="button"
                   onClick={() => setReceiptSearchQuery("")}
-                  className="p-1 rounded text-[var(--text-muted)] hover:text-white"
+                  className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                 >
                   <X size={13} />
                 </button>
@@ -4034,13 +4024,13 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                         : `${formatFeeInr(feeStructure[parseGradeNumber(row.grade) ?? 1] ?? 35000)} / pupil`}
                     </td>
                     <td className="font-semibold text-[var(--text-primary)]">
-                      ₹{(row.totalBilled / 100000).toFixed(2)}L
+                      {formatInrCompact(row.totalBilled)}
                     </td>
                     <td className="font-semibold text-[var(--success)]">
-                      ₹{(row.totalPaid / 100000).toFixed(2)}L
+                      {formatInrCompact(row.totalPaid)}
                     </td>
                     <td className="font-semibold text-[var(--warning)]">
-                      ₹{(row.totalPending / 100000).toFixed(2)}L
+                      {formatInrCompact(row.totalPending)}
                     </td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -4077,13 +4067,13 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   <td>{studentFeeAccounts.length} pupils</td>
                   <td>Unified Policy ({formatFeeInr(feeStructure[1] ?? 30000)} / {formatFeeInr(feeStructure[5] ?? 35000)} / {formatFeeInr(feeStructure[10] ?? 40000)})</td>
                   <td className="font-bold text-[var(--text-primary)]">
-                    ₹{(billed / 100000).toFixed(2)}L
+                    {formatInrCompact(billed)}
                   </td>
                   <td className="font-bold text-[var(--success)]">
-                    ₹{(collected / 100000).toFixed(2)}L
+                    {formatInrCompact(collected)}
                   </td>
                   <td className="font-bold text-[var(--warning)]">
-                    ₹{(outstanding / 100000).toFixed(2)}L
+                    {formatInrCompact(outstanding)}
                   </td>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -4256,7 +4246,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", color: "var(--text-muted)" }}>
                       <span>Projected Total Billing:</span>
                       <span style={{ fontWeight: 600, color: "var(--brand)" }}>
-                        ₹{(projectedBilling / 100000).toFixed(2)}L
+                        {formatInrCompact(projectedBilling)}
                       </span>
                     </div>
                   </div>
@@ -4751,7 +4741,7 @@ function FinanceView({ onBack }: { onBack: () => void }) {
                   <button
                     type="button"
                     onClick={() => setRecordStudent(null)}
-                    className="p-1 rounded text-[var(--text-muted)] hover:text-white"
+                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                     title="Change selected student"
                   >
                     <X size={15} />
@@ -5859,10 +5849,14 @@ function AnalyticsView({
   );
 
   const overallAverage = useMemo(() => {
-    if (analyticsStudents.length === 0) return 0;
-    const total = analyticsStudents.reduce((sum, s) => sum + s.average, 0);
-    return Math.round(total / analyticsStudents.length);
-  }, [analyticsStudents]);
+    // Average the pupils who actually have marks. Dividing by the whole roll
+    // call counted every unmarked pupil as a zero, so the analytics mean came
+    // out lower than the "Academic standing" figure on the overview — the same
+    // cohort, two different answers.
+    if (graded.length === 0) return 0;
+    const total = graded.reduce((sum, s) => sum + s.average, 0);
+    return Math.round(total / graded.length);
+  }, [graded]);
 
   const latestAttendance = analyticsAttendance[analyticsAttendance.length - 1];
   const latestPresent = latestAttendance?.present ?? 0;
@@ -6103,6 +6097,18 @@ function AnalyticsView({
     return bands;
   }, [analyticsStudents]);
 
+  /**
+   * Pupils under the school's attendance threshold.
+   *
+   * The bands above are fixed 10-point buckets, so `bands[3]` is "under 70%" —
+   * not the alert threshold the panel footer talks about. Reporting that count
+   * under a "<75%" label meant the number on screen answered a different
+   * question from the one beside it.
+   */
+  const belowThresholdCount = analyticsStudents.filter(
+    s => s.attendance < ATTENDANCE_THRESHOLD
+  ).length;
+
   /** Subject spread: gap between highest and lowest */
   const subjectSpread = useMemo(() => {
     if (subjectAverages.length === 0) return null;
@@ -6192,7 +6198,7 @@ function AnalyticsView({
       billed,
       collected,
       outstanding,
-      rate: billed > 0 ? Math.round((collected / billed) * 100) : 0,
+      rate: billed > 0 ? Math.round((collected / billed) * 1000) / 10 : 0,
     };
   }, [analyticsInvoices]);
 
@@ -6356,7 +6362,7 @@ function AnalyticsView({
               className="h-full flex flex-col justify-between"
             />
             <MetricBlock
-              label="Attendance Rate"
+              label="Attendance today"
               value={latestMarked > 0 ? `${attendancePct}%` : "—"}
               comparison={
                 latestMarked > 0
@@ -7343,9 +7349,9 @@ function AnalyticsView({
                 </ResponsiveContainer>
               </div>
               <div className="px-5 py-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] mt-auto flex items-center justify-between">
-                <span>Parent alert threshold &lt;75%</span>
+                <span>Alert threshold &lt;{ATTENDANCE_THRESHOLD}%</span>
                 <span className="font-semibold text-[var(--danger)]">
-                  {attendanceBands[3].count} Below 70%
+                  {belowThresholdCount} below {ATTENDANCE_THRESHOLD}%
                 </span>
               </div>
             </section>
@@ -7428,7 +7434,7 @@ function AnalyticsView({
                 </h2>
               </div>
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--success-soft)] text-[var(--success)] border border-[var(--success-border)]">
-                {attendancePct}% Cohort Present
+                {attendancePct}% of marked pupils
               </span>
             </div>
 
@@ -7441,7 +7447,7 @@ function AnalyticsView({
                   {latestAttendance?.present ?? 0}
                 </p>
                 <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                  On campus in class · {attendancePct}% of school cohort
+                  On campus in class · {attendancePct}% of marked pupils
                 </span>
               </div>
               <div className="p-4 rounded-lg bg-[var(--bg-raised)] border border-[var(--border)] flex flex-col justify-between h-full">
@@ -7452,7 +7458,7 @@ function AnalyticsView({
                   {latestAttendance?.absent ?? 0}
                 </p>
                 <span className="text-[11px] text-[var(--text-muted)] mt-1">
-                  Unexcused absence · {Math.max(0, Math.round((100 - attendancePct) * 10) / 10)}% of school cohort
+                  Absent or on leave · {Math.max(0, Math.round((100 - attendancePct) * 10) / 10)}% of marked pupils
                 </span>
               </div>
             </div>

@@ -670,7 +670,7 @@ export function ReportsView({ onBack }: ReportsViewProps) {
                     <button
                       type="button"
                       onClick={() => setSearchQuery("")}
-                      className="absolute right-2.5 top-2 text-[var(--text-muted)] hover:text-white"
+                      className="absolute right-2.5 top-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                     >
                       <X size={13} />
                     </button>

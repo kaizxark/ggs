@@ -52,6 +52,7 @@ import {
   formatPercent,
   initialsFor,
   saveBlob,
+  todayIso,
   updateStudent,
   type DirectoryFilters,
   type DirectoryOptions,
@@ -71,6 +72,7 @@ import { SmoothFilterDropdown } from "@/components/SmoothFilterDropdown";
 import { usePageScrollLock } from "@/components/SmoothScroll";
 import { FormSelect } from "@/components/FormSelect";
 import { formatFeeInr, getFeeForGrade } from "@/lib/fee-structure";
+import { ATTENDANCE_THRESHOLD } from "@shared/attendance";
 
 /**
  * The student directory.
@@ -461,13 +463,7 @@ export function StudentDirectory({ openStudentId, openMode = "drawer", onStudent
           />
           <h1 className="page-title">Students</h1>
           <p className="page-subtitle">
-            {page
-              ? `${page.total.toLocaleString()} student${page.total === 1 ? "" : "s"} on record${
-                  activeFilterCount ? " matching your filters" : ""
-                }`
-              : error
-                ? "The student list could not be loaded."
-                : "Loading the student list…"}
+            Live roll call — attendance, fees and guardian contact for every pupil.
           </p>
         </div>
         <div className="intro-actions">
@@ -1316,7 +1312,7 @@ function AcademicsDrawerSection({
           {att && att.percentage !== null && (
             <div style={{ textAlign: "right" }}>
               <span style={{ fontSize: 11, color: "var(--text-muted)", display: "block" }}>Attendance</span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: att.percentage >= 75 ? "var(--success, #10b981)" : "var(--danger, #ef4444)" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: att.percentage >= ATTENDANCE_THRESHOLD ? "var(--success)" : "var(--danger)" }}>
                 {formatPercent(att.percentage)}
               </span>
             </div>
@@ -1693,7 +1689,7 @@ function StudentDialog({
     section: student?.section ?? "",
     roll_no: student?.roll_no ? String(student.roll_no) : "",
     status: student?.status ?? "active",
-    joined_on: student?.joined_on ?? new Date().toISOString().slice(0, 10),
+    joined_on: student?.joined_on ?? todayIso(),
     admission_payment_mode: "Cash",
     photo_url: student?.photo_url ?? "",
     date_of_birth: student?.date_of_birth ?? "",

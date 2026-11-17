@@ -81,8 +81,79 @@ function serviceHeaders(json = false): Record<string, string> {
   };
 }
 
+/**
+ * One read against PostgREST, with a short retry.
+ *
+ * A whole-school register is many requests fired at once, and on a busy network
+ * a TLS connection to the database can be reset once. Retrying transient
+ * failures keeps one dropped socket from turning into "the register could not
+ * be loaded" for nobody.
+ */
+const REST_RETRIES = 2;
+
+function restDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function restJson(
+  url: string,
+  init: RequestInit = {},
+  label = "database"
+): Promise<Response> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= REST_RETRIES; attempt += 1) {
+    if (attempt > 0) await restDelay(180 * attempt);
+
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+
+    const transient = res.status >= 500 || res.status === 429;
+    if (res.ok || !transient) return res;
+    lastError = new Error(`${label}: ${res.status}`);
+  }
+
+  if (lastError instanceof Error) throw lastError;
+  throw new Error(`${label}: request failed`);
+}
+
+/**
+ * Run tasks a few at a time.
+ *
+ * Unbounded parallel `Promise.all` opens a burst of simultaneous connections,
+ * which is how a shared gateway tends to drop one of them mid-flight.
+ */
+const REST_CONCURRENCY = 6;
+
+async function restAll<T>(
+  total: number,
+  limit: number,
+  run: (index: number) => Promise<T>
+): Promise<T[]> {
+  const results = new Array<T>(total);
+  let next = 0;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next;
+      next += 1;
+      if (index >= total) return;
+      results[index] = await run(index);
+    }
+  };
+
+  const workers = Array.from({ length: Math.min(limit, total) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 async function restRows<T = Json>(table: string, query: string): Promise<T[]> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+  const res = await restJson(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
     headers: serviceHeaders(),
   });
   if (!res.ok) {
@@ -113,9 +184,10 @@ async function restAllRows<T = Json>(
   order = ""
 ): Promise<T[]> {
   const base = `select=${select}&${filter}${order ? `&${order}` : ""}`;
-  const countRes = await fetch(
+  const countRes = await restJson(
     `${SUPABASE_URL}/rest/v1/${table}?${base}&limit=1`,
-    { headers: { ...serviceHeaders(), Prefer: "count=exact" } }
+    { headers: { ...serviceHeaders(), Prefer: "count=exact" } },
+    `${table} count`
   );
   if (!countRes.ok) {
     throw new Error(
@@ -128,9 +200,10 @@ async function restAllRows<T = Json>(
   if (!Number.isFinite(headerTotal)) {
     // When the backend or mock environment does not supply a Content-Range header,
     // fetch all rows directly without pagination.
-    const fallbackRes = await fetch(
+    const fallbackRes = await restJson(
       `${SUPABASE_URL}/rest/v1/${table}?${base}`,
-      { headers: serviceHeaders() }
+      { headers: serviceHeaders() },
+      `${table} fallback`
     );
     if (!fallbackRes.ok) {
       throw new Error(
@@ -144,12 +217,15 @@ async function restAllRows<T = Json>(
   if (total <= 0) return [];
 
   const pages = Math.min(Math.ceil(total / PAGE_SIZE), MAX_PAGES);
-  const results = await Promise.all(
-    Array.from({ length: pages }, async (_, page) => {
+  const results = await restAll(
+    pages,
+    REST_CONCURRENCY,
+    async (page: number) => {
       const offset = page * PAGE_SIZE;
-      const res = await fetch(
+      const res = await restJson(
         `${SUPABASE_URL}/rest/v1/${table}?${base}&limit=${PAGE_SIZE}&offset=${offset}`,
-        { headers: serviceHeaders() }
+        { headers: serviceHeaders() },
+        `${table} page ${page}`
       );
       if (!res.ok) {
         throw new Error(
@@ -157,7 +233,7 @@ async function restAllRows<T = Json>(
         );
       }
       return (await res.json()) as T[];
-    })
+    }
   );
   return results.flat();
 }

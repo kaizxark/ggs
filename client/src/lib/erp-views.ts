@@ -451,7 +451,11 @@ async function loadStudents(): Promise<Student[]> {
     const mk = marks.get(id);
     const fee = feeByStudent.get(id);
 
-    const attendancePct = att && att.total > 0 ? Math.round((att.ok / att.total) * 100) : 0;
+    // One decimal, the precision every attendance screen shows. Rounding to a
+    // whole percent turned 89.6% into 90% and silently lifted a pupil over the
+    // 90% threshold they were actually below.
+    const attendancePct =
+      att && att.total > 0 ? Math.round((att.ok / att.total) * 1000) / 10 : 0;
     const average = mk && mk.n > 0 ? Math.round((mk.sum / mk.n) * 100) : 0;
     // The raw counts travel with the row because 0 is ambiguous on its own:
     // a pupil with no attendance rows looks identical to one who was absent
@@ -563,6 +567,12 @@ async function loadDashboardAttendance(): Promise<DashboardAttendanceRow[]> {
     belowThreshold?: number;
   };
 
+  // Attending vs not — a true partition of the marked register.
+  //
+  // The database counts `present` and `late` as attending (that is the rule in
+  // shared/attendance.ts, and the class list below already reports present +
+  // late). Folding `late` into `absent` instead put the same pupil in both
+  // series, so a class read 100% here and looked half empty in the chart.
   const daily = (payload.daily ?? []).map((row) => ({
     id: String(row.date),
     date: String(row.date),
@@ -570,8 +580,8 @@ async function loadDashboardAttendance(): Promise<DashboardAttendanceRow[]> {
     day:
       DAY_LABELS[new Date(`${row.date}T00:00:00Z`).getUTCDay()] ??
       String(row.date),
-    present: num(row.present),
-    absent: num(row.absent) + num(row.late) + num(row.leave),
+    present: num(row.present) + num(row.late),
+    absent: num(row.absent) + num(row.leave),
   }));
 
   const classes = (payload.classes ?? []).map((row) => {
@@ -755,13 +765,19 @@ async function loadInvoices(): Promise<Invoice[]> {
     const outstanding = Math.max(0, total - paid);
     const dueOn = inv.due_on ? fmtDate(String(inv.due_on)) : "—";
 
+    // The due date decides arrears, not whether anything has been paid.
+    //
+    // This used to reach "Overdue" only when `paid === 0`, so a pupil who had
+    // settled half of a past-due term counted as "Partial" and dropped out of
+    // every overdue total on the overview and the ledger — understating the
+    // arrears the school was actually owed.
     let status: "Paid" | "Partial" | "Overdue" | "Due";
     if (outstanding === 0) {
       status = "Paid";
-    } else if (paid > 0) {
-      status = "Partial";
     } else if (dueOn !== "—" && dueOn < today) {
       status = "Overdue";
+    } else if (paid > 0) {
+      status = "Partial";
     } else {
       status = "Due";
     }

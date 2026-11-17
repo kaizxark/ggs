@@ -42,7 +42,11 @@ import {
   type TransportServiceType,
 } from "@/lib/transport-data";
 import { useStudents } from "@/lib/school-data";
-import { formatMoney } from "@/lib/student-directory";
+import {
+  formatInrCompact,
+  formatMoney,
+  todayIso,
+} from "@/lib/student-directory";
 
 interface TransportationViewProps {
   onBack: () => void;
@@ -79,9 +83,11 @@ export function TransportationView({ onBack, onNavigate }: TransportationViewPro
   const [viewingReceipt, setViewingReceipt] = useState<TransportPaymentReceipt | null>(null);
 
   // Record Payment Form state
-  const [paymentAmount, setPaymentAmount] = useState<string>("14000");
+  const [paymentAmount, setPaymentAmount] = useState<string>(
+    String(ANNUAL_TRANSPORT_FEE)
+  );
   const [paymentMethod, setPaymentMethod] = useState("UPI");
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [paymentDate, setPaymentDate] = useState(() => todayIso());
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
@@ -183,9 +189,15 @@ export function TransportationView({ onBack, onNavigate }: TransportationViewPro
   // Handle open payment modal
   const handleOpenPaymentModal = (student: StudentTransportRecord) => {
     setPaymentModalStudent(student);
-    setPaymentAmount(String(student.outstandingBalance > 0 ? student.outstandingBalance : 14000));
+    setPaymentAmount(
+      String(
+        student.outstandingBalance > 0
+          ? student.outstandingBalance
+          : ANNUAL_TRANSPORT_FEE
+      )
+    );
     setPaymentMethod("UPI");
-    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentDate(todayIso());
     setPaymentReference(`UPI-${Math.floor(100000 + Math.random() * 900000)}`);
     setPaymentNotes("");
   };
@@ -361,7 +373,7 @@ export function TransportationView({ onBack, onNavigate }: TransportationViewPro
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5 mt-2">
         <MetricBlock
           label="Annual Bus Fee"
-          value="₹14,000"
+          value={formatMoney(ANNUAL_TRANSPORT_FEE)}
           comparison="Fixed per student / annum"
           icon={IndianRupee}
         />
@@ -373,19 +385,19 @@ export function TransportationView({ onBack, onNavigate }: TransportationViewPro
         />
         <MetricBlock
           label="Bus Fee Billed"
-          value={`₹${(stats.totalBilled / 100000).toFixed(2)}L`}
+          value={formatInrCompact(stats.totalBilled)}
           comparison={`₹14k × ${stats.busRidersCount} riders`}
           icon={CreditCard}
         />
         <MetricBlock
           label="Fee Collected"
-          value={`₹${(stats.totalCollected / 100000).toFixed(2)}L`}
+          value={formatInrCompact(stats.totalCollected)}
           comparison={`${stats.collectionRate}% collected`}
           icon={CheckCircle2}
         />
         <MetricBlock
           label="Pending Balance"
-          value={`₹${(stats.totalOutstanding / 100000).toFixed(2)}L`}
+          value={formatInrCompact(stats.totalOutstanding)}
           comparison={`${stats.dueRiders} due · ${stats.partialPaidRiders} partial`}
           icon={AlertCircle}
         />
@@ -1090,8 +1102,11 @@ export function TransportationView({ onBack, onNavigate }: TransportationViewPro
                   <button
                     type="button"
                     className="secondary-button compact text-xs justify-center py-1.5"
-                    onClick={() => setPaymentAmount("14000")}
-                    disabled={paymentModalStudent.outstandingBalance < 14000}
+                    onClick={() => setPaymentAmount(String(ANNUAL_TRANSPORT_FEE))}
+                    disabled={
+                      paymentModalStudent.outstandingBalance <
+                      ANNUAL_TRANSPORT_FEE
+                    }
                   >
                     Annual (₹14,000)
                   </button>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Student } from "./school-data";
 import { notifyDataChanged, useDataRevision } from "./live-data";
+import { todayIso } from "./student-directory";
 
 export const ANNUAL_TRANSPORT_FEE = 14000;
 
@@ -521,7 +522,7 @@ export function useTransportData(students: Student[]) {
 
       const receiptSeq = Math.floor(1000 + Math.random() * 9000);
       const receiptNo = `TRN-2026-${receiptSeq}`;
-      const paidDate = input.paidAt || new Date().toISOString().slice(0, 10);
+      const paidDate = input.paidAt || todayIso();
       const newPaidAmount = student.paidAmount + input.amount;
       const newBalance = Math.max(0, ANNUAL_TRANSPORT_FEE - newPaidAmount);
 

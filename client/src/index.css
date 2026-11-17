@@ -6746,97 +6746,99 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
 
 .att-command-updated { color: var(--text-faint); }
 
-/* ---- KPI strip --------------------------------------------------- */
+/* ---- Today's numbers --------------------------------------------- */
 
-.att-kpis { border-radius: 12px; }
-.att-kpis .metric-block { padding: 18px 20px; }
-.att-kpis .metric-value { font-size: 27px; }
+/* One bar, four cells, hairline dividers.
+   Four floating tiles — each with its own icon chip and a sparkline box — made
+   the top of the page louder than the registers it was summarising, and the
+   sparkline duplicated the seven-day panel further down. The numbers are the
+   point, so here only the numbers show. */
+.att-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-panel);
+}
 
-/* ---- Pending alert ----------------------------------------------- */
-
-.att-alert {
+.att-stat-cell {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 15px 18px;
-  border-color: var(--warning-border);
-  background: var(--warning-soft-2);
-}
-
-.att-alert-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.att-alert-copy {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
+  gap: 4px;
   min-width: 0;
+  padding: 15px 18px;
+  border-left: 1px solid var(--border-subtle);
 }
 
-.att-alert-icon {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--warning-soft);
-  color: var(--warning-strong);
-}
+.att-stat-cell:first-child { border-left: 0; }
 
-.att-alert-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.att-alert-sub {
-  margin: 2px 0 0;
+.att-stat-label {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.att-alert-chips {
+.att-stat-value {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -.045em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
 }
 
-.att-chip {
+.att-stat-of {
+  color: var(--text-faint);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+.att-stat-delta {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  max-width: 100%;
-  padding: 5px 9px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  cursor: pointer;
-  transition: border-color .14s var(--ease-out), background-color .14s var(--ease-out);
+  gap: 2px;
+  align-self: center;
+  padding: 1px 5px 1px 3px;
+  border-radius: 5px;
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 
-.att-chip:hover { border-color: var(--warning); background: var(--bg-input); }
-.att-chip-name { color: var(--text-primary); font-weight: 600; }
-.att-chip-meta { color: var(--text-muted); font-size: 11px; }
-.att-chip > svg { color: var(--warning-strong); flex: 0 0 auto; }
+.att-stat-delta.up { background: var(--success-soft-2); color: var(--success-strong); }
+.att-stat-delta.down { background: var(--danger-soft-2); color: var(--danger-strong); }
+
+.att-stat-note {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ---- Toolbar ----------------------------------------------------- */
 
+/* Not a panel. Three stacked cards before the first class made the page read
+   as a wall of boxes; the filters are a quiet row above the grid instead. */
 .att-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 11px;
-  padding: 12px 14px;
+  gap: 9px;
+  padding: 2px 2px 0;
 }
 
 .att-filter-row {
@@ -7863,16 +7865,42 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
 }
 
 @media (max-width: 900px) {
-  .att-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .att-kpis .metric-block { border-left: 0; border-top: 1px solid var(--border); }
-  .att-kpis .metric-block:nth-child(-n + 2) { border-top: 0; }
-  .att-kpis .metric-block:nth-child(even) { border-left: 1px solid var(--border); }
+  .att-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .att-stat-cell { border-left: 1px solid var(--border-subtle); }
+  .att-stat-cell:nth-child(odd) { border-left: 0; }
+  .att-stat-cell:nth-child(n + 3) { border-top: 1px solid var(--border-subtle); }
 }
 
 @media (max-width: 760px) {
+  /* The header and its controls were one row on desktop and three cramped
+     ones on a phone. Stack them and let each control use the full width. */
+  .att-intro-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: space-between;
+  }
+  .att-intro-actions > [role="group"] { flex: 1 1 auto; }
   .att-register-grid { grid-template-columns: 1fr; }
   .att-register-actions { justify-content: flex-start; }
-  .att-command-meta { display: none; }
+  .att-command {
+    padding: 11px 12px;
+    gap: 10px;
+  }
+  .att-date-nav {
+    width: 100%;
+    gap: 6px;
+  }
+  .att-date-trigger { flex: 1 1 auto; justify-content: space-between; }
+  .att-date-block { min-width: 0; }
+  .att-command-meta {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border-subtle);
+  }
   .att-date-pop { width: min(320px, calc(100vw - 32px)); }
   .att-class-grid { grid-template-columns: 1fr; }
   .att-trend { height: 150px; gap: 6px; }
@@ -7880,15 +7908,34 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
 }
 
 @media (max-width: 640px) {
-  /* Four stacked 132px cards pushed every class below the fold on a phone.
-     Two compact rows answer the same four questions in half the height. */
-  .att-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .att-kpis .metric-block { padding: 13px 12px; border-top: 1px solid var(--border); }
-  .att-kpis .metric-block:nth-child(-n + 2) { border-top: 0; }
-  .att-kpis .metric-block:nth-child(even) { border-left: 1px solid var(--border); }
-  .att-kpis .metric-label { font-size: 11.5px; }
-  .att-kpis .metric-value { font-size: 21px; }
-  .att-kpis .metric-change { margin-top: 6px; font-size: 11px; line-height: 1.35; }
+  /* Pills scroll sideways rather than stacking into three rows of chrome. */
+  .att-filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .att-filter-row::-webkit-scrollbar { display: none; }
+  .att-filter-row .status-pill { flex: 0 0 auto; }
+
+  .att-tool-right { width: 100%; }
+  .att-tool-right .att-select { flex: 1 1 auto; min-width: 0; }
+  .att-view-toggle { flex: 0 0 auto; }
+
+  .att-class-card { padding: 13px 14px 11px; }
+  .att-rate { font-size: 24px; }
+  .att-class-grid { gap: 10px; }
+
+  /* Two compact rows instead of four stacked tiles: the same four answers in
+     half the height, so the first class is not pushed below the fold. */
+  .att-stat-cell { padding: 12px 12px 13px; }
+  .att-stat-label { font-size: 10px; letter-spacing: .05em; }
+  .att-stat-value { font-size: 21px; gap: 5px; }
+  .att-stat-of { font-size: 13px; }
+  .att-stat-note { font-size: 11px; white-space: normal; }
+  .att-stat-delta { font-size: 10px; }
+
   .att-drawer { width: 100vw; }
   .att-drawer-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .att-tool-row { align-items: stretch; }
@@ -7901,4 +7948,3 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
   .att-drawer-scrim,
   .att-trend-fill { animation: none; transition: none; }
 }
-                                                                                                                                                                                                                                                                        
