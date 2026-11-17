@@ -1872,26 +1872,31 @@ function AppDialog({
   description,
   children,
   onClose,
+  style,
+  className = "",
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
   onClose: () => void;
+  style?: React.CSSProperties;
+  className?: string;
 }) {
   usePageScrollLock();
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div
-        className="app-dialog"
+        className={`app-dialog ${className}`}
+        style={style}
         onMouseDown={event => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-5 border-b border-[var(--border)] px-6 py-5">
+        <div className="flex items-start justify-between gap-5 border-b border-[var(--border)] px-6 py-4">
           <div>
-            <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--text-secondary)]">
+            <h3 className="text-base font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
               {title}
             </h3>
             {description && (
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                 {description}
               </p>
             )}
@@ -4431,269 +4436,121 @@ function FinanceView({ onBack }: { onBack: () => void }) {
       {/* MODAL: EDIT FEE STRUCTURE */}
       {showFeeStructureModal && (
         <AppDialog
-          title="Edit institutional fee structure"
-          description="Configure annual tuition fees for Global Kids School (AY 2026–27). Set fees by educational cohort band or customize individual classes."
+          title="Fee structure"
+          description="Annual tuition fee per class (AY 2026–27)."
           onClose={() => setShowFeeStructureModal(false)}
+          style={{ width: "min(560px, 100%)" }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            {/* Quick Cohort Band Presets */}
-            <div
-              style={{
-                background: "var(--bg-raised)",
-                border: "1px solid var(--border)",
-                borderRadius: "12px",
-                padding: "16px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                <div>
-                  <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", display: "block" }}>
-                    Batch Update by Cohort Band
-                  </span>
-                  <span style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>
-                    Quickly apply uniform fees to all classes in an educational wing.
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
-                {/* Primary Wing */}
-                <div
-                  style={{
-                    padding: "12px",
-                    background: "var(--bg-panel)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                  }}
+          <div className="space-y-4">
+            {/* Quick Presets */}
+            <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-[var(--border-subtle)]">
+              <span className="text-xs text-[var(--text-muted)] font-medium">
+                Quick presets:
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  className="secondary-button compact text-[11px] py-1 px-2.5"
+                  onClick={() => applyCohortPreset("primary", 30000)}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#10b981" }}>Primary (Classes 1–4)</span>
-                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Policy: 30k</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <input
-                      type="number"
-                      step={1000}
-                      min={0}
-                      value={cohortPreset.primary}
-                      onChange={(e) => setCohortPreset((p) => ({ ...p, primary: Number(e.target.value) }))}
-                      style={{ fontSize: "13px", fontWeight: 600, padding: "6px 8px", height: "34px" }}
-                      placeholder="30000"
-                    />
-                    <button
-                      type="button"
-                      className="secondary-button compact"
-                      onClick={() => applyCohortPreset("primary", cohortPreset.primary)}
-                      style={{ whiteSpace: "nowrap", fontSize: "11.5px", height: "34px", padding: "0 10px" }}
-                    >
-                      Apply 1–4
-                    </button>
-                  </div>
-                </div>
-
-                {/* Middle School */}
-                <div
-                  style={{
-                    padding: "12px",
-                    background: "var(--bg-panel)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                  }}
+                  1–4: ₹30k
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button compact text-[11px] py-1 px-2.5"
+                  onClick={() => applyCohortPreset("middle", 35000)}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}>Middle (Classes 5–7)</span>
-                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Policy: 35k</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <input
-                      type="number"
-                      step={1000}
-                      min={0}
-                      value={cohortPreset.middle}
-                      onChange={(e) => setCohortPreset((p) => ({ ...p, middle: Number(e.target.value) }))}
-                      style={{ fontSize: "13px", fontWeight: 600, padding: "6px 8px", height: "34px" }}
-                      placeholder="35000"
-                    />
-                    <button
-                      type="button"
-                      className="secondary-button compact"
-                      onClick={() => applyCohortPreset("middle", cohortPreset.middle)}
-                      style={{ whiteSpace: "nowrap", fontSize: "11.5px", height: "34px", padding: "0 10px" }}
-                    >
-                      Apply 5–7
-                    </button>
-                  </div>
-                </div>
-
-                {/* Secondary Wing */}
-                <div
-                  style={{
-                    padding: "12px",
-                    background: "var(--bg-panel)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                  }}
+                  5–7: ₹35k
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button compact text-[11px] py-1 px-2.5"
+                  onClick={() => applyCohortPreset("secondary", 40000)}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#8b5cf6" }}>Secondary (Classes 8–10)</span>
-                    <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Policy: 40k</span>
-                  </div>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <input
-                      type="number"
-                      step={1000}
-                      min={0}
-                      value={cohortPreset.secondary}
-                      onChange={(e) => setCohortPreset((p) => ({ ...p, secondary: Number(e.target.value) }))}
-                      style={{ fontSize: "13px", fontWeight: 600, padding: "6px 8px", height: "34px" }}
-                      placeholder="40000"
-                    />
-                    <button
-                      type="button"
-                      className="secondary-button compact"
-                      onClick={() => applyCohortPreset("secondary", cohortPreset.secondary)}
-                      style={{ whiteSpace: "nowrap", fontSize: "11.5px", height: "34px", padding: "0 10px" }}
-                    >
-                      Apply 8–10
-                    </button>
-                  </div>
-                </div>
+                  8–10: ₹40k
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button compact text-[11px] py-1 px-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  onClick={handleResetFeeStructure}
+                  title="Reset to 30k / 35k / 40k defaults"
+                >
+                  <RotateCcw size={11} />
+                  Reset
+                </button>
               </div>
             </div>
 
-            {/* Individual Class Inputs */}
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
-                  Individual Class Fees (INR / year)
-                </span>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                  Term installments are auto-calculated at 50% each
-                </span>
-              </div>
+            {/* 2-Column Class Grid (No scrollbar, zero clutter) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((g) => {
+                const val = editingFees[g] ?? (g <= 4 ? 30000 : g <= 7 ? 35000 : 40000);
+                const band = getCohortBand(g);
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-                  gap: "10px",
-                  maxHeight: "360px",
-                  overflowY: "auto",
-                  paddingRight: "4px",
-                }}
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((g) => {
-                  const val = editingFees[g] ?? (g <= 4 ? 30000 : g <= 7 ? 35000 : 40000);
-                  const band = getCohortBand(g);
-                  const half = Math.round(val / 2);
-
-                  return (
-                    <div
-                      key={g}
-                      style={{
-                        padding: "10px 12px",
-                        background: "var(--bg-raised)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "10px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "10px",
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)" }}>
-                            Class {g}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              padding: "1px 5px",
-                              borderRadius: "4px",
-                              background: band.bg,
-                              color: band.color,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {band.name}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: "11px", color: "var(--text-muted)", display: "block", marginTop: "2px" }}>
-                          2 terms × {formatFeeInr(half)}
-                        </span>
-                      </div>
-
-                      <div style={{ width: "110px" }}>
-                        <input
-                          type="number"
-                          step={500}
-                          min={0}
-                          value={val}
-                          onChange={(e) => {
-                            const num = Number(e.target.value);
-                            setEditingFees((prev) => ({ ...prev, [g]: num }));
-                          }}
-                          style={{
-                            fontSize: "13px",
-                            fontWeight: 700,
-                            textAlign: "right",
-                            padding: "6px 8px",
-                            height: "34px",
-                          }}
-                        />
-                      </div>
+                return (
+                  <div
+                    key={g}
+                    className="flex items-center justify-between py-1.5 px-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-hover)]"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-[var(--text-primary)] font-mono">
+                        Class {g}
+                      </span>
+                      <span className="text-[10px] text-[var(--text-muted)]">
+                        &middot; {band.name.replace(" Wing", "").replace(" School", "")}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="relative w-28">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-[var(--text-muted)]">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        step={500}
+                        min={0}
+                        value={val}
+                        onChange={(e) => {
+                          const num = Number(e.target.value);
+                          setEditingFees((prev) => ({ ...prev, [g]: num }));
+                        }}
+                        className="form-input text-xs font-mono font-bold text-right pl-6 pr-2 py-1 h-7 w-full"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Actions */}
-            <div className="dialog-actions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border)", paddingTop: "16px" }}>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={handleResetFeeStructure}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "12px", color: "var(--text-muted)" }}
-              >
-                <RotateCcw size={12} />
-                Reset to default policy (30k/35k/40k)
-              </button>
+            <div className="dialog-actions flex items-center justify-between pt-3 border-t border-[var(--border)] mt-4">
+              <span className="text-[11px] text-[var(--text-muted)]">
+                Installments: 50% per term
+              </span>
 
-              <div style={{ display: "flex", gap: "10px" }}>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="secondary-button compact"
                   onClick={() => setShowFeeStructureModal(false)}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  className="primary-button"
+                  className="primary-button compact"
                   disabled={feeSaving}
                   onClick={handleSaveFeeStructure}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
                   {feeSaving ? (
                     <>
-                      <Loader2 size={14} className="animate-spin" />
-                      Saving...
+                      <Loader2 size={13} className="animate-spin" />
+                      Saving…
                     </>
                   ) : (
                     <>
-                      <Check size={14} />
-                      Save & Publish Structure
+                      <Check size={13} />
+                      Save structure
                     </>
                   )}
                 </button>
