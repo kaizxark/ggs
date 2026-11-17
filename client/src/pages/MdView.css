@@ -516,6 +516,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 .mdv-table {
@@ -524,9 +526,9 @@
 }
 
 .mdv-table th {
-  padding: 14px 0 11px;
+  padding: 16px 0 12px;
   border-bottom: 1px solid var(--mdv-line);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -538,7 +540,7 @@
 .mdv-table th.num,
 .mdv-table td.num {
   text-align: right;
-  padding-right: 20px;
+  padding-right: 24px;
 }
 
 .mdv-table td {
@@ -562,9 +564,9 @@
 .mdv-row-label {
   display: flex;
   align-items: baseline;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  padding: 13px 0;
+  padding: 16px 0;
   border: 0;
   background: none;
   color: inherit;
@@ -574,7 +576,7 @@
 
 .mdv-row-label strong {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 17.5px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--mdv-text);
@@ -583,7 +585,7 @@
 
 .mdv-row-label em {
   font-style: normal;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--mdv-muted);
   white-space: nowrap;
 }
@@ -602,29 +604,29 @@
 
 .mdv-cell-num {
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: 15.5px;
   font-variant-numeric: tabular-nums;
   color: var(--mdv-muted);
 }
 
 .mdv-row td.mdv-cell-num {
-  padding: 13px 20px 13px 0;
+  padding: 16px 24px 16px 0;
 }
 
 .mdv-rate {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 14px;
-  padding: 13px 0;
+  gap: 16px;
+  padding: 16px 0;
 }
 
 .mdv-track {
   flex: 1 1 auto;
   min-width: 56px;
   max-width: 240px;
-  height: 5px;
-  border-radius: 3px;
+  height: 6px;
+  border-radius: 4px;
   background: rgba(36, 30, 24, 0.08);
   overflow: hidden;
 }
@@ -632,7 +634,7 @@
 .mdv-track i {
   display: block;
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--mdv-sage);
   transition: width 0.4s var(--ease-out);
 }
@@ -642,7 +644,7 @@
   flex: 0 0 auto;
   text-align: right;
   font-family: var(--font-mono);
-  font-size: 16px;
+  font-size: 16.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--mdv-text);
@@ -666,12 +668,12 @@
 }
 
 .mdv-row--section .mdv-row-label {
-  padding: 10px 0;
+  padding: 12px 0;
 }
 
 .mdv-row--section .mdv-row-label strong {
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--mdv-muted);
 }
@@ -679,9 +681,9 @@
 .mdv-row--section .mdv-sub {
   display: inline-flex;
   align-items: baseline;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
-  margin-left: 23px;
+  margin-left: 24px;
   padding-left: 14px;
   border-left: 1px solid var(--mdv-line);
 }
@@ -701,21 +703,21 @@
 }
 
 .mdv-row--section td.mdv-cell-num {
-  padding: 10px 20px 10px 0;
-  font-size: 13px;
+  padding: 12px 24px 12px 0;
+  font-size: 13.5px;
   color: var(--mdv-muted);
 }
 
 .mdv-row--section .mdv-rate {
-  padding: 10px 0;
+  padding: 12px 0;
 }
 
 .mdv-row--section .mdv-track {
-  height: 3px;
+  height: 4px;
 }
 
 .mdv-row--section .mdv-pct {
-  font-size: 13.5px;
+  font-size: 14px;
   color: var(--mdv-muted);
 }
 
@@ -797,10 +799,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 38px;
-  padding: 0 28px;
+  height: 44px;
+  padding: 0 clamp(24px, 3.5vw, 48px);
   border-top: 1px solid var(--mdv-line);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
