@@ -42,6 +42,8 @@ import {
   ReferenceLine,
   Cell,
 } from "recharts";
+import { supabase } from "@/lib/supabase";
+import { createRealtimeManager } from "@/lib/realtime";
 
 import "./MdView.css";
 
@@ -1105,7 +1107,11 @@ function RosterDialog({
 
 const AUTH_KEY = "mdview_auth";
 const AUTH_TOKEN = "admin123";
-const POLL_MS = 10_000;
+
+const mdRealtime = createRealtimeManager(supabase, {
+  allowAnonymous: true,
+  enableBroadcast: true,
+});
 
 export default function MdView() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -1206,14 +1212,44 @@ export default function MdView() {
     void fetchData(true);
   }, [isAuthenticated, fetchData]);
 
-  /* Poll every 10 seconds */
+  /* Comprehensive Supabase Realtime synchronization across all institutional records */
   useEffect(() => {
     if (!isAuthenticated) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void fetchData(false);
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleSyncTrigger = () => {
+      if (debounceTimer) return;
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        void fetchData(false);
+      }, 120);
+    };
+
+    const unsubscribe = mdRealtime.subscribeToTables(
+      [
+        "attendance",
+        "attendance_corrections",
+        "payments",
+        "invoices",
+        "students",
+        "classrooms",
+        "enrollments",
+      ],
+      handleSyncTrigger
+    );
+
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") void fetchData(false);
+    };
+    window.addEventListener("focus", onVisibilityOrFocus);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+
+    return () => {
+      unsubscribe();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+    };
   }, [isAuthenticated, fetchData]);
 
   const handleLogin = async (event: FormEvent) => {
@@ -1408,6 +1444,11 @@ export default function MdView() {
         </div>
 
         <div className="mdv-right">
+          <div className="mdv-live-tag" title="Connected to Supabase Realtime live sync">
+            <span className="mdv-live-dot" aria-hidden="true" />
+            <span>REALTIME</span>
+          </div>
+
           <div className="mdv-clock">
             <b>{clockTime(now)}</b>
             <span>{clockDate(now)}</span>

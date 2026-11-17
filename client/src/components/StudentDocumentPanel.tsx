@@ -40,6 +40,8 @@ import {
 } from "@/lib/student-documents";
 import { toast } from "@/lib/toast";
 import { supabase } from "@/lib/supabase";
+import { useDataRevision } from "@/lib/live-data";
+import { useRealtimeInvalidation } from "@/lib/use-realtime";
 
 export interface DocumentPanelProps {
   studentId: string;
@@ -94,9 +96,12 @@ export function DocumentPanel({ studentId, studentName }: DocumentPanelProps) {
     }
   }, [studentId]);
 
+  const dataRevision = useDataRevision();
+  const realtimeRevision = useRealtimeInvalidation(["student_documents"]);
+
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, dataRevision, realtimeRevision]);
 
   const heldMap = useMemo(() => new Map(documents.map((d) => [d.docType, d])), [documents]);
   const missingCore = useMemo(() => DOC_TYPES.filter((t) => !heldMap.has(t.id)), [heldMap]);

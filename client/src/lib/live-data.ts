@@ -17,6 +17,7 @@
  */
 
 import { useSyncExternalStore } from "react";
+import { broadcastMutation, onRealtimeReconnect } from "./realtime";
 
 type Listener = () => void;
 type Invalidator = () => void;
@@ -51,6 +52,11 @@ function bump(broadcast: boolean) {
       channel?.postMessage({ type: "invalidate", at: lastBump });
     } catch {
       // A closed channel or a serialisation failure is not fatal.
+    }
+    try {
+      broadcastMutation("*", "UPDATE");
+    } catch {
+      // Supabase broadcast is best-effort
     }
   }
 }
@@ -122,6 +128,11 @@ if (typeof window !== "undefined") {
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") refresh();
+    });
+  }
+  if (typeof onRealtimeReconnect === "function") {
+    onRealtimeReconnect(() => {
+      refresh();
     });
   }
 }

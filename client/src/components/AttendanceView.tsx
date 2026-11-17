@@ -68,6 +68,7 @@ import {
 import { ApiError } from "../lib/student-directory";
 import { toast } from "@/lib/toast";
 import { useCurrentUser } from "../lib/erp-views";
+import { useDataRevision } from "../lib/live-data";
 import { useRealtimeInvalidation } from "../lib/use-realtime";
 import {
   ATTENDANCE_STATUSES,
@@ -312,8 +313,15 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
     "all" | "absent" | "present"
   >("all");
 
-  // Any client writing attendance or changing a class re-reads this screen.
-  const realtimeRev = useRealtimeInvalidation(["attendance", "classrooms"]);
+  const dataRev = useDataRevision();
+  // Any client writing attendance or changing a class or student re-reads this screen.
+  const realtimeRev = useRealtimeInvalidation([
+    "attendance",
+    "attendance_corrections",
+    "classrooms",
+    "students",
+    "enrollments",
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -353,7 +361,7 @@ export default function AttendanceView({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [date, classroomId, reloadKey, realtimeRev]);
+  }, [date, classroomId, reloadKey, realtimeRev, dataRev]);
 
   const classes = data?.classes ?? [];
   const roster = data?.roster ?? [];

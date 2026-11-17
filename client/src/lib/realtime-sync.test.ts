@@ -363,4 +363,48 @@ describe("Multi-session Supabase Realtime synchronization", () => {
     expect(aReceived).toBe(2);
     expect(bReceived).toBe(1);
   });
+
+  it("supports anonymous / wallboard subscriptions without a user session", async () => {
+    // Client with null session
+    const anonClient = createSimulatedClient(bus, "", "");
+    anonClient.__session.setSession(null);
+
+    const wallboardManager = createRealtimeManager(anonClient as never, {
+      allowAnonymous: true,
+    });
+
+    let wallboardEvents = 0;
+    wallboardManager.subscribeToTable("attendance", () => {
+      wallboardEvents++;
+    });
+    await settle();
+
+    // Wallboard channel was opened immediately
+    expect(wallboardManager.channelCount()).toBe(1);
+
+    // When an attendance record changes, wallboard receives it immediately
+    bus.broadcast("attendance", "UPDATE", { id: "att-today", present: 85, absent: 5 });
+    await settle();
+    expect(wallboardEvents).toBe(1);
+
+    wallboardManager.destroy();
+  });
+
+  it("invokes reconnection listeners on network reconnect", async () => {
+    const testTarget = new EventTarget();
+    const reconnectingManager = createRealtimeManager(clientA as never, {
+      onlineTarget: testTarget,
+    });
+
+    let reconnected = false;
+    reconnectingManager.onReconnect(() => {
+      reconnected = true;
+    });
+
+    testTarget.dispatchEvent(new Event("online"));
+    await settle();
+    expect(reconnected).toBe(true);
+
+    reconnectingManager.destroy();
+  });
 });

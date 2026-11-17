@@ -88,6 +88,10 @@ export interface RealtimeManagerOptions {
    * exercised outside a browser.
    */
   onlineTarget?: EventTarget;
+  /** Allow connecting and receiving changes anonymously (e.g. wallboard displays). */
+  allowAnonymous?: boolean;
+  /** Enable shared broadcast channel for multi-session and cross-device sync. */
+  enableBroadcast?: boolean;
 }
 
 /**
@@ -106,10 +110,12 @@ export function createRealtimeManager(
   const seen = new Map<string, number>();
 
   let initialised = false;
-  let authReady = false;
+  let authReady = options.allowAnonymous ?? false;
   let userId: string | null = null;
   let authSubscription: { unsubscribe: () => void } | null = null;
   let channelSeq = 0;
+  let broadcastChannel: RealtimeChannel | null = null;
+  const reconnectListeners = new Set<() => void>();
 
   function pruneSeen(now: number) {
     if (seen.size <= DEDUPE_MAX_ENTRIES) return;
@@ -258,11 +264,78 @@ export function createRealtimeManager(
       destroyChannel(table);
       ensureChannel(table);
     }
+    for (const listener of reconnectListeners) {
+      try {
+        listener();
+      } catch {
+        // Listener error ignored
+      }
+    }
+  }
+
+  function ensureBroadcastChannel() {
+    if (broadcastChannel || !authReady || !options.enableBroadcast) return;
+    try {
+      if (typeof client.channel !== "function") return;
+      const bc = client.channel("ggs-erp-broadcast");
+      if (typeof bc.on === "function") {
+        bc.on(
+          "broadcast",
+          { event: "table_mutation" },
+          (payload: unknown) => {
+            const container = payload as { payload?: Record<string, unknown> } | Record<string, unknown>;
+            const data = (container && "payload" in container && container.payload) ? container.payload : container;
+            if (!data || typeof data !== "object") return;
+            const table = (data as Record<string, unknown>).table;
+            if (typeof table !== "string" || !table) return;
+            dispatch({
+              table,
+              eventType: ((data as Record<string, unknown>).eventType as RealtimeEventType) || "UPDATE",
+              new: ((data as Record<string, unknown>).new as Record<string, unknown>) || {},
+              old: ((data as Record<string, unknown>).old as Record<string, unknown>) || {},
+              receivedAt: Date.now(),
+            });
+          }
+        );
+      }
+      if (typeof bc.subscribe === "function") {
+        bc.subscribe();
+      }
+      broadcastChannel = bc;
+    } catch {
+      // Safe fallback if client is mock
+    }
+  }
+
+  function broadcastMutation(
+    table: string,
+    eventType: RealtimeEventType = "UPDATE",
+    payload: { new?: Record<string, unknown>; old?: Record<string, unknown> } = {}
+  ): void {
+    if (!table) return;
+    try {
+      if (broadcastChannel && typeof (broadcastChannel as unknown as { send?: (msg: unknown) => unknown }).send === "function") {
+        (broadcastChannel as unknown as { send: (msg: unknown) => unknown }).send({
+          type: "broadcast",
+          event: "table_mutation",
+          payload: {
+            table,
+            eventType,
+            new: payload.new ?? {},
+            old: payload.old ?? {},
+            timestamp: Date.now(),
+          },
+        });
+      }
+    } catch {
+      // Non-fatal if broadcast channel is closed
+    }
   }
 
   function restartAll() {
     for (const table of Array.from(channels.keys())) destroyChannel(table);
     for (const table of listeners.keys()) ensureChannel(table);
+    ensureBroadcastChannel();
   }
 
   function applySession(session: AuthSessionLike | null | undefined) {
@@ -270,11 +343,13 @@ export function createRealtimeManager(
     const nextUser = session?.user?.id ?? null;
     const wasReady = authReady;
 
-    authReady = Boolean(token);
+    authReady = Boolean(token) || (options.allowAnonymous ?? false);
     // The Realtime client sends this token when it joins a channel and when it
     // refreshes. Setting it explicitly keeps the socket in step with auth even
     // if a consumer subscribed between events.
-    void client.realtime.setAuth(token);
+    if (client.realtime && typeof client.realtime.setAuth === "function") {
+      void client.realtime.setAuth(token);
+    }
 
     if (nextUser !== userId) {
       userId = nextUser;
@@ -365,13 +440,26 @@ export function createRealtimeManager(
   /** Tear everything down (used by tests and by a full sign-out reset). */
   function destroy() {
     for (const table of Array.from(channels.keys())) destroyChannel(table);
+    if (broadcastChannel) {
+      if (typeof client.removeChannel === "function") {
+        void client.removeChannel(broadcastChannel);
+      }
+      broadcastChannel = null;
+    }
     listeners.clear();
     seen.clear();
+    reconnectListeners.clear();
     authSubscription?.unsubscribe();
     authSubscription = null;
     initialised = false;
-    authReady = false;
+    authReady = options.allowAnonymous ?? false;
     userId = null;
+  }
+
+  function onReconnect(listener: () => void): () => void {
+    init();
+    reconnectListeners.add(listener);
+    return () => reconnectListeners.delete(listener);
   }
 
   return {
@@ -381,11 +469,15 @@ export function createRealtimeManager(
     isReady: () => authReady,
     /** Number of live channels — useful for diagnostics and tests. */
     channelCount: () => channels.size,
+    broadcastMutation,
+    onReconnect,
   };
 }
 
 /** The app-wide manager. Import this, not a fresh instance. */
-export const realtime = createRealtimeManager(supabase);
+export const realtime = createRealtimeManager(supabase, { enableBroadcast: true });
 
 export const subscribeToTable = realtime.subscribeToTable;
 export const subscribeToTables = realtime.subscribeToTables;
+export const broadcastMutation = realtime.broadcastMutation;
+export const onRealtimeReconnect = realtime.onReconnect;

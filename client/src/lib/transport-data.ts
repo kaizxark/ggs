@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Student } from "./school-data";
 import { notifyDataChanged, useDataRevision } from "./live-data";
+import { useRealtimeInvalidation } from "./use-realtime";
 import { todayIso } from "./student-directory";
 
 export const ANNUAL_TRANSPORT_FEE = 14000;
@@ -292,6 +293,12 @@ function seedInitialReceipts(students: Student[], allocations: Record<string, St
 
 export function useTransportData(students: Student[]) {
   const revision = useDataRevision();
+  const realtimeRevision = useRealtimeInvalidation([
+    "transport_routes",
+    "vehicles",
+    "students",
+    "enrollments",
+  ]);
 
   // Load or seed overrides from localStorage
   const [allocations, setAllocations] = useState<Record<string, StoredOverride>>(() => {
@@ -346,7 +353,7 @@ export function useTransportData(students: Student[]) {
 
       return merged;
     });
-  }, [students]);
+  }, [students, revision, realtimeRevision]);
 
   // Compose complete StudentTransportRecords
   const studentRecords = useMemo<StudentTransportRecord[]>(() => {

@@ -233,6 +233,42 @@
   min-width: 0;
 }
 
+.mdv-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 9999px;
+  background: rgba(30, 122, 92, 0.08);
+  border: 1px solid rgba(30, 122, 92, 0.22);
+  color: #1e7a5c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mdv-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1e7a5c;
+  box-shadow: 0 0 0 0 rgba(30, 122, 92, 0.7);
+  animation: mdv-pulse 2s infinite;
+}
+
+@keyframes mdv-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(30, 122, 92, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(30, 122, 92, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(30, 122, 92, 0);
+  }
+}
+
 .mdv-clock {
   text-align: right;
   white-space: nowrap;

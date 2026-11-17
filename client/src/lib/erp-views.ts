@@ -224,10 +224,10 @@ registerDataInvalidator(clearErpCache);
 const VIEW_TABLES: Record<string, string[]> = {
   students: ["students", "enrollments", "classrooms", "attendance", "exam_results", "invoices"],
   staff: ["staff", "profiles"],
-  attendance_daily: ["attendance", "classrooms", "students"],
-  class_attendance: ["attendance", "classrooms", "students"],
-  dashboard_attendance: ["attendance", "classrooms", "students", "enrollments"],
-  student_counts: ["students"],
+  attendance_daily: ["attendance", "attendance_corrections", "classrooms", "students"],
+  class_attendance: ["attendance", "attendance_corrections", "classrooms", "students", "enrollments"],
+  dashboard_attendance: ["attendance", "attendance_corrections", "classrooms", "students", "enrollments"],
+  student_counts: ["students", "enrollments"],
   invoices: ["invoices", "students", "classrooms", "enrollments", "payments"],
   payments: ["payments", "invoices", "students"],
   finance_monthly: ["payments", "invoices"],
@@ -249,22 +249,31 @@ const VIEW_TABLES: Record<string, string[]> = {
   library_books: ["library_books", "library_loans"],
   schedule: ["schedule"],
   report_exports: ["report_exports"],
-  timetable: ["settings", "timetable"],
+  timetable: ["settings", "timetable", "classrooms", "staff", "subjects"],
   activity_log: ["activity_log", "activities", "activity_participations"],
 };
 
 /**
- * Drop the raw-table cache for the tables a realtime event touched.
+ * Drop the raw-table cache and compiled view cache for the tables a realtime event touched.
  *
  * `fetchAll` has no TTL: it is cleared by `notifyDataChanged` after a local
  * write. A remote write has to clear it the same way, otherwise the view
  * re-runs its loader and receives the cached pre-change rows.
  */
-function invalidateRows(tables: readonly string[]) {
+export function invalidateTableCaches(tables: readonly string[]) {
   if (!tables.length) return;
   for (const key of rowCache.keys()) {
     if (tables.some((table) => key.startsWith(`${table}|`))) {
       rowCache.delete(key);
+    }
+  }
+  for (const [viewKey, viewTables] of Object.entries(VIEW_TABLES)) {
+    if (tables.some((table) => viewTables.includes(table))) {
+      for (const cacheKey of cache.keys()) {
+        if (cacheKey.startsWith(`${viewKey}:`)) {
+          cache.delete(cacheKey);
+        }
+      }
     }
   }
 }
@@ -325,7 +334,7 @@ function useErpView<T extends { id: string | number }>(
       handledRealtime.current = realtimeRevision;
       if (realtimeRevision > 0) {
         cache.delete(`${key}:${nonce}`);
-        invalidateRows(tables);
+        invalidateTableCaches(tables);
       }
     }
     // Only show loading skeleton on initial mount; keep rendered data steady during revalidations
