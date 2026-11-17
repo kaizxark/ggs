@@ -43,6 +43,7 @@ import {
   countsAsPresent,
   isAttendanceStatus,
   type AttendanceAbsenteeItem,
+  type AttendanceAtRiskPupil,
   type AttendanceBootstrap,
   type AttendanceClassOption,
   type AttendanceDaySummary,
@@ -243,6 +244,14 @@ interface AttendanceRow {
 interface AttendanceMarkRow extends AttendanceRow {
   id: string;
   notes: string | null;
+  created_at: string | null;
+}
+
+interface AcademicYearRecord {
+  id: string;
+  name: string;
+  starts_on: string;
+  ends_on: string | null;
 }
 
 interface Roster {
@@ -298,6 +307,48 @@ async function loadStaff(orgId: string): Promise<StaffRecord[]> {
   );
 }
 
+/**
+ * The academic calendar, when the school has configured one.
+ *
+ * A "term" figure has to start somewhere. Reading the configured academic year
+ * keeps the register honest across a year boundary; when no calendar exists the
+ * route falls back to the Indian financial-year convention (1 April).
+ */
+async function loadAcademicYears(orgId: string): Promise<AcademicYearRecord[]> {
+  return restRows<AcademicYearRecord>(
+    "academic_years",
+    `select=id,name,starts_on,ends_on&organisation_id=eq.${encodeURIComponent(orgId)}` +
+      `&order=starts_on.desc`
+  );
+}
+
+/** The academic year containing `date`, and the first day of that year. */
+function yearForDate(
+  date: string,
+  years: AcademicYearRecord[]
+): { start: string; end: string; name: string | null } {
+  for (const year of years) {
+    const start = String(year.starts_on ?? "");
+    const end = String(year.ends_on ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) continue;
+    if (date < start) continue;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(end) && date > end) continue;
+    return {
+      start,
+      end: end || `${Number.parseInt(start.slice(0, 4), 10) + 1}-03-31`,
+      name: year.name ?? null,
+    };
+  }
+  // Indian academic year: April to March.
+  const [year, month] = date.split("-").map((part) => Number.parseInt(part, 10));
+  const startYear = month >= 4 ? year : year - 1;
+  return {
+    start: `${startYear}-04-01`,
+    end: `${startYear + 1}-03-31`,
+    name: null,
+  };
+}
+
 async function loadEnrollments(
   orgId: string,
   classroomIds: string[]
@@ -332,14 +383,18 @@ async function loadStudents(
  */
 async function loadAttendance(
   orgId: string,
-  classroomIds: string[]
+  classroomIds: string[],
+  from: string,
+  to: string
 ): Promise<AttendanceRow[]> {
   if (classroomIds.length === 0) return [];
   return restAllRows<AttendanceRow>(
     "attendance",
     "student_id,classroom_id,attendance_date,status",
     `organisation_id=eq.${encodeURIComponent(orgId)}` +
-      `&classroom_id=in.(${classroomIds.join(",")})`,
+      `&classroom_id=in.(${classroomIds.join(",")})` +
+      `&attendance_date=gte.${encodeURIComponent(from)}` +
+      `&attendance_date=lte.${encodeURIComponent(to)}`,
     "order=attendance_date.desc"
   );
 }
@@ -353,7 +408,7 @@ async function loadDayMarks(
   if (classroomIds.length === 0) return [];
   return restAllRows<AttendanceMarkRow>(
     "attendance",
-    "id,student_id,classroom_id,attendance_date,status,notes",
+    "id,student_id,classroom_id,attendance_date,status,notes,created_at",
     `organisation_id=eq.${encodeURIComponent(orgId)}` +
       `&classroom_id=in.(${classroomIds.join(",")})` +
       `&attendance_date=eq.${encodeURIComponent(date)}`
@@ -372,65 +427,187 @@ function compareRoster(a: Roster, b: Roster): number {
 /* Assembling the bootstrap                                            */
 /* ------------------------------------------------------------------ */
 
-function summariseDay(date: string, rows: AttendanceRow[]): AttendanceDaySummary {
-  let present = 0;
-  let absent = 0;
-  let late = 0;
-  let leave = 0;
-  for (const row of rows) {
-    if (row.attendance_date !== date) continue;
-    if (row.status === "present") present += 1;
-    else if (row.status === "absent") absent += 1;
-    else if (row.status === "late") late += 1;
-    else if (row.status === "leave") leave += 1;
+/* ------------------------------------------------------------------ */
+/* Assembling the bootstrap                                            */
+/* ------------------------------------------------------------------ */
+
+interface TermFigures {
+  present: number;
+  total: number;
+}
+
+interface AttendanceIndex {
+  studentsById: Map<string, StudentRecord>;
+  enrollmentsByClass: Map<string, EnrollmentRecord[]>;
+  enrollmentByStudent: Map<string, EnrollmentRecord>;
+  classByStudent: Map<string, string>;
+  dayMarksByClass: Map<string, AttendanceMarkRow[]>;
+  dayMarkByStudent: Map<string, AttendanceMarkRow>;
+  termByClass: Map<string, TermFigures>;
+  termByClassStudent: Map<string, TermFigures>;
+  termByStudent: Map<string, TermFigures>;
+  byDate: Map<string, AttendanceDaySummary>;
+  dates: string[];
+}
+
+/**
+ * One pass over every row, once.
+ *
+ * The first version of this route filtered the full attendance table once per
+ * classroom and called `studentIds.includes()` inside a loop over every row.
+ * At 24 classes and ~20,000 term rows that is millions of comparisons on every
+ * page load. The data is the same; the shape it is read in is not.
+ */
+function indexAttendance(
+  rows: AttendanceRow[],
+  dayMarks: AttendanceMarkRow[],
+  enrollments: EnrollmentRecord[],
+  students: StudentRecord[]
+): AttendanceIndex {
+  const studentsById = new Map(students.map((student) => [student.id, student]));
+  const enrollmentsByClass = new Map<string, EnrollmentRecord[]>();
+  const enrollmentByStudent = new Map<string, EnrollmentRecord>();
+  const classByStudent = new Map<string, string>();
+
+  for (const enrollment of enrollments) {
+    const list = enrollmentsByClass.get(enrollment.classroom_id);
+    if (list) list.push(enrollment);
+    else enrollmentsByClass.set(enrollment.classroom_id, [enrollment]);
+    enrollmentByStudent.set(enrollment.student_id, enrollment);
+    classByStudent.set(enrollment.student_id, enrollment.classroom_id);
   }
-  const marked = present + absent + late + leave;
+
+  const dayMarksByClass = new Map<string, AttendanceMarkRow[]>();
+  const dayMarkByStudent = new Map<string, AttendanceMarkRow>();
+  for (const mark of dayMarks) {
+    const key = mark.classroom_id ?? "";
+    const list = dayMarksByClass.get(key);
+    if (list) list.push(mark);
+    else dayMarksByClass.set(key, [mark]);
+    dayMarkByStudent.set(mark.student_id, mark);
+  }
+
+  const termByClass = new Map<string, TermFigures>();
+  const termByClassStudent = new Map<string, TermFigures>();
+  const termByStudent = new Map<string, TermFigures>();
+  const byDate = new Map<string, AttendanceDaySummary>();
+
+  const bump = (map: Map<string, TermFigures>, key: string, present: boolean) => {
+    const entry = map.get(key) ?? { present: 0, total: 0 };
+    entry.total += 1;
+    if (present) entry.present += 1;
+    map.set(key, entry);
+  };
+
+  for (const row of rows) {
+    const present = countsAsPresent(row.status);
+    const classroomId = row.classroom_id ?? "";
+    bump(termByClass, classroomId, present);
+    bump(termByClassStudent, `${classroomId}:${row.student_id}`, present);
+    bump(termByStudent, row.student_id, present);
+
+    const day = byDate.get(row.attendance_date) ?? {
+      date: row.attendance_date,
+      present: 0,
+      absent: 0,
+      late: 0,
+      leave: 0,
+      marked: 0,
+      percent: 0,
+    };
+    if (row.status === "present") day.present += 1;
+    else if (row.status === "absent") day.absent += 1;
+    else if (row.status === "late") day.late += 1;
+    else if (row.status === "leave") day.leave += 1;
+    day.marked += 1;
+    byDate.set(row.attendance_date, day);
+  }
+
+  for (const day of byDate.values()) {
+    day.percent = attendancePercent(day.present + day.late, day.marked);
+  }
+
   return {
-    date,
-    present,
-    absent,
-    late,
-    leave,
-    marked,
-    percent: attendancePercent(present + late, marked),
+    studentsById,
+    enrollmentsByClass,
+    enrollmentByStudent,
+    classByStudent,
+    dayMarksByClass,
+    dayMarkByStudent,
+    termByClass,
+    termByClassStudent,
+    termByStudent,
+    byDate,
+    dates: Array.from(byDate.keys()).sort(),
   };
 }
 
 function buildOverview(
-  rows: AttendanceRow[],
+  index: AttendanceIndex,
   date: string,
-  studentIds: string[],
-  classes: AttendanceClassOption[]
+  classes: AttendanceClassOption[],
+  classLabels: Map<string, string>
 ): AttendanceOverview {
-  const dates = Array.from(new Set(rows.map((row) => row.attendance_date))).sort();
-  const recent = dates.slice(-7).map((d) => summariseDay(d, rows));
+  const recent = index.dates.slice(-7).map((day) => index.byDate.get(day)!);
+  const daySummary = index.byDate.get(date) ?? {
+    date,
+    present: 0,
+    absent: 0,
+    late: 0,
+    leave: 0,
+    marked: 0,
+    percent: 0,
+  };
 
-  const daySummary = summariseDay(date, rows);
-
-  const perStudent = new Map<string, { total: number; present: number }>();
-  for (const row of rows) {
-    if (!studentIds.includes(row.student_id)) continue;
-    const entry = perStudent.get(row.student_id) ?? { total: 0, present: 0 };
-    entry.total += 1;
-    if (countsAsPresent(row.status)) entry.present += 1;
-    perStudent.set(row.student_id, entry);
-  }
   let belowThreshold = 0;
-  for (const entry of perStudent.values()) {
-    if (entry.total > 0 && attendancePercent(entry.present, entry.total) < ATTENDANCE_THRESHOLD) {
-      belowThreshold += 1;
-    }
+  const atRisk: AttendanceAtRiskPupil[] = [];
+  for (const [studentId, term] of index.termByStudent) {
+    if (term.total <= 0) continue;
+    const percent = attendancePercent(term.present, term.total);
+    if (percent >= ATTENDANCE_THRESHOLD) continue;
+    belowThreshold += 1;
+    const student = index.studentsById.get(studentId);
+    if (!student) continue;
+    const classroomId = index.classByStudent.get(studentId) ?? "";
+    atRisk.push({
+      id: studentId,
+      name: `${student.first_name} ${student.last_name}`.trim(),
+      classroomId,
+      classLabel: classLabels.get(classroomId) ?? "Unassigned class",
+      present: term.present,
+      total: term.total,
+      percent,
+    });
   }
+  atRisk.sort((a, b) => a.percent - b.percent || a.name.localeCompare(b.name));
 
   const classesTotal = classes.length;
-  const classesMarked = classes.filter((c) => Boolean(c.isMarked)).length;
-  const classesPending = classes.filter((c) => (c.markedToday ?? 0) === 0).length;
-  const totalStudents = classes.reduce((sum, c) => sum + (c.studentCount ?? 0), 0);
+  const classesMarked = classes.filter((option) => Boolean(option.isMarked)).length;
+  const classesPending = classes.filter((option) => (option.markedToday ?? 0) === 0).length;
+  const totalStudents = classes.reduce((sum, option) => sum + (option.studentCount ?? 0), 0);
+  const markedToday = daySummary.marked;
+  const unmarkedToday = Math.max(0, totalStudents - markedToday);
+
+  let lastMarkedAt: string | null = null;
+  for (const option of classes) {
+    if (!option.markedAt) continue;
+    if (!lastMarkedAt || option.markedAt > lastMarkedAt) lastMarkedAt = option.markedAt;
+  }
+
+  // The previous *recorded* school day, not yesterday: a weekend or holiday
+  // should not read as a 0% collapse.
+  const previousDate = index.dates.filter((day) => day < date).slice(-1)[0];
+  const previous = previousDate ? index.byDate.get(previousDate) : null;
+  const previousPercent = previous ? previous.percent : null;
+  const trendDelta =
+    previousPercent === null
+      ? 0
+      : Math.round((daySummary.percent - previousPercent) * 10) / 10;
 
   return {
     daily: recent,
     todayPresent: daySummary.present + daySummary.late,
-    todayMarked: daySummary.marked,
+    todayMarked: markedToday,
     todayPercent: daySummary.percent,
     todayAbsent: daySummary.absent,
     todayLate: daySummary.late,
@@ -440,40 +617,30 @@ function buildOverview(
     classesMarked,
     classesPending,
     classesTotal,
+    unmarkedToday,
+    completionPercent: attendancePercent(markedToday, totalStudents),
+    lastMarkedAt,
+    trendDelta,
+    previousPercent,
+    atRisk: atRisk.slice(0, 12),
   };
 }
 
 function buildRoster(
   classroomId: string,
-  enrollments: EnrollmentRecord[],
-  students: StudentRecord[],
-  summaryRows: AttendanceRow[],
-  dayMarks: AttendanceMarkRow[]
+  index: AttendanceIndex
 ): AttendanceRosterStudent[] {
-  const studentById = new Map(students.map((student) => [student.id, student]));
-  const rowByStudent = new Map<string, AttendanceMarkRow>();
-  const termByStudent = new Map<string, { total: number; present: number }>();
-
-  for (const row of dayMarks) {
-    if (row.classroom_id !== classroomId) continue;
-    rowByStudent.set(row.student_id, row);
-  }
-
-  for (const row of summaryRows) {
-    if (row.classroom_id !== classroomId) continue;
-    const term = termByStudent.get(row.student_id) ?? { total: 0, present: 0 };
-    term.total += 1;
-    if (countsAsPresent(row.status)) term.present += 1;
-    termByStudent.set(row.student_id, term);
-  }
-
+  const enrollments = index.enrollmentsByClass.get(classroomId) ?? [];
   const roster: Roster[] = [];
+
   for (const enrollment of enrollments) {
-    if (enrollment.classroom_id !== classroomId) continue;
-    const student = studentById.get(enrollment.student_id);
+    const student = index.studentsById.get(enrollment.student_id);
     if (!student) continue;
-    const term = termByStudent.get(student.id) ?? { total: 0, present: 0 };
-    const mark = rowByStudent.get(student.id);
+    const term = index.termByClassStudent.get(`${classroomId}:${student.id}`) ?? {
+      present: 0,
+      total: 0,
+    };
+    const mark = index.dayMarkByStudent.get(student.id);
     roster.push({
       id: student.id,
       name: `${student.first_name} ${student.last_name}`.trim(),
@@ -500,56 +667,61 @@ function buildRoster(
 function buildClassOptions(
   classrooms: ClassroomRecord[],
   staffById: Map<string, StaffRecord>,
-  enrollments: EnrollmentRecord[],
-  students: StudentRecord[],
-  rows: AttendanceRow[],
-  dayMarks: AttendanceMarkRow[],
-  date: string,
-  today: string,
+  index: AttendanceIndex,
   staffId: string,
   managerView: boolean
 ): AttendanceClassOption[] {
-  const studentById = new Map(students.map((student) => [student.id, student]));
-
   return classrooms.map((room) => {
-    const classRows = rows.filter((row) => row.classroom_id === room.id);
-    const total = classRows.length;
-    const present = classRows.filter((row) => countsAsPresent(row.status)).length;
+    const term = index.termByClass.get(room.id) ?? { present: 0, total: 0 };
+    const classDayMarks = index.dayMarksByClass.get(room.id) ?? [];
+    const enrollments = index.enrollmentsByClass.get(room.id) ?? [];
+    const studentCount = enrollments.length;
 
-    // Daily marks for this classroom on the queried date:
-    const classDayMarks = dayMarks.filter((row) => row.classroom_id === room.id);
+    let presentToday = 0;
+    let absentToday = 0;
+    let lateToday = 0;
+    let leaveToday = 0;
+    let markedAt: string | null = null;
+    const absentees: AttendanceAbsenteeItem[] = [];
+
+    for (const mark of classDayMarks) {
+      if (countsAsPresent(mark.status)) presentToday += 1;
+      if (mark.status === "absent") absentToday += 1;
+      else if (mark.status === "late") lateToday += 1;
+      else if (mark.status === "leave") leaveToday += 1;
+
+      if (mark.created_at && (!markedAt || mark.created_at > markedAt)) {
+        markedAt = mark.created_at;
+      }
+
+      if (mark.status === "absent" || mark.status === "leave" || mark.status === "late") {
+        const student = index.studentsById.get(mark.student_id);
+        if (!student) continue;
+        const enrollment = index.enrollmentByStudent.get(mark.student_id);
+        absentees.push({
+          id: student.id,
+          name: `${student.first_name} ${student.last_name}`.trim(),
+          rollNo: enrollment?.roll_no ? String(enrollment.roll_no) : null,
+          status: mark.status,
+          notes: String(mark.notes ?? "").trim(),
+        });
+      }
+    }
+
     const markedToday = classDayMarks.length;
-    const presentToday = classDayMarks.filter((row) => countsAsPresent(row.status)).length;
-    const absentToday = classDayMarks.filter((row) => row.status === "absent").length;
-    const lateToday = classDayMarks.filter((row) => row.status === "late").length;
-    const leaveToday = classDayMarks.filter((row) => row.status === "leave").length;
-
-    const studentCount = enrollments.filter(
-      (enrollment) => enrollment.classroom_id === room.id
-    ).length;
+    const unmarkedToday = Math.max(0, studentCount - markedToday);
+    let atRiskCount = 0;
+    for (const enrollment of enrollments) {
+      const figures = index.termByClassStudent.get(`${room.id}:${enrollment.student_id}`);
+      if (!figures || figures.total <= 0) continue;
+      if (attendancePercent(figures.present, figures.total) < ATTENDANCE_THRESHOLD) {
+        atRiskCount += 1;
+      }
+    }
 
     const teacher = room.class_teacher_id
       ? staffById.get(room.class_teacher_id)
       : undefined;
-
-    const absentees: AttendanceAbsenteeItem[] = [];
-    for (const mark of classDayMarks) {
-      if (mark.status === "absent" || mark.status === "leave" || mark.status === "late") {
-        const student = studentById.get(mark.student_id);
-        const enrollment = enrollments.find(
-          (e) => e.student_id === mark.student_id && e.classroom_id === room.id
-        );
-        if (student) {
-          absentees.push({
-            id: student.id,
-            name: `${student.first_name} ${student.last_name}`.trim(),
-            rollNo: enrollment?.roll_no ? String(enrollment.roll_no) : null,
-            status: mark.status,
-            notes: String(mark.notes ?? "").trim(),
-          });
-        }
-      }
-    }
 
     return {
       id: room.id,
@@ -561,18 +733,21 @@ function buildClassOptions(
       classTeacherName: teacher?.name ?? null,
       studentCount,
       // Administrators review; only the assigned class teacher marks.
-      canMark:
-        !managerView &&
-        Boolean(staffId) &&
-        room.class_teacher_id === staffId,
-      termPercent: attendancePercent(present, total),
+      canMark: !managerView && Boolean(staffId) && room.class_teacher_id === staffId,
+      termPercent: attendancePercent(term.present, term.total),
+      termPresent: term.present,
+      termMarked: term.total,
       presentToday,
       markedToday,
+      unmarkedToday,
+      completionPercent: attendancePercent(markedToday, studentCount),
       absentToday,
       lateToday,
       leaveToday,
       todayPercent: attendancePercent(presentToday, markedToday),
       isMarked: studentCount > 0 && markedToday >= studentCount,
+      markedAt,
+      atRiskCount,
       absentees,
     };
   });
@@ -588,9 +763,10 @@ async function bootstrap(caller: Caller, orgId: string, url: URL): Promise<Atten
   const requestedDate = isoDate(url.searchParams.get("date")) ?? today;
   const requestedClass = String(url.searchParams.get("classroomId") ?? "").trim();
 
-  const [classrooms, staff] = await Promise.all([
+  const [classrooms, staff, years] = await Promise.all([
     loadClassrooms(orgId),
     loadStaff(orgId),
+    loadAcademicYears(orgId).catch(() => [] as AcademicYearRecord[]),
   ]);
   const staffById = new Map(staff.map((member) => [member.id, member]));
   const me = staff.find((member) => member.profile_id === caller.id) ?? null;
@@ -602,10 +778,15 @@ async function bootstrap(caller: Caller, orgId: string, url: URL): Promise<Atten
     ? classrooms
     : classrooms.filter((room) => Boolean(staffId) && room.class_teacher_id === staffId);
 
+  // "Term" means the academic year that contains the selected date, up to that
+  // date. Viewing an old register must not pull in marks from a later term.
+  const year = yearForDate(requestedDate, years);
+  const termEnd = year.end < requestedDate ? year.end : requestedDate;
+
   const visibleIds = visible.map((room) => room.id);
   const [enrollments, rows, dayMarks] = await Promise.all([
     loadEnrollments(orgId, visibleIds),
-    loadAttendance(orgId, visibleIds),
+    loadAttendance(orgId, visibleIds, year.start, termEnd),
     loadDayMarks(orgId, visibleIds, requestedDate),
   ]);
 
@@ -614,24 +795,22 @@ async function bootstrap(caller: Caller, orgId: string, url: URL): Promise<Atten
   );
   const students = await loadStudents(orgId, studentIds);
 
+  const index = indexAttendance(rows, dayMarks, enrollments, students);
   const classes = buildClassOptions(
     visible,
     staffById,
-    enrollments,
-    students,
-    rows,
-    dayMarks,
-    requestedDate,
-    today,
+    index,
     staffId,
     managerView
   );
 
+  const classLabels = new Map(
+    visible.map((room) => [room.id, classLabel(room)] as const)
+  );
+
   const selected =
     classes.find((option) => option.id === requestedClass) ?? classes[0] ?? null;
-  const roster = selected
-    ? buildRoster(selected.id, enrollments, students, rows, dayMarks)
-    : [];
+  const roster = selected ? buildRoster(selected.id, index) : [];
 
   let message = "";
   if (classes.length === 0) {
@@ -654,11 +833,13 @@ async function bootstrap(caller: Caller, orgId: string, url: URL): Promise<Atten
     role: caller.role,
     managerView,
     canMarkAny: classes.some((option) => option.canMark),
+    termStart: year.start,
+    academicYear: year.name,
     classes,
     selectedClassroomId: selected?.id ?? null,
     selectedClass: selected,
     roster,
-    overview: buildOverview(rows, requestedDate, studentIds, classes),
+    overview: buildOverview(index, requestedDate, classes, classLabels),
     message,
   };
 }

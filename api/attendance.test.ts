@@ -118,17 +118,24 @@ function stubNetwork() {
       );
     }
 
+    if (table === "academic_years") return Response.json([]);
+
     if (table === "attendance") {
       const students = filterValues(url, "student_id");
-      const dates = filterValues(url, "attendance_date");
       const classes = filterValues(url, "classroom_id");
+      const dateFilters = url.searchParams.getAll("attendance_date");
       return Response.json(
-        store.attendance.filter(
-          (row) =>
-            (!students || students.includes(String(row.student_id))) &&
-            (!dates || dates.includes(String(row.attendance_date))) &&
-            (!classes || classes.includes(String(row.classroom_id)))
-        )
+        store.attendance.filter((row) => {
+          if (students && !students.includes(String(row.student_id))) return false;
+          if (classes && !classes.includes(String(row.classroom_id))) return false;
+          const date = String(row.attendance_date);
+          for (const filter of dateFilters) {
+            if (filter.startsWith("eq.") && date !== filter.slice(3)) return false;
+            if (filter.startsWith("gte.") && date < filter.slice(4)) return false;
+            if (filter.startsWith("lte.") && date > filter.slice(4)) return false;
+          }
+          return true;
+        })
       );
     }
 

@@ -83,6 +83,17 @@ export interface AttendanceAbsenteeItem {
   notes: string;
 }
 
+/** A pupil whose term attendance sits below the school threshold. */
+export interface AttendanceAtRiskPupil {
+  id: string;
+  name: string;
+  classLabel: string;
+  classroomId: string;
+  present: number;
+  total: number;
+  percent: number;
+}
+
 export interface AttendanceClassOption {
   id: string;
   label: string;
@@ -96,13 +107,24 @@ export interface AttendanceClassOption {
   canMark: boolean;
   /** Present + late, over every recorded day for this class. */
   termPercent: number;
+  /** Raw term-to-date figures behind `termPercent`. */
+  termPresent: number;
+  termMarked: number;
   presentToday: number;
   markedToday: number;
+  /** Enrolled pupils with no status for the selected date. */
+  unmarkedToday: number;
+  /** `markedToday / studentCount`, rounded to one decimal. */
+  completionPercent: number;
   absentToday?: number;
   lateToday?: number;
   leaveToday?: number;
   todayPercent?: number;
   isMarked?: boolean;
+  /** When the class's register for this date was last written, ISO. */
+  markedAt?: string | null;
+  /** Pupils in this class below the term threshold. */
+  atRiskCount?: number;
   absentees?: AttendanceAbsenteeItem[];
 }
 
@@ -129,6 +151,18 @@ export interface AttendanceOverview {
   todayAbsent?: number;
   todayLate?: number;
   todayLeave?: number;
+  /** Enrolled pupils with no status for the selected date. */
+  unmarkedToday?: number;
+  /** `todayMarked / totalStudents`, rounded to one decimal. */
+  completionPercent?: number;
+  /** When the newest mark for the selected date was written, ISO. */
+  lastMarkedAt?: string | null;
+  /** Percentage-point change against the previous recorded school day. */
+  trendDelta?: number;
+  /** Attendance on the previous recorded school day, or null when none. */
+  previousPercent?: number | null;
+  /** The pupils furthest below the threshold, worst first. */
+  atRisk?: AttendanceAtRiskPupil[];
 }
 
 export interface AttendanceBootstrap {
@@ -141,6 +175,10 @@ export interface AttendanceBootstrap {
   managerView: boolean;
   /** True when this caller may mark at least one class. */
   canMarkAny: boolean;
+  /** First day of the academic year that contains `date`, YYYY-MM-DD. */
+  termStart: string | null;
+  /** Human name of that academic year, when one is configured. */
+  academicYear: string | null;
   classes: AttendanceClassOption[];
   selectedClassroomId: string | null;
   selectedClass: AttendanceClassOption | null;
