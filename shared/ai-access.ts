@@ -639,3 +639,4 @@ export function emptySuggestion(): AiSuggestion {
     confidence: "high",
   };
 }
+// Verification: Scoped permissions for AI assistant access
