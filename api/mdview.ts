@@ -489,3 +489,4 @@ export default async function handler(req: Request): Promise<Response> {
   if (req.method === "GET") return GET(req);
   return new Response("Method not allowed", { status: 405 });
 }
+// MD View Edge API: 3-second memory cache TTL
