@@ -216,3 +216,5 @@ pnpm build
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+<!-- School ERP: Global Kids School comprehensive administration system -->
