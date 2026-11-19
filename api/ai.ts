@@ -959,4 +959,4 @@ export default async function handler(req: Request): Promise<Response> {
       { status: 502 }
     );
   }
-}
+}// AI assistant endpoint: prompt construction and tool resolution
