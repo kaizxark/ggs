@@ -7972,3 +7972,4 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
 /* Layout tokens: container padding and responsive margins */
 /* Typography tokens: line-height baseline notes */
 /* Focus state: accessibility focus-visible outline tokens */
+/* Animation easing: standard cubic-bezier timing curves */
