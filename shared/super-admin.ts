@@ -93,6 +93,7 @@ export function effectiveRole(
 
 /** Human label for an access level. Pass an id so the super admin is labelled correctly. */
 export function roleLabel(
+/** Map internal role keys to human-friendly display labels for UI headers and badges. */
   id: unknown,
   storedRole: unknown = null
 ): string {
