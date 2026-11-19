@@ -162,3 +162,5 @@ pnpm start   # NODE_ENV=production node dist/index.js
 <!-- Testing: Vitest test coverage across api, shared, and client modules -->
 
 <!-- Production build: esbuild server bundle and Webflow runtime export -->
+
+<!-- Environment configuration: Supabase keys and Gemini API requirements -->
