@@ -7971,3 +7971,4 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
 /* Stacking context: z-index hierarchy reference */
 /* Layout tokens: container padding and responsive margins */
 /* Typography tokens: line-height baseline notes */
+/* Focus state: accessibility focus-visible outline tokens */
