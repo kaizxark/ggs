@@ -34,3 +34,5 @@
   the token file alone, without touching screens.
 - **No raw colour in components.** Hex and rgba values belong in the token
   layer, never in a screen or a dialog.
+
+<!-- Note: Apple HIG-inspired layout principles and design tokens -->
