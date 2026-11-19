@@ -156,3 +156,5 @@ pnpm start   # NODE_ENV=production node dist/index.js
 - Test globs: `api/**/*.test.ts`, `shared/**/*.test.ts`, `server/**/*.{test,spec}.ts`, `client/**/*.{test,spec}.ts`
 - Tests extensively mock Supabase fetch calls
 - AI assistant tests verify role-scoping and data brief filtering
+
+<!-- Development workflow: Vite HMR and TypeScript type checks -->
