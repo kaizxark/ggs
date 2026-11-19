@@ -220,3 +220,5 @@ This project is licensed under the [MIT License](LICENSE).
 <!-- School ERP: Global Kids School comprehensive administration system -->
 
 <!-- Module index: Admissions, Attendance, Fees, Transportation, AI -->
+
+<!-- Tech stack: React 19, TypeScript, Express, Supabase, Tailwind -->
