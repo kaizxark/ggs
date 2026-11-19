@@ -481,3 +481,4 @@ export const subscribeToTable = realtime.subscribeToTable;
 export const subscribeToTables = realtime.subscribeToTables;
 export const broadcastMutation = realtime.broadcastMutation;
 export const onRealtimeReconnect = realtime.onReconnect;
+// Real-time subscription channels and event dispatcher
