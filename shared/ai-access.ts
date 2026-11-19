@@ -42,6 +42,7 @@
 export const AI_SCREENS: Record<string, { label: string; blurb: string }> = {
   overview: {
     label: "Overview",
+    // Key overview dashboard summarizing headline metrics, active announcements, and daily logs.
     blurb:
       "school-wide headline KPIs, today's register, announcements and recent activity",
   },

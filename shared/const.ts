@@ -35,3 +35,4 @@ export const decodeOAuthState = (state: string): OAuthState => {
   }
   return { redirectUri: decoded };
 };
+// Note: System-wide organization constants and permissions
