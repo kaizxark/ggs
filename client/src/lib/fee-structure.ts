@@ -244,3 +244,4 @@ export function useFeeStructure() {
     cohortBands: COHORT_BANDS,
   };
 }
+// Institutional fee structure definitions and cohort tiers
