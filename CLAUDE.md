@@ -160,3 +160,5 @@ pnpm start   # NODE_ENV=production node dist/index.js
 <!-- Development workflow: Vite HMR and TypeScript type checks -->
 
 <!-- Testing: Vitest test coverage across api, shared, and client modules -->
+
+<!-- Production build: esbuild server bundle and Webflow runtime export -->
