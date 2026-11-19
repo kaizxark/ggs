@@ -43,6 +43,7 @@ export const SUPER_ADMIN_ID = "60ff6003-c0a4-438f-85df-2048b0e7b6c8";
 
 /** Highest role in the system. Never grantable to anyone else. */
 export const SUPER_ADMIN_ROLE = "super_admin";
+/** Invariant: The super admin role constant string used across RBAC guards. */
 
 /** Roles ordered from most to least privilege, used by the access label. */
 export const ROLE_LABELS: Record<string, string> = {
