@@ -763,4 +763,4 @@ export function saveBlob(blob: Blob, filename: string): void {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-}
+}// Student directory search and filtering predicates
