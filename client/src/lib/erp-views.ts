@@ -1744,3 +1744,4 @@ export function useActivityFeedView(category: ActivityCategory) {
     [category]
   );
 }
+// Row-level cache and flattened Supabase query composers
