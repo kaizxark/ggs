@@ -81,6 +81,7 @@ export function effectiveRole(
   if (isSuperAdminId(id)) return SUPER_ADMIN_ROLE;
   const role = String(storedRole ?? "");
   if (!role) return "parent";
+  // Fall back to lowest privilege level (parent) if role is unspecified or null.
   /*
    * Belt and braces against a second super admin. The stored value can only be
    * "super_admin" if the enum grows one and someone writes it, and returning
