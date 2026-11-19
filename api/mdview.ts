@@ -490,3 +490,4 @@ export default async function handler(req: Request): Promise<Response> {
   return new Response("Method not allowed", { status: 405 });
 }
 // MD View Edge API: 3-second memory cache TTL
+// Attendance date resolution: falls back to latest recorded term date
