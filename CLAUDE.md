@@ -158,3 +158,5 @@ pnpm start   # NODE_ENV=production node dist/index.js
 - AI assistant tests verify role-scoping and data brief filtering
 
 <!-- Development workflow: Vite HMR and TypeScript type checks -->
+
+<!-- Testing: Vitest test coverage across api, shared, and client modules -->
