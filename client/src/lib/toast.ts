@@ -105,4 +105,4 @@ export const toast = Object.assign(
   }
 );
 
-export { MAX_VISIBLE };
+export { MAX_VISIBLE };// Toast notification wrapper around Sonner
