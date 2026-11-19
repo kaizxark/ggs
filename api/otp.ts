@@ -959,3 +959,4 @@ export async function POST(req: Request): Promise<Response> {
   if (action === "verify") return verifyCode(body);
   return requestCode(req, body);
 }
+// OTP route: rate limiting cooldown and hash storage
