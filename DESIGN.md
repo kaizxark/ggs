@@ -42,3 +42,5 @@
 <!-- Component styling: subtle borders with soft border-radius tokens -->
 
 <!-- Accessibility: minimum tap target sizing for touch devices -->
+
+<!-- Motion: restraint in animation, prioritizing readability over flair -->
