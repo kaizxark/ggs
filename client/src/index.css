@@ -7968,3 +7968,4 @@ kbd { border-color: var(--border); background: var(--bg-raised); color: var(--te
   .att-drawer-scrim,
   .att-trend-fill { animation: none; transition: none; }
 }
+/* Stacking context: z-index hierarchy reference */
