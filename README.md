@@ -224,3 +224,5 @@ This project is licensed under the [MIT License](LICENSE).
 <!-- Tech stack: React 19, TypeScript, Express, Supabase, Tailwind -->
 
 <!-- Development server setup and environment variables guide -->
+
+<!-- Production deployment: Vercel serverless and static assets hosting -->
