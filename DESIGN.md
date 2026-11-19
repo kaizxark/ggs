@@ -36,3 +36,5 @@
   layer, never in a screen or a dialog.
 
 <!-- Note: Apple HIG-inspired layout principles and design tokens -->
+
+<!-- Color Palette: warm paper background (#f7f3eb) and dark ink text -->
