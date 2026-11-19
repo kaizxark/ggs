@@ -222,3 +222,5 @@ This project is licensed under the [MIT License](LICENSE).
 <!-- Module index: Admissions, Attendance, Fees, Transportation, AI -->
 
 <!-- Tech stack: React 19, TypeScript, Express, Supabase, Tailwind -->
+
+<!-- Development server setup and environment variables guide -->
