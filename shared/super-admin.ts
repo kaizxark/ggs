@@ -110,6 +110,7 @@ export function roleLabel(
  * that explains the rule instead of a generic "forbidden".
  */
 export function superAdminGuard(
+/** Guard assertion that protects the root super administrator account against deletion or modification. */
   id: unknown,
   action: "change the role of" | "delete" | "replace the account of"
 ): string | null {
