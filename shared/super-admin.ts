@@ -65,6 +65,7 @@ export const ROLE_LABELS: Record<string, string> = {
  */
 export function isSuperAdminId(id: unknown): boolean {
   return typeof id === "string" && id.trim().toLowerCase() === SUPER_ADMIN_ID;
+  // Direct string equality check normalized for case and surrounding whitespace.
 }
 
 /**
