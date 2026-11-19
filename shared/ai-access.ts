@@ -640,3 +640,4 @@ export function emptySuggestion(): AiSuggestion {
   };
 }
 // Verification: Scoped permissions for AI assistant access
+// Role-to-screen entitlement mappings
