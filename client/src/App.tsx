@@ -45,6 +45,7 @@ const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"));
 const Login = lazyWithRetry(() => import("./pages/Login"));
 const ResetPassword = lazyWithRetry(() => import("./pages/ResetPassword"));
 const MdView = lazyWithRetry(() => import("./pages/MdView"));
+const Home = lazyWithRetry(() => import("./pages/Home"));
 
 function AuthSplash() {
   return (
@@ -99,6 +100,14 @@ function MdViewRoute() {
   );
 }
 
+function HomeRoute() {
+  return (
+    <Suspense fallback={<AuthSplash />}>
+      <Home />
+    </Suspense>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -111,8 +120,8 @@ function Router() {
       <Route path="/reset-password" component={ResetPasswordRoute} />
       <Route path="/mdview" component={MdViewRoute} />
       <Route path="/login" component={LoginGate} />
-      <Route path="/" component={GuardedDashboard} />
       <Route path="/dashboard" component={GuardedDashboard} />
+      <Route path="/" component={HomeRoute} />
       <Route component={NotFound} />
     </Switch>
   );
